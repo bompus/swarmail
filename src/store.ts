@@ -259,15 +259,27 @@ const queries = (db: Database) => ({
 
 /** Lookups and writes over one mail database; the tools are thin wrappers around these. */
 export class MailStore {
-  readonly db: Database;
-  readonly q: ReturnType<typeof queries>;
+  private readonly db: Database;
+  private readonly q: ReturnType<typeof queries>;
+  private readonly tx: (run: () => unknown) => unknown;
 
   constructor(db: Database) {
     this.db = db;
     this.q = queries(db);
+    this.tx = db.transaction((run: () => unknown) => run());
   }
 
   private readonly checkouts = new Map<string, string>();
+
+  /** Runs one tool call in one transaction, so a call that throws partway leaves no partial write. */
+  atomic<T>(run: () => T): T {
+    return this.tx(run) as T;
+  }
+
+  /** Reads a real table, so a closed, locked or unreadable database throws. */
+  ping(): void {
+    this.db.query("SELECT 1 FROM projects LIMIT 1").get();
+  }
 
   /**
    * A path inside a git worktree or subdirectory names the repository's primary checkout, where
@@ -348,14 +360,39 @@ export class MailStore {
     return a;
   }
 
-  // Every tool an agent calls as itself counts as activity, which list_agents orders by, and brings back an agent
-  // the server retired for idleness.
+  // Every successful tool call an agent makes as itself counts as activity, which list_agents orders by, and brings
+  // back an agent the server retired for idleness.
   acting(p: Project, name: unknown, field = "agent_name"): Agent {
     const a = this.agent(p, name, field);
     a.last_active_ts = nowUs();
     a.retired_at = null;
     this.q.touch.run(a.last_active_ts, a.id);
     return a;
+  }
+
+  agentById(id: number): Agent {
+    return this.q.agentById.get(id)!;
+  }
+
+  /** A project's agents that are not retired, most recently active first. */
+  liveAgents(p: Project, activeSince: number, limit: number): Agent[] {
+    return this.db
+      .query<Agent, [number, number, number]>(
+        `SELECT * FROM agents WHERE project_id = ? AND retired_at IS NULL AND last_active_ts >= ?
+         ORDER BY last_active_ts DESC, id DESC LIMIT ?`,
+      )
+      .all(p.id, activeSince, limit);
+  }
+
+  retire(who: Agent, now: number): void {
+    this.db.run("UPDATE agents SET retired_at = ? WHERE id = ?", [now, who.id]);
+  }
+
+  unretire(who: Agent, now: number): void {
+    this.db.run("UPDATE agents SET retired_at = NULL, last_active_ts = ? WHERE id = ?", [
+      now,
+      who.id,
+    ]);
   }
 
   uniqueName(projectId: number): string {
@@ -433,52 +470,53 @@ export class MailStore {
       )!;
   }
 
-  // Runs a write in one transaction. With a key, a repeat of the same arguments returns the first result marked
-  // idempotent_replay; the same key with different arguments is a conflict, never a silent replay.
+  // With a key, a repeat of the same arguments returns the first result marked idempotent_replay; the same key with
+  // different arguments is a conflict, never a silent replay. The caller's atomic() keeps the key and the write together.
   idempotent<T extends object>(tool: string, agentId: number, a: Args, run: () => T): T {
-    return this.db.transaction(() => {
-      const key = a.idempotency_key;
-      if (key == null || key === "") {
-        return run();
+    if (!this.db.inTransaction) {
+      throw new Error("idempotent() runs inside atomic()");
+    }
+    const key = a.idempotency_key;
+    if (key == null || key === "") {
+      return run();
+    }
+    const { idempotency_key, ...rest } = a;
+    const fingerprint = new Bun.CryptoHasher("sha256")
+      .update(
+        JSON.stringify(
+          Object.keys(rest)
+            .sort()
+            .map((k) => [k, rest[k]]),
+        ),
+      )
+      .digest("hex");
+    const hit = this.db
+      .query<{ result: string; fingerprint: string }, [string, number, string]>(
+        "SELECT result, fingerprint FROM idempotency_keys WHERE tool = ? AND agent_id = ? AND key = ?",
+      )
+      .get(tool, agentId, String(key));
+    if (hit) {
+      if (hit.fingerprint !== fingerprint) {
+        throw new ToolError(
+          "IDEMPOTENCY_KEY_CONFLICT",
+          `idempotency_key '${key}' was already used with different arguments`,
+          {
+            idempotency_key: key,
+          },
+        );
       }
-      const { idempotency_key, ...rest } = a;
-      const fingerprint = new Bun.CryptoHasher("sha256")
-        .update(
-          JSON.stringify(
-            Object.keys(rest)
-              .sort()
-              .map((k) => [k, rest[k]]),
-          ),
-        )
-        .digest("hex");
-      const hit = this.db
-        .query<{ result: string; fingerprint: string }, [string, number, string]>(
-          "SELECT result, fingerprint FROM idempotency_keys WHERE tool = ? AND agent_id = ? AND key = ?",
-        )
-        .get(tool, agentId, String(key));
-      if (hit) {
-        if (hit.fingerprint !== fingerprint) {
-          throw new ToolError(
-            "IDEMPOTENCY_KEY_CONFLICT",
-            `idempotency_key '${key}' was already used with different arguments`,
-            {
-              idempotency_key: key,
-            },
-          );
-        }
-        return { ...JSON.parse(hit.result), idempotent_replay: true } as T;
-      }
-      const result = run();
-      this.db.run("INSERT INTO idempotency_keys VALUES (?, ?, ?, ?, ?, ?)", [
-        tool,
-        agentId,
-        String(key),
-        fingerprint,
-        JSON.stringify(result),
-        nowUs(),
-      ]);
-      return result;
-    })();
+      return { ...JSON.parse(hit.result), idempotent_replay: true } as T;
+    }
+    const result = run();
+    this.db.run("INSERT INTO idempotency_keys VALUES (?, ?, ?, ?, ?, ?)", [
+      tool,
+      agentId,
+      String(key),
+      fingerprint,
+      JSON.stringify(result),
+      nowUs(),
+    ]);
+    return result;
   }
 
   deliver(p: Project, sender: Agent, a: Args, defaults: Row = {}) {
@@ -592,6 +630,75 @@ export class MailStore {
     return { id, r };
   }
 
+  markRead(messageId: number, who: Agent, readTs: number): void {
+    this.db.run("UPDATE message_recipients SET read_ts = ? WHERE message_id = ? AND agent_id = ?", [
+      readTs,
+      messageId,
+      who.id,
+    ]);
+  }
+
+  acknowledge(messageId: number, who: Agent, ackTs: number, readTs: number): void {
+    this.db.run(
+      "UPDATE message_recipients SET ack_ts = ?, read_ts = ? WHERE message_id = ? AND agent_id = ?",
+      [ackTs, readTs, messageId, who.id],
+    );
+  }
+
+  /** Each recipient of a message with its read and acknowledge times, by name. */
+  receipts(messageId: number): Row[] {
+    return this.db
+      .query<Row, [number]>(
+        `SELECT a.name, r.kind, r.read_ts, r.ack_ts FROM message_recipients r JOIN agents a ON a.id = r.agent_id
+         WHERE r.message_id = ? ORDER BY a.name`,
+      )
+      .all(messageId);
+  }
+
+  /** Full-text matches in one project, best first unless `recency`; `excerpt` wraps hits in the two markers. */
+  search(
+    p: Project,
+    f: {
+      match: string;
+      from: string | null;
+      threadId: string | null;
+      importance: string | null;
+      after: number | null;
+      before: number | null;
+      limit: number;
+      offset: number;
+      startMarker: string;
+      endMarker: string;
+      recency: boolean;
+    },
+  ): Row[] {
+    return this.db
+      .query<Row, any[]>(
+        `SELECT m.id, m.subject, m.importance, m.ack_required, m.created_ts, m.thread_id, m.topic, s.name AS "from",
+                m.body_md, m.recipients_json,
+                snippet(messages_fts, -1, ?10, ?11, ' … ', 32) AS excerpt
+         FROM messages_fts f JOIN messages m ON m.id = f.rowid JOIN agents s ON s.id = m.sender_id
+         WHERE messages_fts MATCH ?1 AND m.project_id = ?2 AND (?3 IS NULL OR s.name = ?3 COLLATE NOCASE)
+           AND (?4 IS NULL OR m.thread_id = ?4 OR CAST(m.id AS TEXT) = ?4) AND (?5 IS NULL OR m.importance IN (SELECT value FROM json_each(?5)))
+           AND (?6 IS NULL OR m.created_ts >= ?6) AND (?7 IS NULL OR m.created_ts <= ?7)
+         ORDER BY ${f.recency ? "" : "bm25(messages_fts, 4.0, 1.0),"} m.created_ts DESC, m.id DESC
+         LIMIT ?8 OFFSET ?9`,
+      )
+      .all(
+        f.match,
+        p.id,
+        f.from,
+        f.threadId,
+        f.importance,
+        f.after,
+        f.before,
+        f.limit,
+        f.offset,
+        f.startMarker,
+        f.endMarker,
+      );
+  }
+
   activeReservations(projectId: number, now: number) {
     return this.db
       .query<Row, [number, number]>(
@@ -668,6 +775,17 @@ export class MailStore {
         (paths.length === 0 || paths.includes(r.path_pattern)) &&
         (ids.length === 0 || ids.includes(r.id)),
     );
+  }
+
+  setExpiry(reservationId: number, expiresTs: number): void {
+    this.db.run("UPDATE file_reservations SET expires_ts = ? WHERE id = ?", [
+      expiresTs,
+      reservationId,
+    ]);
+  }
+
+  release(reservationId: number, now: number): void {
+    this.db.run("UPDATE file_reservations SET released_ts = ? WHERE id = ?", [now, reservationId]);
   }
 
   thread(p: Project, threadId: string) {

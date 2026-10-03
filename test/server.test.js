@@ -726,6 +726,31 @@ test("register_agent rejects a descriptive name and generates one when omitted",
   expect(generated.name).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
 });
 
+test("a call that fails partway writes nothing", async () => {
+  const key = "/w/fails-partway";
+  const rows = () => ({
+    projects: db.query("SELECT count(*) AS n FROM projects WHERE human_key = ?").get(key).n,
+    agents: db.query("SELECT count(*) AS n FROM agents WHERE name = 'AmberFinch'").get().n,
+  });
+  // The project row comes before the name check.
+  await expect(
+    call("register_agent", { project_key: key, program: "codex", model: "m", name: "not a name" }),
+  ).rejects.toMatchObject({ type: "INVALID_AGENT_NAME" });
+  expect(rows()).toEqual({ projects: 0, agents: 0 });
+  // The project and agent come before the reservation, whose NOT NULL expiry rejects a TTL of "soon".
+  await expect(
+    call("macro_start_session", {
+      human_key: key,
+      program: "codex",
+      model: "m",
+      agent_name: "AmberFinch",
+      file_reservation_paths: ["src/*"],
+      file_reservation_ttl_seconds: "soon",
+    }),
+  ).rejects.toMatchObject({ type: "INTERNAL" });
+  expect(rows()).toEqual({ projects: 0, agents: 0 });
+});
+
 test("a registration without a name keeps the name of the session or T3 thread its tag names", async () => {
   const project = "/w/one-identity";
   const start = (task, extra = {}) =>

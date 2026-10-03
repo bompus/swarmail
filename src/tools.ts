@@ -2,9 +2,7 @@
 import type { Database } from "bun:sqlite";
 import { iso, nowUs } from "./db.ts";
 import {
-  type Agent,
   type Args,
-  type Row,
   agentOut,
   list,
   MailStore,
@@ -21,8 +19,7 @@ type Tools = Record<string, (a: Args) => unknown>;
 
 const identityTools = (s: MailStore, info: { databasePath: string }): Tools => ({
   health_check: () => {
-    // Read a real table so a closed, locked or unreadable database fails the check.
-    s.db.query("SELECT 1 FROM projects LIMIT 1").get();
+    s.ping();
     return { status: "ok", database_path: info.databasePath };
   },
 
@@ -54,20 +51,14 @@ const identityTools = (s: MailStore, info: { databasePath: string }): Tools => (
   list_agents: (a) => {
     const p = s.project(a.project_key);
     const since = a.active_within_days ? nowUs() - a.active_within_days * 86_400_000_000 : 0;
-    return s.db
-      .query<Agent, [number, number, number]>(
-        `SELECT * FROM agents WHERE project_id = ? AND retired_at IS NULL AND last_active_ts >= ?
-         ORDER BY last_active_ts DESC, id DESC LIMIT ?`,
-      )
-      .all(p.id, since, pageLimit(a.limit, "limit", 250))
-      .map((r) => ({
-        name: r.name,
-        program: r.program,
-        model: r.model,
-        task_description: r.task_description,
-        inception_ts: iso(r.inception_ts),
-        last_active_ts: iso(r.last_active_ts),
-      }));
+    return s.liveAgents(p, since, pageLimit(a.limit, "limit", 250)).map((r) => ({
+      name: r.name,
+      program: r.program,
+      model: r.model,
+      task_description: r.task_description,
+      inception_ts: iso(r.inception_ts),
+      last_active_ts: iso(r.last_active_ts),
+    }));
   },
 
   retire_agent: (a) => {
@@ -75,17 +66,14 @@ const identityTools = (s: MailStore, info: { databasePath: string }): Tools => (
     const p = s.project(a.project_key),
       who = s.agent(p, a.agent_name),
       now = nowUs();
-    s.db.run("UPDATE agents SET retired_at = ? WHERE id = ?", [now, who.id]);
+    s.retire(who, now);
     return { agent_name: who.name, retired: true, retired_at: iso(now) };
   },
 
   unretire_agent: (a) => {
     const p = s.project(a.project_key),
       who = s.agent(p, a.agent_name);
-    s.db.run("UPDATE agents SET retired_at = NULL, last_active_ts = ? WHERE id = ?", [
-      nowUs(),
-      who.id,
-    ]);
+    s.unretire(who, nowUs());
     return { agent_name: who.name, retired: false };
   },
 });
@@ -105,7 +93,7 @@ const messageTools = (s: MailStore): Tools => ({
     const subject = original.subject.toLowerCase().startsWith(prefix.toLowerCase())
       ? original.subject
       : `${prefix} ${original.subject}`;
-    const to = a.to ?? [s.q.agentById.get(original.sender_id)!.name];
+    const to = a.to ?? [s.agentById(original.sender_id).name];
     return s.idempotent("reply_message", sender.id, a, () => {
       const m = s.deliver(
         p,
@@ -127,7 +115,7 @@ const messageTools = (s: MailStore): Tools => ({
     a = { ...a, limit: pageLimit(a.limit, "limit", 20) };
     const p = s.project(a.project_key),
       who = s.acting(p, a.agent_name);
-    return s.db.transaction(() => s.inbox(p, who, a, a.mark_read ?? true))();
+    return s.inbox(p, who, a, a.mark_read ?? true);
   },
 
   mark_message_read: (a) => {
@@ -136,11 +124,7 @@ const messageTools = (s: MailStore): Tools => ({
     const { id, r } = s.recipientRow(p, who, a.message_id);
     const readTs = r.read_ts ?? nowUs();
     if (r.read_ts == null) {
-      s.db.run("UPDATE message_recipients SET read_ts = ? WHERE message_id = ? AND agent_id = ?", [
-        readTs,
-        id,
-        who.id,
-      ]);
+      s.markRead(id, who, readTs);
     }
     return { message_id: id, read: true, read_at: iso(readTs) };
   },
@@ -152,10 +136,7 @@ const messageTools = (s: MailStore): Tools => ({
     const now = nowUs(),
       ackTs = r.ack_ts ?? now,
       readTs = r.read_ts ?? now;
-    s.db.run(
-      "UPDATE message_recipients SET ack_ts = ?, read_ts = ? WHERE message_id = ? AND agent_id = ?",
-      [ackTs, readTs, id, who.id],
-    );
+    s.acknowledge(id, who, ackTs, readTs);
     return {
       message_id: id,
       acknowledged: true,
@@ -212,31 +193,19 @@ function searchMessages(s: MailStore, a: Args) {
       field: "cursor",
     });
   }
-  const rows = s.db
-    .query<Row, any[]>(
-      `SELECT m.id, m.subject, m.importance, m.ack_required, m.created_ts, m.thread_id, m.topic, s.name AS "from",
-                m.body_md, m.recipients_json,
-                snippet(messages_fts, -1, ?10, ?11, ' … ', 32) AS excerpt
-         FROM messages_fts f JOIN messages m ON m.id = f.rowid JOIN agents s ON s.id = m.sender_id
-         WHERE messages_fts MATCH ?1 AND m.project_id = ?2 AND (?3 IS NULL OR s.name = ?3 COLLATE NOCASE)
-           AND (?4 IS NULL OR m.thread_id = ?4 OR CAST(m.id AS TEXT) = ?4) AND (?5 IS NULL OR m.importance IN (SELECT value FROM json_each(?5)))
-           AND (?6 IS NULL OR m.created_ts >= ?6) AND (?7 IS NULL OR m.created_ts <= ?7)
-         ORDER BY ${a.ranking === "recency" ? "" : "bm25(messages_fts, 4.0, 1.0),"} m.created_ts DESC, m.id DESC
-         LIMIT ?8 OFFSET ?9`,
-    )
-    .all(
-      match,
-      p.id,
-      from,
-      a.thread_id == null ? null : String(a.thread_id),
-      importance,
-      after,
-      before,
-      limit + 1,
-      offset,
-      startMarker,
-      endMarker,
-    );
+  const rows = s.search(p, {
+    match,
+    from,
+    threadId: a.thread_id == null ? null : String(a.thread_id),
+    importance,
+    after,
+    before,
+    limit: limit + 1,
+    offset,
+    startMarker,
+    endMarker,
+    recency: a.ranking === "recency",
+  });
   const result = rows.slice(0, limit).map(({ body_md, recipients_json, ...m }) => {
     const r = JSON.parse(recipients_json || "{}");
     // Omit an unset topic.
@@ -259,12 +228,7 @@ const readTools = (s: MailStore): Tools => ({
   get_message_delivery_receipt: (a) => {
     const p = s.project(a.project_key);
     const m = s.message(p, a.message_id);
-    const rows = s.db
-      .query<Row, [number]>(
-        `SELECT a.name, r.kind, r.read_ts, r.ack_ts FROM message_recipients r JOIN agents a ON a.id = r.agent_id
-         WHERE r.message_id = ? ORDER BY a.name`,
-      )
-      .all(m.id);
+    const rows = s.receipts(m.id);
     // read_at tells a sender whether each recipient has fetched the message yet.
     return {
       message_id: m.id,
@@ -317,41 +281,42 @@ const reservationTools = (s: MailStore): Tools => ({
     const p = s.project(a.project_key),
       who = s.acting(p, a.agent_name);
     const extend = Number(a.extend_seconds ?? 1800) * 1_000_000;
-    return s.db.transaction(() => {
-      const renewed = s.ownActive(p, who, a).map((r) => {
-        const next = r.expires_ts + extend;
-        s.db.run("UPDATE file_reservations SET expires_ts = ? WHERE id = ?", [next, r.id]);
-        return {
-          id: r.id,
-          path_pattern: r.path_pattern,
-          old_expires_ts: iso(r.expires_ts),
-          new_expires_ts: iso(next),
-        };
-      });
-      return { renewed: renewed.length, file_reservations: renewed };
-    })();
+    const renewed = s.ownActive(p, who, a).map((r) => {
+      const next = r.expires_ts + extend;
+      s.setExpiry(r.id, next);
+      return {
+        id: r.id,
+        path_pattern: r.path_pattern,
+        old_expires_ts: iso(r.expires_ts),
+        new_expires_ts: iso(next),
+      };
+    });
+    return { renewed: renewed.length, file_reservations: renewed };
   },
 
   release_file_reservations: (a) => {
     const p = s.project(a.project_key),
       who = s.acting(p, a.agent_name),
       now = nowUs();
-    return s.db.transaction(() => {
-      const rows = s.ownActive(p, who, a);
-      for (const r of rows) {
-        s.db.run("UPDATE file_reservations SET released_ts = ? WHERE id = ?", [now, r.id]);
-      }
-      return { released: rows.length, released_at: iso(now) };
-    })();
+    const rows = s.ownActive(p, who, a);
+    for (const r of rows) {
+      s.release(r.id, now);
+    }
+    return { released: rows.length, released_at: iso(now) };
   },
 });
 
 export function createTools(db: Database, info: { databasePath: string }): Tools {
   const s = new MailStore(db);
-  return {
+  const tools: Tools = {
     ...identityTools(s, info),
     ...messageTools(s),
     ...readTools(s),
     ...reservationTools(s),
   };
+  // One transaction per call: a tool that throws partway, such as a register that fails after its project was
+  // created, writes nothing.
+  return Object.fromEntries(
+    Object.entries(tools).map(([name, run]) => [name, (a: Args) => s.atomic(() => run(a))]),
+  );
 }
