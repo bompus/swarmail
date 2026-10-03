@@ -1,6 +1,7 @@
 // Session registration: the register hook's per-session state, one JSON file per session id written
 // under a lock file, and the server calls that register a session. The hook and the T3 supervisor
 // register through `openRegistry`; `who`, the guard and the wake hook only read.
+import { renameOver } from "./files.ts";
 import { stateHome } from "./paths.ts";
 import {
   closeSync,
@@ -8,7 +9,6 @@ import {
   openSync,
   readdirSync,
   readFileSync,
-  renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -242,7 +242,7 @@ function readState<S>(file: string): S | null {
 // Rename over the old file, so a reader that skips the lock sees the old state or the new one.
 function writeState(file: string, state: RegisterState): void {
   writeFileSync(`${file}.tmp`, JSON.stringify(state) + "\n");
-  renameSync(`${file}.tmp`, file);
+  renameOver(`${file}.tmp`, file);
 }
 
 function stateFiles(dir: string): string[] {

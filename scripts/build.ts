@@ -8,11 +8,11 @@
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join } from "node:path";
+import { binaryPath, homeDir } from "../src/paths.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..");
-export const defaultBinary = (home = homedir()) => join(home, ".local", "bin", "swarmail");
+export const defaultBinary = (home = homeDir()) => binaryPath(home);
 
 /** A hash of what the binary is built from: the server sources, by path and content, and the Bun version. */
 export function sourceHash(root = REPO_ROOT, bun = Bun.version): string {
@@ -45,9 +45,36 @@ export function buildEntry(root = REPO_ROOT): string {
   return existsSync(join(src, "main.ts")) ? join(src, "main.ts") : join(src, "cli.ts");
 }
 
+/**
+ * Moves the new build over `out`. Windows refuses to rename over a running program but lets it be moved aside, so
+ * a busy one gets a dated name; each build deletes the earlier ones that nothing runs any more.
+ */
+function replaceBinary(next: string, out: string): void {
+  if (process.platform !== "win32") {
+    renameSync(next, out);
+    return;
+  }
+  const dir = dirname(out);
+  const stem = basename(out).replace(/\.exe$/i, "");
+  for (const name of readdirSync(dir).filter((name) => name.startsWith(`${stem}.old-`))) {
+    try {
+      rmSync(join(dir, name));
+    } catch {
+      // Still running; a later build removes it.
+    }
+  }
+  try {
+    renameSync(next, out);
+  } catch {
+    renameSync(out, join(dir, `${stem}.old-${Date.now()}.exe`));
+    renameSync(next, out);
+  }
+}
+
 export function buildSwarmail(root = REPO_ROOT, out = defaultBinary()): string {
   const source = sourceHash(root);
-  const next = `${out}.new`;
+  // Bun adds .exe to a Windows outfile without one, so the suffix stays last.
+  const next = out.replace(/(\.exe)?$/i, ".new$1");
   const build = spawnSync(
     process.execPath,
     [
@@ -72,7 +99,7 @@ export function buildSwarmail(root = REPO_ROOT, out = defaultBinary()): string {
     throw new Error(`bun build failed:\n${build.stderr}`);
   }
   // A rename, so running hooks and the server keep the old file instead of failing to write a busy one.
-  renameSync(next, out);
+  replaceBinary(next, out);
   return source;
 }
 

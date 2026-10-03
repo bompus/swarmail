@@ -48,31 +48,36 @@ function fakeMail(handler) {
 }
 
 test("resolves a worktree to its primary checkout and skips bare or missing repositories", () => {
-  const run = (common) => () => common;
-  expect(primaryCheckout("/w/repo-task", run("/home/u/repo/.git"))).toBe("/home/u/repo");
-  expect(primaryCheckout("/home/u/repo", run("/home/u/repo/.git"))).toBe("/home/u/repo");
-  expect(primaryCheckout("/srv/bare", run("/srv/bare.git"))).toBeNull();
+  const root = tmpdir();
+  // Git prints forward slashes on every platform; the checkout comes back in the native form.
+  const run = (common) => () => common.replaceAll("\\", "/");
+  const repo = join(root, "repo");
+  expect(primaryCheckout(join(root, "w", "repo-task"), run(join(repo, ".git")))).toBe(repo);
+  expect(primaryCheckout(repo, run(join(repo, ".git")))).toBe(repo);
+  expect(primaryCheckout(join(root, "bare"), run(join(root, "bare.git")))).toBeNull();
   expect(
-    primaryCheckout("/tmp", () => {
+    primaryCheckout(root, () => {
       throw new Error("not a repo");
     }),
   ).toBeNull();
 });
 
 test("resolves the edited file's folder, falling back to the session cwd", () => {
-  expect(targetDir({ cwd: "/home/u", tool_input: { file_path: "/tmp/new-dir/x.ts" } })).toBe(
-    "/tmp",
+  const root = tmpdir();
+  const home = join(root, "no-such-home");
+  expect(targetDir({ cwd: home, tool_input: { file_path: join(root, "new-dir", "x.ts") } })).toBe(
+    root,
   );
-  expect(targetDir({ cwd: "/home/u", tool_input: {} })).toBe("/home/u");
+  expect(targetDir({ cwd: home, tool_input: {} })).toBe(home);
   expect(targetDir({ tool_input: { file_path: "relative.ts" } })).toBeNull();
   const patch = "*** Begin Patch\n*** Update File: sub/x.ts\n@@\n*** End Patch";
-  expect(targetDir({ cwd: "/tmp", tool_input: { command: patch } })).toBe("/tmp");
-  expect(targetDir({ cwd: "/home/u", tool_input: { command: "*** Add File: /tmp/a/b.ts" } })).toBe(
-    "/tmp",
-  );
-  expect(targetDir({ cwd: "/home/u", toolCall: { args: { TargetFile: "/tmp/new/c.ts" } } })).toBe(
-    "/tmp",
-  );
+  expect(targetDir({ cwd: root, tool_input: { command: patch } })).toBe(root);
+  expect(
+    targetDir({ cwd: home, tool_input: { command: `*** Add File: ${join(root, "a", "b.ts")}` } }),
+  ).toBe(root);
+  expect(
+    targetDir({ cwd: home, toolCall: { args: { TargetFile: join(root, "new", "c.ts") } } }),
+  ).toBe(root);
 });
 
 test("registers once per repository and tag, keeping one name across repositories", () => {

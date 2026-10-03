@@ -3,8 +3,8 @@
 // copied V1 tables stay behind, frozen. V1 keeps writing `state.sqlite`.
 import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { t3Home } from "./paths.ts";
 
 /** V2's database once a V2 server has created it, else V1's. */
 export function t3StatePath(baseDir: string): string {
@@ -46,10 +46,7 @@ export const T3_V2_THREADS = `
  * thread id to the provider process, but V1's resume cursor for the thread and V2's native
  * thread reference hold the session id.
  */
-export function t3ThreadId(
-  sessionId: string,
-  dbPath = t3StatePath(join(homedir(), ".t3")),
-): string | null {
+export function t3ThreadId(sessionId: string, dbPath = t3StatePath(t3Home())): string | null {
   if (!existsSync(dbPath)) {
     return null;
   }

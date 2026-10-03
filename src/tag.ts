@@ -1,6 +1,6 @@
 // The session tag that leads a roster task description, e.g. `[t3:<thread> claude:<session> build:<hash> cwd:~/repo]`.
 // The register hook writes it; wake routing, `who` and re-registration read it.
-import { homedir } from "node:os";
+import { homeDir, tildePath } from "./paths.ts";
 import { buildSource } from "./build.ts";
 
 export interface Tag {
@@ -26,7 +26,7 @@ export function sessionTag(
     build = buildSource,
   }: { t3?: string | null; host: string; sessionId?: string | null; build?: string | null },
   cwd: unknown,
-  home = homedir(),
+  home = homeDir(),
 ): string {
   const parts = t3 ? [`t3:${t3}`] : [];
   parts.push(sessionId ? `${host}:${sessionId}` : host);
@@ -34,9 +34,7 @@ export function sessionTag(
     parts.push(`build:${build}`);
   }
   if (typeof cwd === "string" && cwd) {
-    parts.push(
-      `cwd:${cwd === home || cwd.startsWith(home + "/") ? "~" + cwd.slice(home.length) : cwd}`,
-    );
+    parts.push(`cwd:${tildePath(home, cwd)}`);
   }
   return `[${parts.join(" ")}]`;
 }

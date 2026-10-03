@@ -6,7 +6,7 @@
 // prints nothing: Antigravity reads any stdout, even `{}`, as a decision and denies the call.
 
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { primaryCheckout } from "./checkout.ts";
 import { hostProcess, sameHost } from "./proc.ts";
 import { openRegistry, serverRegister, type Session } from "./registry.ts";
@@ -56,9 +56,9 @@ export function targetDir(input: HookInput): string | null {
     patched,
   ].find((value) => typeof value === "string" && value);
   const cwd = typeof input.cwd === "string" ? input.cwd : null;
-  if (typeof file === "string" && (file.startsWith("/") || cwd)) {
-    let dir = dirname(resolve(cwd ?? "/", file));
-    while (dir !== "/" && !existsSync(dir)) {
+  if (typeof file === "string" && (isAbsolute(file) || cwd)) {
+    let dir = dirname(cwd ? resolve(cwd, file) : resolve(file));
+    while (dirname(dir) !== dir && !existsSync(dir)) {
       dir = dirname(dir);
     }
     return dir;
@@ -131,7 +131,10 @@ export function hookSession(input: HookInput, env: NodeJS.ProcessEnv = process.e
   }
   // Claude only on positive evidence: its transcript path, or the variable it sets for child processes.
   // An unrecognised host must not be taken for Claude, since only Claude gets hook output.
-  if ((str(input.transcript_path) ?? "").includes("/.claude/projects/") || env.CLAUDECODE === "1") {
+  if (
+    /[\\/]\.claude[\\/]projects[\\/]/.test(str(input.transcript_path) ?? "") ||
+    env.CLAUDECODE === "1"
+  ) {
     return {
       ...session("claude", undefined, undefined, "claude-code"),
       model: model ?? str(env.ANTHROPIC_MODEL),

@@ -1,9 +1,8 @@
 #!/usr/bin/env bun
 // Swarmail server: MCP over streamable HTTP (stateless JSON responses) on 127.0.0.1.
 //   bun server.ts                      serve (SWARMAIL_DB, SWARMAIL_PORT, SWARMAIL_SYNCHRONOUS, SWARMAIL_RETIRE_DAYS: 0 keeps idle agents and gone projects); GET /wait is the wake long poll (wake.ts)
-import { databasePath, DEFAULT_PORT } from "./paths.ts";
+import { databasePath, DEFAULT_PORT, homeDir, within } from "./paths.ts";
 import type { Database } from "bun:sqlite";
-import { homedir } from "node:os";
 import { dirname } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import { nowUs, openDatabase } from "./db.ts";
@@ -192,7 +191,7 @@ export function pruneIdempotencyKeys(db: Database, days: number, now = nowUs()):
  */
 export function pruneGoneProjects(
   db: Database,
-  { home = homedir(), exists = existsSync, now = nowUs() } = {},
+  { home = homeDir(), exists = existsSync, now = nowUs() } = {},
 ): number {
   const dayAgo = now - 86_400_000_000;
   const ids = db
@@ -206,7 +205,7 @@ export function pruneGoneProjects(
          AND NOT EXISTS (SELECT 1 FROM agents a WHERE a.project_id = p.id AND a.last_active_ts > ?)`,
     )
     .all(now, dayAgo)
-    .filter((p) => p.human_key.startsWith(`${home}/`) && !exists(p.human_key))
+    .filter((p) => !!within(home, p.human_key) && !exists(p.human_key))
     .map((p) => p.id);
   db.transaction(() => {
     for (const id of ids) {
