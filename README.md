@@ -204,4 +204,5 @@ or the Bun version changed. Restart the unit to load a new build.
 
 ## Licence
 
-MIT
+MIT. `CODE_OF_CONDUCT.md` is the Contributor Covenant under CC BY 4.0; see
+`THIRD_PARTY_NOTICES.md`. To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md).
