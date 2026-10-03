@@ -59,13 +59,30 @@ test("resume clears an end from before the prompt and leaves one recorded after 
   });
 });
 
-test("readers skip unreadable state and leftover temporary files", () => {
+test("readers skip unreadable or foreign state and leftover temporary files", () => {
   withRegistry((registry, dir) => {
     writeFileSync(join(dir, "good.json"), JSON.stringify({ name: "GoldMoss", projects: [] }));
     writeFileSync(join(dir, "torn.json"), '{"name": "Ha');
     writeFileSync(join(dir, "left.json.tmp"), "{}");
-    expect(registry.all()).toEqual([{ sessionId: "good", name: "GoldMoss", projects: [] }]);
+    for (const [id, text] of [
+      ["empty", "{}"],
+      ["list", "[]"],
+      ["null", "null"],
+      ["number", "7"],
+    ]) {
+      writeFileSync(join(dir, `${id}.json`), text);
+    }
+    expect(registry.all().sort((a, b) => a.sessionId.localeCompare(b.sessionId))).toEqual([
+      { sessionId: "empty", projects: [] },
+      { sessionId: "good", name: "GoldMoss", projects: [] },
+    ]);
     expect(registry.read("torn")).toBeNull();
+    expect(registry.read("empty")).toEqual({ projects: [] });
+    expect(registry.read("number")).toBeNull();
+    // A state that is not an object is replaced, not merged into.
+    expect(
+      registry.settle("list", { since: 0, project: "/r", tag: "[t]", register: () => "Fen" }).after,
+    ).toEqual({ name: "Fen", projects: ["/r"], tags: { "/r": "[t]" } });
     expect(registry.read("missing")).toBeNull();
     registry.end("good", () => {}, new Date(0));
     expect(JSON.parse(readFileSync(join(dir, "good.json"), "utf8")).ended).toBe(

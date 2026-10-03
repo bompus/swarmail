@@ -238,9 +238,14 @@ export interface Registry<S extends RegisterState = RegisterState> {
 
 const fresh = (): RegisterState => ({ name: null, projects: [] });
 
+/** A state file's contents, or null when it is missing, torn, or not a JSON object. */
 function readState<S>(file: string): S | null {
   try {
-    return JSON.parse(readFileSync(file, "utf8"));
+    const value = JSON.parse(readFileSync(file, "utf8"));
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+    return Array.isArray(value.projects) ? value : { ...value, projects: [] };
   } catch {
     return null;
   }
