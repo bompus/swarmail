@@ -4,7 +4,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { primaryCheckout } from "./checkout.ts";
 import { overlaps } from "./glob.ts";
-import { leadingTag } from "./tag.ts";
+import { leadingTag, parseTag, sameSession } from "./tag.ts";
 import { InvalidTimestamp, iso, nowUs, parseIso } from "./db.ts";
 
 /** A tool failure reported to the caller as `{"error": {type, message, recoverable, data}}`. */
@@ -240,6 +240,9 @@ const queries = (db: Database) => ({
     "SELECT * FROM agents WHERE project_id = ? AND name = ? COLLATE NOCASE",
   ),
   agentById: db.query<Agent, [number]>("SELECT * FROM agents WHERE id = ?"),
+  liveAgentsMentioning: db.query<Agent, [number, string]>(
+    "SELECT * FROM agents WHERE project_id = ? AND retired_at IS NULL AND instr(task_description, ?) > 0 ORDER BY last_active_ts DESC, id DESC",
+  ),
   agentNames: db.query<{ name: string }, [number]>(
     "SELECT name FROM agents WHERE project_id = ? AND retired_at IS NULL ORDER BY last_active_ts DESC, id DESC",
   ),
@@ -367,6 +370,25 @@ export class MailStore {
     throw new ToolError("INTERNAL", "could not find a free agent name");
   }
 
+  /**
+   * The live agent whose leading tag names the same session as `task`'s, most recently active
+   * first, so a session that registers again without its name keeps it instead of getting a second.
+   */
+  private agentForTag(projectId: number, task: unknown): Agent | null {
+    const tag = parseTag(leadingTag(String(task ?? "")));
+    for (const key of [tag?.t3, tag?.sessionId]) {
+      const hit = key
+        ? this.q.liveAgentsMentioning
+            .all(projectId, `:${key}`)
+            .find((agent) => sameSession(parseTag(agent.task_description), tag))
+        : undefined;
+      if (hit) {
+        return hit;
+      }
+    }
+    return null;
+  }
+
   register(p: Project, a: Args): Agent {
     const name = a.name;
     if (name != null && !NAME_RE.test(name)) {
@@ -378,7 +400,10 @@ export class MailStore {
       );
     }
     const now = nowUs();
-    const existing = name == null ? null : this.q.agentByName.get(p.id, name);
+    const existing =
+      name == null
+        ? this.agentForTag(p.id, a.task_description)
+        : this.q.agentByName.get(p.id, name);
     if (existing) {
       // Re-registering replaces the task description. A leading `[host:session ...]` tag routes
       // wake-ups (wake.ts), so a new description without one keeps the old tag.

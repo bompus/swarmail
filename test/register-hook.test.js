@@ -392,6 +392,77 @@ test("an edit from a session registered before tags retags its row and keeps nam
   }
 });
 
+test("a new provider session in a T3 thread takes over the thread's name", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "hook-t3-thread-"));
+  const mail = fakeMail((name, args) =>
+    name === "list_agents"
+      ? [
+          { name: "QuietElm", task_description: "[claude:other-sid cwd:~/repo] unrelated" },
+          {
+            name: "BoldWillow",
+            task_description: "[t3:thread-1 claude:old-sid cwd:~/repo] Swarmail release",
+          },
+        ]
+      : { name: args.name ?? "FreshName" },
+  );
+  try {
+    const repo = join(dir, "repo");
+    Bun.spawnSync(["git", "init", "-q", repo]);
+    mkdirSync(join(dir, ".t3/userdata"), { recursive: true });
+    const t3 = new Database(join(dir, ".t3/userdata/statev2.sqlite"));
+    createT3V2Tables(t3);
+    addT3V2Thread(t3, { threadId: "thread-1", nativeId: "new-sid", driver: "claudeAgent" });
+    t3.close();
+    const env = {
+      ...process.env,
+      SWARMAIL_URL: mail.url,
+      XDG_STATE_HOME: join(dir, "state"),
+      HOME: dir,
+      GROK_SESSION_ID: "",
+      DEVIN_PROJECT_DIR: "",
+      CLAUDECODE: "",
+    };
+    const input = JSON.stringify({
+      session_id: "new-sid",
+      transcript_path: join(dir, ".claude/projects/repo/new-sid.jsonl"),
+      cwd: repo,
+      tool_input: { file_path: join(repo, "a.txt") },
+    });
+    await Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
+      stdin: new Blob([input]),
+      env,
+    }).exited;
+    const register = mail.calls.find((call) => call.name === "register_agent").arguments;
+    expect(register.name).toBe("BoldWillow");
+    expect(register.task_description).toBe(
+      "[t3:thread-1 claude:new-sid cwd:~/repo] Swarmail release",
+    );
+  } finally {
+    mail.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("register --tag takes the session id from the host's shell variable when none is given", () => {
+  const dir = mkdtempSync(join(tmpdir(), "hook-tag-"));
+  try {
+    const tag = (args, env) =>
+      Bun.spawnSync(["bun", join(import.meta.dir, "../src/cli.ts"), "register", ...args], {
+        cwd: dir,
+        env: { ...process.env, HOME: dir, CODEX_THREAD_ID: "", ...env },
+      })
+        .stdout.toString()
+        .trim();
+    expect(tag(["--tag", "codex"], { CODEX_THREAD_ID: "env-sid" })).toBe("[codex:env-sid cwd:~]");
+    expect(tag(["--tag", "codex", "arg-sid"], { CODEX_THREAD_ID: "env-sid" })).toBe(
+      "[codex:arg-sid cwd:~]",
+    );
+    expect(tag(["--tag", "codex"], {})).toBe("[codex cwd:~]");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("finds the agent host above the hook and records its PID and start time", () => {
   const procs = {
     40: { comm: "sh", ppid: 30, start: "900" },

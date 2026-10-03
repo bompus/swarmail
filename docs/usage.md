@@ -22,7 +22,9 @@ checkout, unless a project already exists under that exact path.
   uses to match names to sessions. A `register_agent` call whose description
   has no tag keeps the existing tag. For a manual registration, print the tag
   with `swarmail register --tag <host> [session id]` from your working
-  directory.
+  directory; it reads the session id from the host's shell variable when you
+  leave it out. A registration without a name whose tag names a session that
+  already has one keeps that name.
 
 ## When to send mail
 
