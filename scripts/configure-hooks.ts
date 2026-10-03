@@ -1,11 +1,13 @@
 #!/usr/bin/env bun
 // Installs the Swarmail hooks (`swarmail register`, `swarmail hook wake`) for every host: Claude settings, which Cursor, Devin and Grok also load; Cursor's own hooks.json for its
 // wake hook; Codex (~/.codex/hooks.json), OpenCode (a plugin) and Antigravity
-// (~/.gemini/config/hooks.json). Linux home only.
+// (~/.gemini/config/hooks.json). Linux home only. A host whose directory doesn't exist is
+// skipped, so a host that isn't installed gets no config directory.
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
   planJson,
+  present,
   readConfig,
   withHook as withOwnedHook,
   writeChanged,
@@ -121,21 +123,31 @@ export function configureSwarmailHooks(home: string = homedir(), { dryRun = fals
   home = resolve(home);
   const { bin, command, wake, rearm } = swarmailHookPaths(home);
   const hookEntry = { type: "command", command, timeout: 15 };
-  const plans: { path: string; original: string; next: string }[] = [
-    planJson(join(home, ".claude", "settings.json"), home, (config) =>
-      withClaudeHooks(config, command, wake("claude"), rearm),
-    ),
+  // Each plan lists the home directories that mean its host is installed.
+  const plans: { path: string; original: string; next: string; hosts: string[] }[] = [
+    {
+      ...planJson(join(home, ".claude", "settings.json"), home, (config) =>
+        withClaudeHooks(config, command, wake("claude"), rearm),
+      ),
+      hosts: [".claude", ".cursor", ".grok", ".config/devin"],
+    },
     // Cursor runs the Claude Stop hook too, where the script exits at once (no CLAUDE_PID ancestor).
     // Its own stop hook holds the idle turn open, and a followup_message starts the next one. Cursor
     // stops auto-continuing after 5 follow-ups with no user prompt (loop_limit), which also ends a
     // loop of agents waking each other.
-    planJson(join(home, ".cursor", "hooks.json"), home, (config) =>
-      withHook({ version: 1, ...config }, "stop", { command: wake("cursor"), timeout: 28900 }),
-    ),
+    {
+      ...planJson(join(home, ".cursor", "hooks.json"), home, (config) =>
+        withHook({ version: 1, ...config }, "stop", { command: wake("cursor"), timeout: 28900 }),
+      ),
+      hosts: [".cursor"],
+    },
     // Codex matches `apply_patch` as Edit|Write and adds `turn_id`, which the hook uses to tell it from Claude.
-    planJson(join(home, ".codex", "hooks.json"), home, (config) =>
-      withHook(config, "PreToolUse", { matcher: "Edit|Write", hooks: [hookEntry] }),
-    ),
+    {
+      ...planJson(join(home, ".codex", "hooks.json"), home, (config) =>
+        withHook(config, "PreToolUse", { matcher: "Edit|Write", hooks: [hookEntry] }),
+      ),
+      hosts: [".codex"],
+    },
     {
       path: join(home, ".config", "opencode", "plugin", "swarmail-register.ts"),
       original: readConfig(
@@ -143,29 +155,34 @@ export function configureSwarmailHooks(home: string = homedir(), { dryRun = fals
         home,
       ),
       next: openCodePlugin(bin),
+      hosts: [".config/opencode"],
     },
     // Antigravity keys hooks by group name. Its docs derive matcher names from step types while the
     // model calls write_to_file / replace_file_content, so match both.
     // A user's `"enabled": false` on the group survives reinstalls.
-    planJson(join(home, ".gemini", "config", "hooks.json"), home, (config) => ({
-      ...config,
-      [marker]: {
-        ...((config[marker] as { enabled?: unknown } | undefined)?.enabled === false && {
-          enabled: false,
-        }),
-        PreToolUse: [
-          {
-            matcher:
-              "code_action|file_change|write_to_file|replace_file_content|multi_replace_file_content",
-            hooks: [hookEntry],
-          },
-        ],
-      },
-    })),
+    {
+      ...planJson(join(home, ".gemini", "config", "hooks.json"), home, (config) => ({
+        ...config,
+        [marker]: {
+          ...((config[marker] as { enabled?: unknown } | undefined)?.enabled === false && {
+            enabled: false,
+          }),
+          PreToolUse: [
+            {
+              matcher:
+                "code_action|file_change|write_to_file|replace_file_content|multi_replace_file_content",
+              hooks: [hookEntry],
+            },
+          ],
+        },
+      })),
+      hosts: [".gemini"],
+    },
   ];
-  const changed = plans.filter((plan) => plan.original !== plan.next).map((plan) => plan.path);
+  const installed = plans.filter(({ hosts }) => hosts.some((dir) => present(join(home, dir))));
+  const changed = installed.filter((plan) => plan.original !== plan.next).map((plan) => plan.path);
   if (!dryRun) {
-    for (const plan of plans) {
+    for (const plan of installed) {
       writeChanged(plan.path, plan.original, plan.next, "setup-backup");
     }
   }
@@ -176,9 +193,10 @@ if (import.meta.main) {
   if (process.platform !== "linux" || process.getuid?.() === 0) {
     throw new Error("Run as your normal Linux user.");
   }
-  console.log(
-    JSON.stringify(
-      configureSwarmailHooks(homedir(), { dryRun: process.argv.includes("--dry-run") }),
-    ),
-  );
+  // Any other argument, --help included, stops before a write.
+  const args = process.argv.slice(2);
+  if (args.some((arg) => arg !== "--dry-run")) {
+    throw new Error("Usage: bun scripts/configure-hooks.ts [--dry-run]");
+  }
+  console.log(JSON.stringify(configureSwarmailHooks(homedir(), { dryRun: args.length > 0 })));
 }
