@@ -23,7 +23,6 @@ import { hostAlive } from "./proc.ts";
 import { openRegistry, registryDir, selfNames } from "./registry.ts";
 import { t3StatePath, t3ThreadId, t3Threads, type T3Thread } from "./t3-state.ts";
 import { parseTag, withoutTag } from "./tag.ts";
-import { liveRoomPath } from "./who-extra.ts";
 
 /** A roster row from `list_agents`. */
 export interface RosterAgent {
@@ -125,6 +124,7 @@ export function resolveProject(target: string, keys: string[], checkout = primar
   );
 }
 
+/** The live room heartbeat at `path` (SWARMAIL_LIVE_ROOM), or null when unset, unreadable or stale. */
 function liveRoom(path: string | null): LiveRoom | null {
   if (!path) {
     return null;
@@ -266,7 +266,7 @@ export function main(args: string[]): void {
     roster,
     stateDir: registryDir(),
     threads: t3Threads(t3StatePath(join(home, ".t3"))),
-    room: liveRoom(liveRoomPath()),
+    room: liveRoom(process.env.SWARMAIL_LIVE_ROOM || null),
     queues: unreadQueues(dbPath, project),
   }).filter(
     (row) =>

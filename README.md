@@ -146,6 +146,7 @@ anywhere prints usage and runs nothing.
 | `SWARMAIL_RETIRE_DAYS` | `7` | Retire idle agents and drop projects whose checkout is gone; `0` keeps both |
 | `SWARMAIL_GUARD` | `block` | `warn` only reports, `off` skips |
 | `SWARMAIL_AGENT` | from hook state | Name used by `inbox`, `send`, `ping`, `guard` and `who` |
+| `SWARMAIL_LIVE_ROOM` | unset | A JSON heartbeat file (`heartbeatAt`, plus `agentName`, `hostSessionId` or `t3Thread`); while its heartbeat is under 5 minutes old, `who` flags the session it names |
 
 `scripts/enable.sh`, the service unit and `configure-mcp.ts` use port 18765.
 Change `SWARMAIL_PORT` and the two URL variables only when you run

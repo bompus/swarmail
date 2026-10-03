@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 // The swarmail command, and the entry for its single binary: scripts/build.ts builds ~/.local/bin/swarmail.
-// It runs on Linux only, since sessions are identified through /proc.
+// It runs on Linux only, since sessions are identified through /proc. Another entry can import main() and pass it
+// commands of its own.
 // Modules load on demand, so a waiting hook does not load the server's. No top-level await: `--bytecode` builds CommonJS.
-import { EXTRA_COMMANDS } from "./cli-extra.ts";
 
 /** One subcommand: its usage lines and what it runs with the arguments after its name. */
 export interface Command {
@@ -97,7 +97,6 @@ const COMMANDS: Record<string, Command> = {
       "swarmail thread <id> [--limit N] [--json]        a thread's messages, oldest first (mail.ts)",
     ),
   ]),
-  ...EXTRA_COMMANDS,
   version: {
     usage: [
       "swarmail version                                 the source hash the binary was built from, or `source`",
@@ -109,12 +108,15 @@ const COMMANDS: Record<string, Command> = {
   },
 };
 
+/** The commands main() runs: COMMANDS plus the extra ones it was given. */
+let commands = COMMANDS;
+
 /** The command named `name`; an own-property check, so `constructor` and the like are unknown commands. */
 const find = (name: string | undefined): Command | undefined =>
-  name !== undefined && Object.hasOwn(COMMANDS, name) ? COMMANDS[name] : undefined;
+  name !== undefined && Object.hasOwn(commands, name) ? commands[name] : undefined;
 
 const USAGE = () =>
-  `Usage:\n  ${Object.values(COMMANDS)
+  `Usage:\n  ${Object.values(commands)
     .flatMap((c) => c.usage)
     .join("\n  ")}`;
 
@@ -133,7 +135,13 @@ function help(args: string[]): boolean {
   return true;
 }
 
-async function run(args: string[]): Promise<void> {
+/** Runs the command `args` names, from COMMANDS or `extra`; an extra command cannot replace a built-in one. */
+export async function main(
+  args = process.argv.slice(2),
+  extra: Record<string, Command> = {},
+): Promise<void> {
+  // Keys keep COMMANDS' order, then the extras'; spreading COMMANDS last keeps its values.
+  commands = { ...COMMANDS, ...extra, ...COMMANDS };
   if (help(args)) {
     return;
   }
@@ -147,4 +155,6 @@ async function run(args: string[]): Promise<void> {
   await command.run(args.slice(1));
 }
 
-void run(process.argv.slice(2));
+if (import.meta.main) {
+  void main();
+}
