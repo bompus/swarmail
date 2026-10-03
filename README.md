@@ -170,8 +170,8 @@ lives in `~/.local/state/swarmail-register/`.
 
 ## Waking sessions
 
-After each Claude Code or Cursor turn, the wake hook long-polls the server for
-up to 8 hours. When mail arrives, it starts a new turn with a one-line hint
+After each Claude Code or Cursor turn, the wake hook long-polls the server:
+for about 23 days in Claude Code and 8 hours in Cursor. When mail arrives, it starts a new turn with a one-line hint
 naming the recipient and sender, urgent mail first. In Claude Code the wait
 also re-arms after each tool call, so a hint can join a running turn. The
 server answers `swarmail ping` itself, so a ping never wakes the model.

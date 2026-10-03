@@ -369,6 +369,38 @@ for (const [name, hook] of Object.entries(HOOKS)) {
       }
     }, 20000);
 
+    test("the hook waits again when the server ends a wait before the hook's own time is up", async () => {
+      // The server ends each /wait after at most a day, and Claude's hook waits about 23 days.
+      const waits = [];
+      const fake = Bun.serve({
+        port: 0,
+        fetch(req) {
+          const url = new URL(req.url);
+          if (url.pathname === "/healthz") {
+            return new Response("ok");
+          }
+          waits.push(url.searchParams.get("timeout"));
+          return waits.length === 1
+            ? new Response(null, { status: 204 })
+            : new Response("Swarmail: 1 new message for PinkFox in /w/project from BlueLake.");
+        },
+      });
+      const waiting = Bun.spawn([...hook, "cursor", "15"], {
+        stdin: new Blob(['{"conversation_id":"c-1"}']),
+        env: { ...process.env, SWARMAIL_WAKE_URL: `http://127.0.0.1:${fake.port}` },
+      });
+      try {
+        expect(await waiting.exited).toBe(0);
+        expect(JSON.parse(await new Response(waiting.stdout).text()).followup_message).toContain(
+          "for PinkFox in /w/project",
+        );
+        expect(waits).toHaveLength(2);
+      } finally {
+        waiting.kill();
+        fake.stop(true);
+      }
+    }, 20000);
+
     test("the hook reconnects after a server restart and still gets the hint", async () => {
       const first = createServer(join(dir, "mail.sqlite3"), 0, { wakePollMs: 20 });
       const port = first.server.port;
