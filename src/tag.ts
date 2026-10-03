@@ -86,6 +86,45 @@ export function sameSession(a: Tag | null, b: Tag | null): boolean {
   return !!a.sessionId && a.host === b.host && a.sessionId === b.sessionId;
 }
 
-/** Matches a description whose tag names `sessionId`, as `<host>:<sessionId>`. */
-export const sessionMarker = (sessionId: string): RegExp =>
-  new RegExp(`^\\[[^\\]]*:${sessionId}[ \\]]`);
+/** The session columns of an `agents` row, parsed once from its description's leading tag; all null without one. */
+export interface Identity {
+  host: string | null;
+  session_id: string | null;
+  t3_thread: string | null;
+  build: string | null;
+  cwd: string | null;
+}
+
+export function identity(description: unknown): Identity {
+  const tag = parseTag(leadingTag(String(description ?? "")));
+  return {
+    host: tag?.host ?? null,
+    session_id: tag?.sessionId ?? null,
+    t3_thread: tag?.t3 ?? null,
+    build: tag?.build ?? null,
+    cwd: tag?.cwd ?? null,
+  };
+}
+
+/** The tag an `agents` row's columns describe. */
+export const tagOf = (row: Identity): Tag => ({
+  t3: row.t3_thread,
+  host: row.host,
+  sessionId: row.session_id,
+  build: row.build,
+  cwd: row.cwd,
+});
+
+/**
+ * The row naming the same session as `tag` (sameSession), or null. A row tagged with the same T3 thread comes before
+ * one matched by `<host>:<session>`; otherwise rows keep their order, which callers give most recently active first.
+ * The server's re-registration and the register hook's name reuse both pick with this.
+ */
+export function sameSessionRow<T>(
+  rows: T[],
+  tag: Tag | null,
+  read: (row: T) => Tag | null,
+): T | null {
+  const same = rows.filter((row) => sameSession(read(row), tag));
+  return same.find((row) => !!tag?.t3 && read(row)?.t3 === tag.t3) ?? same[0] ?? null;
+}

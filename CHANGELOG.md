@@ -9,6 +9,26 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   0.1.0 stores the current format.
 - The README names WSL 2 as a supported Linux and says macOS and native
   Windows are not supported yet.
+- The server stores each agent's session tag parts (`host`, `session_id`,
+  `t3_thread`, `build`, `cwd`) as indexed columns of `agents`, set whenever a
+  registration writes the task description. Opening an older database adds
+  them and sets `PRAGMA user_version` to 1. Every open re-derives the columns
+  from the descriptions, so rows an older build wrote after a rollback are
+  repaired on the next upgrade. With 100 sessions waiting, a send costs
+  the server about 40% less CPU, since each waiting session is now an index
+  lookup instead of a scan of every description.
+- `list_agents` returns `host`, `session_id`, `t3_thread` and `cwd` for each
+  agent. On a 250-agent roster this costs about a quarter more server CPU
+  per call.
+- A wait matches agents by the exact host session id or T3 thread in their
+  tag. Before, its id could also match another part of the tag, such as the
+  end of a session id that contains a colon.
+- The register hook reuses a roster name by the rule the server uses: a row
+  from another T3 thread no longer matches only because it carries the same
+  provider session id. `rowForSession` in `src/registry.ts` takes the
+  session's tag, and `sessionMarker` is gone from `src/tag.ts`.
+- `src/paths.ts` holds the default database path, state directory, port and
+  URLs.
 
 ## 0.1.4 - 2026-10-03
 

@@ -1,6 +1,8 @@
 // Swarmail storage with microsecond timestamps, SQLite WAL and FTS5 search.
 import { Database } from "bun:sqlite";
+import { identity, type Identity } from "./tag.ts";
 
+// The schema as first released. MIGRATIONS bring it, or an older database, up to date.
 const schema = `
 CREATE TABLE IF NOT EXISTS projects (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,6 +82,65 @@ CREATE TRIGGER IF NOT EXISTS messages_fts_insert AFTER INSERT ON messages BEGIN
 END;
 `;
 
+/**
+ * Schema changes after the first release, applied in order; PRAGMA user_version counts how many a database has.
+ * Append to this list and never edit a released entry.
+ */
+const MIGRATIONS: ((db: Database) => void)[] = [
+  // Session identity as columns of agents, so wake routing and re-registration look sessions up by index instead of
+  // scanning descriptions. syncIdentity fills them.
+  (db) => {
+    for (const column of ["host", "session_id", "t3_thread", "build", "cwd"]) {
+      db.run(`ALTER TABLE agents ADD COLUMN ${column} TEXT`);
+    }
+    db.run("CREATE INDEX idx_agents_session ON agents(session_id) WHERE session_id IS NOT NULL");
+    db.run("CREATE INDEX idx_agents_t3_thread ON agents(t3_thread) WHERE t3_thread IS NOT NULL");
+  },
+];
+
+const IDENTITY = ["host", "session_id", "t3_thread", "build", "cwd"] as const;
+
+/**
+ * Re-derives every agent's identity columns from the leading tag of its task description (tag.ts) and rewrites the
+ * rows that differ. The store keeps them in step on each registration, but an older build run on a migrated database
+ * writes descriptions without them, so every open repairs what it left.
+ */
+function syncIdentity(db: Database): void {
+  const set = db.query<unknown, (string | number | null)[]>(
+    "UPDATE agents SET host = ?, session_id = ?, t3_thread = ?, build = ?, cwd = ? WHERE id = ?",
+  );
+  const rows = db
+    .query<Identity & { id: number; task_description: string }, []>(
+      "SELECT id, task_description, host, session_id, t3_thread, build, cwd FROM agents",
+    )
+    .all();
+  for (const row of rows) {
+    const id = identity(row.task_description);
+    if (IDENTITY.some((column) => id[column] !== row[column])) {
+      set.run(id.host, id.session_id, id.t3_thread, id.build, id.cwd, row.id);
+    }
+  }
+}
+
+/**
+ * Applies the migrations `db` lacks, then syncIdentity, in one transaction. A database a newer build migrated further
+ * keeps its version.
+ */
+function migrate(db: Database): void {
+  db.transaction(() => {
+    const { user_version: done } = db
+      .query<{ user_version: number }, []>("PRAGMA user_version")
+      .get()!;
+    if (done < MIGRATIONS.length) {
+      for (const step of MIGRATIONS.slice(done)) {
+        step(db);
+      }
+      db.run(`PRAGMA user_version = ${MIGRATIONS.length}`);
+    }
+    syncIdentity(db);
+  }).immediate();
+}
+
 export function openDatabase(
   path: string,
   synchronous = process.env.SWARMAIL_SYNCHRONOUS || "normal",
@@ -95,6 +156,7 @@ export function openDatabase(
   db.run(`PRAGMA synchronous = ${synchronous.toUpperCase()}`);
   db.run("PRAGMA foreign_keys = ON");
   db.exec(schema);
+  migrate(db);
   return db;
 }
 

@@ -987,6 +987,15 @@ test("re-registering without a tag keeps the wake tag; a new tag replaces it", a
   expect((await tagged("[WIP] fourth")).task_description).toBe(
     "[codex:session-2 cwd:/w/project] [WIP] fourth",
   );
+  const listed = (await call("list_agents", { project_key: P })).find(
+    (agent) => agent.name === "TaggedOtter",
+  );
+  expect(listed).toMatchObject({
+    host: "codex",
+    session_id: "session-2",
+    t3_thread: null,
+    cwd: "/w/project",
+  });
 });
 
 test("a worktree or subdirectory path names its repository's primary checkout", async () => {

@@ -1,11 +1,10 @@
 // `swarmail guard <pre-commit|pre-push>`: refuses a commit or push that touches a path another agent holds
 // an exclusive Swarmail reservation on. Installed into a repository's hook chain by install-swarmail-guard.ts.
 // SWARMAIL_GUARD=warn reports without blocking, SWARMAIL_GUARD=off skips the check; `--no-verify` skips every hook.
+import { databasePath } from "./paths.ts";
 import { Database } from "bun:sqlite";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { nowUs } from "./db.ts";
 import { primaryCheckout } from "./checkout.ts";
 import { overlaps } from "./glob.ts";
@@ -68,7 +67,7 @@ export function guard(
   if (mode === "off") {
     return 0;
   }
-  const dbPath = env.SWARMAIL_DB || join(homedir(), ".local", "share", "swarmail", "mail.sqlite3");
+  const dbPath = databasePath(env);
   // Sessions register under the primary checkout, whichever worktree they commit from.
   const project = primaryCheckout(cwd);
   if (!project || !existsSync(dbPath)) {

@@ -24,7 +24,10 @@ checkout, unless a project already exists under that exact path.
   with `swarmail register --tag <host> [session id]` from your working
   directory; it reads the session id from the host's shell variable when you
   leave it out. A registration without a name whose tag names a session that
-  already has one keeps that name.
+  already has one keeps that name. Two tags name one session when they share
+  a T3 thread, or, when either has none, the same `<host>:<session id>`.
+  `list_agents` also returns the tag's parts as `host`, `session_id`,
+  `t3_thread` and `cwd`.
 
 ## When to send mail
 

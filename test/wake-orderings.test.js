@@ -7,8 +7,8 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
   try {
     db.exec(`
       INSERT INTO projects(id,slug,human_key,created_at) VALUES(1,'test','/test',1);
-      INSERT INTO agents(id,project_id,name,program,model,task_description,inception_ts,last_active_ts)
-        VALUES(1,1,'GreenCastle','test','test','[t3:order-test]',1,1);
+      INSERT INTO agents(id,project_id,name,program,model,task_description,inception_ts,last_active_ts,t3_thread)
+        VALUES(1,1,'GreenCastle','test','test','[t3:order-test]',1,1,'order-test');
     `);
     const send = () => {
       const { id } = db

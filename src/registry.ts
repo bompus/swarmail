@@ -1,6 +1,7 @@
 // Session registration: the register hook's per-session state, one JSON file per session id written
 // under a lock file, and the server calls that register a session. The hook and the T3 supervisor
 // register through `openRegistry`; `who`, the guard and the wake hook only read.
+import { stateHome } from "./paths.ts";
 import {
   closeSync,
   mkdirSync,
@@ -12,11 +13,10 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { callTool, swarmailUrl } from "./client.ts";
 import { hostProcess, type HostProcess } from "./proc.ts";
-import { parseTag, sessionMarker, withoutTag } from "./tag.ts";
+import { leadingTag, parseTag, sameSessionRow, withoutTag, type Tag } from "./tag.ts";
 
 /** Per-session state under ~/.local/state/swarmail-register/<session id>.json. */
 export interface RegisterState {
@@ -48,7 +48,7 @@ export interface RosterRow {
 export type Register = (project: string, name: string | null) => string | null;
 
 export const registryDir = (env: NodeJS.ProcessEnv = process.env): string =>
-  join(env.XDG_STATE_HOME || join(homedir(), ".local", "state"), "swarmail-register");
+  join(stateHome(env), "swarmail-register");
 
 /** Days a registration outlives its session's end before the server's sweep deletes it. */
 export const REGISTRATION_DAYS = 14;
@@ -136,24 +136,14 @@ function settleRegistration<S extends RegisterState>(
 }
 
 /**
- * The roster row whose tag names `sessionId`, so a session registered by hand keeps its name. Under
- * T3, a row tagged with the same thread `t3` comes next: T3 can start a new provider session in a
- * thread, which keeps the thread's name instead of registering a second one. Rows come most recently
- * active first.
+ * The roster row naming the same session as `tag`, so a session registered by hand keeps its name. Under T3, a row
+ * tagged with the same thread counts even with another provider session id: T3 can start a new provider session in a
+ * thread, which keeps the thread's name instead of registering a second one. The server matches re-registrations by
+ * the same rule (sameSessionRow). Rows come most recently active first.
  */
-export function rowForSession(
-  rows: RosterRow[],
-  sessionId: string | null,
-  t3: string | null = null,
-): RosterRow | null {
-  if (!sessionId) {
-    return null;
-  }
-  const marker = sessionMarker(sessionId);
-  return (
-    rows.find((row) => marker.test(String(row.task_description ?? ""))) ??
-    (t3 ? rows.find((row) => parseTag(row.task_description)?.t3 === t3) : undefined) ??
-    null
+export function rowForSession(rows: RosterRow[], tag: Tag | null): RosterRow | null {
+  return sameSessionRow(rows, tag, (row) =>
+    parseTag(leadingTag(String(row.task_description ?? ""))),
   );
 }
 
@@ -181,9 +171,7 @@ export function serverRegister(session: Session, tag: string, url = swarmailUrl(
       } catch {
         // No roster read: register with the placeholder task.
       }
-      const row = name
-        ? rows.find((r) => r.name === name)
-        : rowForSession(rows, session.sessionId, parseTag(tag)?.t3);
+      const row = name ? rows.find((r) => r.name === name) : rowForSession(rows, parseTag(tag));
       const reuse = name ?? row?.name;
       return (
         (

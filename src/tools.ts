@@ -239,6 +239,10 @@ export const TOOLS: Tool[] = [
         program: r.program,
         model: r.model,
         task_description: r.task_description,
+        host: r.host,
+        session_id: r.session_id,
+        t3_thread: r.t3_thread,
+        cwd: r.cwd,
         inception_ts: iso(r.inception_ts),
         last_active_ts: iso(r.last_active_ts),
       }));

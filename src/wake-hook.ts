@@ -6,9 +6,9 @@
 //     starting a second waiter from the shell.
 //     A session that runs the Swarmail mod (claude-wake-mod.js) has SWARMAIL_WAKE_MOD=1, and the hook exits at once.
 //   cursor: stop hook in hooks.json; a {"followup_message": ...} reply starts a turn, {} otherwise.
+import { stateHome, wakeUrl } from "./paths.ts";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { openRegistry, registryDir } from "./registry.ts";
 
@@ -70,8 +70,7 @@ const alive = (pid: number) => {
 };
 
 /** The PID of the Claude session to wait for, or null when this hook should not wait. */
-const stateDir = (env: NodeJS.ProcessEnv) =>
-  env.XDG_STATE_HOME || join(homedir(), ".local", "state");
+const stateDir = stateHome;
 
 function claudeAgent(
   sid: string,
@@ -166,7 +165,7 @@ export async function wakeHook(
     agent = read(process.ppid)?.ppid || process.ppid;
   }
 
-  const base = env.SWARMAIL_WAKE_URL || "http://127.0.0.1:18765";
+  const base = wakeUrl(env);
   const end =
     Date.now() + (seconds ?? WAKE_SECONDS[host === "claude" ? "claude" : "cursor"]) * 1000;
   let request = new AbortController();
