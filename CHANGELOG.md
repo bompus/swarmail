@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.1.3 - 2026-10-03
 
 - Claude Code sessions now wake through the Swarmail mod, a Claude Code
   plugin. `bun scripts/configure-hooks.ts` copies it to
