@@ -1,0 +1,25 @@
+name: Bug
+description: The server, the swarmail command, a hook or a setup script fails or gives a wrong result.
+labels: [bug]
+body:
+  - type: input
+    id: command
+    attributes:
+      label: Command or tool call
+      description: The exact command you ran, or the MCP tool and its arguments.
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: What you expected, and what happened
+      description: Include the error output and, for the server, `journalctl --user -u swarmail` lines. Remove anything private first.
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Swarmail version or commit, Bun version, distribution, and the agent host.
+    validations:
+      required: true

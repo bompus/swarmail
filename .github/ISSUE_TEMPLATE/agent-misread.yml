@@ -1,0 +1,25 @@
+name: An agent misused Swarmail
+description: An agent ignored or misread docs/usage.md or a tool description.
+labels: [usage]
+body:
+  - type: input
+    id: guidance
+    attributes:
+      label: Guidance
+      description: The file and section or tool, such as `docs/usage.md` § Sending or `macro_start_session`.
+    validations:
+      required: true
+  - type: input
+    id: host
+    attributes:
+      label: Host and model
+      description: For example, Claude Code with Sonnet, Cursor with GPT, Codex.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What the agent did, and what the guidance says it should have done
+      description: Quote the agent's reply or tool calls where you can. Remove anything private first.
+    validations:
+      required: true
