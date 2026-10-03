@@ -85,7 +85,7 @@ export function withClaudeHooks(
  * and OpenCode 2 still discovers the singular `plugin/` directory.
  */
 export function openCodePlugin(bin: string): string {
-  return `// Installed by swarmail scripts/configure-hooks.ts; edits here are overwritten.
+  return `// Installed by the Swarmail hooks installer (scripts/configure-hooks.ts); edits here are overwritten.
 // Registers this OpenCode session in Swarmail on its first edit in each repository.
 const command = ${JSON.stringify([bin, "register"])};
 // OpenCode 2 names its patch tool \`patch\`; OpenCode 1 called it \`apply_patch\`. Both send \`patchText\`.

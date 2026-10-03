@@ -24,6 +24,7 @@ import { t3ThreadId } from "./register-hook.ts";
 import { registryDir, selfNames, type RegisterState } from "./registry.ts";
 import { isT3V2, T3_V2_THREADS, t3StatePath } from "./t3-state.ts";
 import { parseTag, withoutTag } from "./tag.ts";
+import { liveRoomPath } from "./who-extra.ts";
 
 /** A roster row from `list_agents`. */
 export interface RosterAgent {
@@ -189,7 +190,10 @@ function t3Threads(dbPath: string): Map<string, T3Thread> {
   }
 }
 
-function liveRoom(path: string): LiveRoom | null {
+function liveRoom(path: string | null): LiveRoom | null {
+  if (!path) {
+    return null;
+  }
   try {
     const room = JSON.parse(readFileSync(path, "utf8")) as LiveRoom;
     return Date.now() - Date.parse(room.heartbeatAt) < LIVE_ROOM_FRESH_MS ? room : null;
@@ -327,7 +331,7 @@ export function main(args: string[]): void {
     roster,
     stateDir: registryDir(),
     threads: t3Threads(t3StatePath(join(home, ".t3"))),
-    room: process.env.SWARMAIL_LIVE_ROOM ? liveRoom(process.env.SWARMAIL_LIVE_ROOM) : null,
+    room: liveRoom(liveRoomPath()),
     queues: unreadQueues(dbPath, project),
   }).filter(
     (row) =>
