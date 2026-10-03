@@ -78,8 +78,17 @@ async function wait($) {
   const res = await $.http.fetch(
     `${base}/wait?session=${encodeURIComponent(sid)}&timeout=${WAIT_SECONDS}&after=${acked}`,
   );
+  if ((await $.session.id()) !== sid) {
+    // /clear ran during the wait: the mail is for the old session.
+    return 0;
+  }
   if (res.status === 200) {
-    held = { hint: res.text.trim(), eventId: Number(res.headers["x-swarmail-event-id"]) };
+    const eventId = Number(res.headers["x-swarmail-event-id"]);
+    if (!Number.isSafeInteger(eventId) || eventId < 0) {
+      // Without a cursor the next wait can't acknowledge this hint.
+      return ERROR_MS;
+    }
+    held = { hint: res.text.trim(), eventId };
   }
   if (res.status === 200 || res.status === 204) {
     return 0;

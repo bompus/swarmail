@@ -9,7 +9,7 @@ function session({ registered = true, entrypoint = "cli" } = {}) {
   const state = {
     sid: "s-1",
     registered,
-    /** @type {({ status: number, text: string, headers?: object } | Error)[]} */
+    /** @type {({ status: number, text: string, headers?: object } | Error | (() => object))[]} */
     responses: [],
     fetched: [],
     submitted: [],
@@ -33,7 +33,8 @@ function session({ registered = true, entrypoint = "cli" } = {}) {
     http: {
       fetch: async (url) => {
         state.fetched.push(url);
-        const next = state.responses.shift() ?? { status: 204, text: "" };
+        const queued = state.responses.shift() ?? { status: 204, text: "" };
+        const next = typeof queued === "function" ? queued() : queued;
         if (next instanceof Error) {
           throw next;
         }
@@ -142,6 +143,21 @@ test("pauses after an error or a replaced wait, and starts over when the server 
   expect(s.state.fetched.at(-1)).toEndWith("&after=9");
   await s.tick();
   expect(s.state.fetched.at(-1)).toEndWith("&after=0");
+});
+
+test("drops a hint without a usable event id, or one for a session /clear replaced mid-wait", async () => {
+  const s = session();
+  await s.start();
+  s.state.responses.push({ status: 200, text: "Swarmail: 1 new message\n" });
+  expect(await s.tick()).toBe(3000);
+  s.state.responses.push(() => {
+    s.state.sid = "s-2";
+    return hint(5);
+  });
+  expect(await s.tick()).toBe(0);
+  await s.tick();
+  expect(s.state.submitted).toEqual([]);
+  expect(s.state.fetched.at(-1)).toContain("session=s-2&timeout=25&after=0");
 });
 
 test("does nothing in `claude -p`, which exits after one prompt", async () => {
