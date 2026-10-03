@@ -1,0 +1,12 @@
+[Unit]
+Description=Swarmail MCP coordination server (localhost)
+
+[Service]
+# Built by scripts/build.ts. Settings are environment variables; see the README.
+ExecStart=%h/.local/bin/swarmail serve
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,126 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "no-unused-vars": [
+      "warn",
+      {
+        "ignoreRestSiblings": true
+      }
+    ],
+    "no-unused-expressions": [
+      "warn",
+      {
+        "allowTernary": true,
+        "allowShortCircuit": true
+      }
+    ],
+    "unicorn/no-new-array": "off",
+    "unicorn/no-useless-spread": "off",
+    "eslint/array-callback-return": "error",
+    "eslint/curly": "error",
+    "eslint/eqeqeq": [
+      "error",
+      "always",
+      {
+        "null": "ignore"
+      }
+    ],
+    "eslint/no-var": "warn",
+    "unicorn/prefer-string-slice": "warn",
+    "eslint/no-throw-literal": "error",
+    "eslint/no-unsafe-optional-chaining": [
+      "error",
+      {
+        "disallowArithmeticOperators": true
+      }
+    ],
+    "eslint/no-useless-assignment": "error",
+    "eslint/no-useless-catch": "error",
+    "eslint/prefer-promise-reject-errors": "error",
+    "eslint/preserve-caught-error": "error",
+    "import/no-duplicates": "error",
+    "import/no-self-import": "error",
+    "promise/no-return-in-finally": "error",
+    "typescript/no-extra-non-null-assertion": "error",
+    "typescript/no-non-null-asserted-nullish-coalescing": "error",
+    "typescript/prefer-ts-expect-error": "error",
+    "unicorn/no-abusive-eslint-disable": "error",
+    "unicorn/no-unreadable-array-destructuring": "error",
+    "unicorn/no-useless-iterator-to-array": "error",
+    "unicorn/prefer-array-some": "error",
+    "unicorn/prefer-at": "error",
+    "unicorn/prefer-node-protocol": "error",
+    "unicorn/prefer-optional-catch-binding": "error",
+    "unicorn/prefer-structured-clone": "error",
+    "typescript/await-thenable": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-unnecessary-condition": "error",
+    "typescript/prefer-includes": "error",
+    "typescript/prefer-optional-chain": "error",
+    "typescript/switch-exhaustiveness-check": "error",
+    "typescript/no-unsafe-enum-comparison": "error",
+    "typescript/no-base-to-string": "off",
+    "typescript/restrict-template-expressions": "off",
+    "typescript/require-array-sort-compare": "off",
+    "typescript/consistent-type-imports": [
+      "error",
+      {
+        "prefer": "type-imports",
+        "fixStyle": "separate-type-imports"
+      }
+    ],
+    "max-lines": [
+      "error",
+      {
+        "max": 999,
+        "skipBlankLines": false,
+        "skipComments": false
+      }
+    ],
+    "max-depth": [
+      "warn",
+      {
+        "max": 4
+      }
+    ],
+    "max-lines-per-function": [
+      "warn",
+      {
+        "max": 100,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
+    "max-params": [
+      "warn",
+      {
+        "max": 5
+      }
+    ]
+  },
+  "ignorePatterns": [
+    "docs/experiments/**"
+  ],
+  "plugins": [
+    "eslint",
+    "typescript",
+    "unicorn",
+    "oxc",
+    "import",
+    "promise"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "test/**"
+      ],
+      "rules": {
+        "max-lines-per-function": "off",
+        "max-lines": "off"
+      }
+    }
+  ]
+}

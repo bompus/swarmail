@@ -1,0 +1,7 @@
+[install]
+exact = true
+# Scripts run as `bun scripts/<script>.ts` from this checkout: never install a missing import on the fly.
+auto = "disable"
+# Three days, so a compromised release is usually pulled before it lands here.
+minimumReleaseAge = 259200
+minimumReleaseAgeExcludes = ["@types/bun", "typescript"]
