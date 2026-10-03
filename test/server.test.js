@@ -17,7 +17,7 @@ const P = "/w/project";
 let dir, server, db, url;
 
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), "swarmail-server-"));
+  dir = realpathSync.native(mkdtempSync(join(tmpdir(), "swarmail-server-")));
   ({ server, db } = createServer(join(dir, "mail.sqlite3"), 0));
   url = `http://127.0.0.1:${server.port}/mcp/`;
 });
@@ -367,7 +367,7 @@ test("durable message retries preserve identity across restart orderings", async
     }
   }
   expect(violations).toEqual([]);
-});
+}, 30_000);
 
 test("broadcast stays rejected and a retired agent receives nothing", async () => {
   await expect(

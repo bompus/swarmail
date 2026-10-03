@@ -314,7 +314,7 @@ export class MailStore {
     let canonical = this.checkouts.get(key);
     if (canonical === undefined) {
       const primary = primaryCheckout(key);
-      canonical = primary && realpathSync(key) !== primary ? primary : key;
+      canonical = primary && realpathSync.native(key) !== primary ? primary : key;
       this.checkouts.set(key, canonical);
     }
     return canonical;
