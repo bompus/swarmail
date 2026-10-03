@@ -802,6 +802,13 @@ test("a reservation time or activity window that is not a usable number is an ar
       call("list_agents", { project_key: key, active_within_days }),
     ).rejects.toMatchObject({ type: "INVALID_ARGUMENT", data: { field: "active_within_days" } });
   }
+  // An uncapped field names no upper limit; a capped one does.
+  await expect(call("list_agents", { project_key: key, active_within_days: 0 })).rejects.toThrow(
+    /^active_within_days must be a number above 0$/,
+  );
+  await expect(call("renew_file_reservations", { ...as, extend_seconds: 0 })).rejects.toThrow(
+    /^extend_seconds must be a whole number above 0 and at most 2592000$/,
+  );
   expect(state()).toEqual(before);
   expect(
     (await call("list_agents", { project_key: key, active_within_days: 0.5 })).map((a) => a.name),
