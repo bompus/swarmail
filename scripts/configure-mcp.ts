@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import { homedir } from "node:os";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { object, present, readConfig } from "./lib/config-files.ts";
 import {
   commitMcpPlans,
@@ -91,8 +91,10 @@ const managedEntry = (format: McpFormat, client: string): Record<string, unknown
 
 function planHost(home: string, windows: boolean, [client, path, format]: Target): McpPlan {
   // Register only where the host's config file or directory already exists, so a host that
-  // isn't installed gets no config directory.
-  if (!present(path) && !present(dirname(path))) {
+  // isn't installed gets no config directory. Claude's file sits in home itself, which always
+  // exists, so its ~/.claude directory stands in for the config directory.
+  const dir = client === "claude" ? join(dirname(path), ".claude") : dirname(path);
+  if (!present(path) && !present(dir)) {
     return { client, path, original: "", next: "", status: "skipped-absent" };
   }
   const original = readConfig(path, home);
@@ -151,9 +153,11 @@ if (import.meta.main) {
   }
   const { dryRun, home, windowsHome, positional } = parseConfigureArgs(process.argv.slice(2));
   if (positional.length > 0) {
-    throw new Error(
+    const help = positional.some((arg) => arg === "--help" || arg === "-h");
+    (help ? console.log : console.error)(
       "Usage: bun scripts/configure-mcp.ts [--dry-run] [--home DIR] [--windows-home[=DIR]]",
     );
+    process.exit(help ? 0 : 64);
   }
   console.log(
     JSON.stringify(

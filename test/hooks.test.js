@@ -70,17 +70,19 @@ test("skips hosts that aren't installed; Cursor alone still gets the Claude sett
   expect(readdirSync(dir).sort()).toEqual([".claude", ".cursor"]);
 });
 
-test("the CLI refuses --help and unknown flags before writing", () => {
+test("the CLI prints usage for --help and refuses unknown flags before writing", () => {
   const dir = home();
   mkdirSync(join(dir, ".claude"));
   const script = Bun.fileURLToPath(new URL("../scripts/configure-hooks.ts", import.meta.url));
-  for (const args of [["--help"], ["--hosts", "claude-code,codex"]]) {
-    const res = Bun.spawnSync([process.execPath, script, ...args], {
-      env: { ...process.env, HOME: dir },
-    });
-    expect(res.exitCode).not.toBe(0);
-    expect(res.stderr.toString()).toContain("Usage:");
-  }
+  const run = (args) =>
+    Bun.spawnSync([process.execPath, script, ...args], { env: { ...process.env, HOME: dir } });
+  const help = run(["--help"]);
+  expect(help.exitCode).toBe(0);
+  expect(help.stdout.toString()).toContain("Usage:");
+  const bad = run(["--hosts", "claude-code,codex"]);
+  expect(bad.exitCode).toBe(64);
+  // A usage line, not an uncaught-error trace.
+  expect(bad.stderr.toString()).toStartWith("Usage:");
   expect(existsSync(join(dir, ".claude", "settings.json"))).toBe(false);
 });
 

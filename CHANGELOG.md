@@ -2,10 +2,17 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.1.1 - 2026-10-02
 
-- `configure-hooks.ts` refuses `--help` and unknown flags before writing
-  anything. It used to ignore them and install hooks for every host.
+- `configure-hooks.ts` and `configure-mcp.ts` print usage for `--help` and
+  exit 64 with a usage line on an unknown flag, before writing anything.
+  `configure-hooks.ts` used to ignore every flag and install hooks for every
+  host.
+- `configure-mcp.ts` registers Claude Code only when `~/.claude.json` or
+  `~/.claude/` exists. It used to create `~/.claude.json` in any home.
+- `scripts/enable.sh` is executable, so README step 2 runs as written.
+- The register hook and `swarmail who` read T3 Code's `statev2.sqlite` when
+  it exists, so they find T3 Code Orchestrator V2 threads.
 - `configure-hooks.ts` skips hosts whose config directory doesn't exist,
   as `configure-mcp.ts` does. Claude's `settings.json` is written when any
   host that reads it (Claude Code, Cursor, Grok, Devin) is installed.

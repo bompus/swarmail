@@ -22,6 +22,7 @@ import { callTool } from "./client.ts";
 import { hostAlive } from "./proc.ts";
 import { t3ThreadId } from "./register-hook.ts";
 import { registryDir, selfNames, type RegisterState } from "./registry.ts";
+import { isT3V2, T3_V2_THREADS, t3StatePath } from "./t3-state.ts";
 import { parseTag, withoutTag } from "./tag.ts";
 
 /** A roster row from `list_agents`. */
@@ -153,22 +154,36 @@ export function resolveProject(target: string, keys: string[], checkout = primar
   );
 }
 
+/** T3's threads by id; none while the database is missing or mid-copy on V2's first start. */
 function t3Threads(dbPath: string): Map<string, T3Thread> {
   if (!existsSync(dbPath)) {
     return new Map();
   }
-  const db = new Database(dbPath, { readonly: true });
+  let db: Database;
+  try {
+    db = new Database(dbPath, { readonly: true });
+  } catch {
+    return new Map();
+  }
   try {
     const rows = db
-      .query<T3Thread, []>(`
+      .query<T3Thread, []>(
+        isT3V2(db)
+          ? `
+      select thread_id, title, cwd, status, last_seen_at from (${T3_V2_THREADS})
+      where deleted_at is null`
+          : `
       select t.thread_id, t.title, coalesce(t.worktree_path, p.workspace_root) as cwd,
              r.status, r.last_seen_at
       from projection_threads t
       left join projection_projects p on p.project_id = t.project_id
       left join provider_session_runtime r on r.thread_id = t.thread_id
-      where t.deleted_at is null`)
+      where t.deleted_at is null`,
+      )
       .all();
     return new Map(rows.map((row) => [row.thread_id, row]));
+  } catch {
+    return new Map();
   } finally {
     db.close();
   }
@@ -311,7 +326,7 @@ export function main(args: string[]): void {
     project,
     roster,
     stateDir: registryDir(),
-    threads: t3Threads(join(home, ".t3", "userdata", "state.sqlite")),
+    threads: t3Threads(t3StatePath(join(home, ".t3"))),
     room: process.env.SWARMAIL_LIVE_ROOM ? liveRoom(process.env.SWARMAIL_LIVE_ROOM) : null,
     queues: unreadQueues(dbPath, project),
   }).filter(
