@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Additions to the CodeRabbit organization settings. With inheritance on, every
+# key this file leaves out keeps its organization value instead of resetting
+# to CodeRabbit's default.
+inheritance: true
+
+reviews:
+  estimate_code_review_effort: false
+  sequence_diagrams: false
+  suggested_reviewers: false
+  suggested_labels: false
+  in_progress_fortune: false
+  poem: false
+  auto_review:
+    ignore_title_keywords: ["WIP", "DO NOT MERGE"]
+  path_instructions:
+    - path: "**/*"
+      instructions: >-
+        Flag only problems this pull request introduces. Lines that were moved
+        or re-indented are not new. Before posting a finding, check it against
+        the code in the repository.
+    - path: "docs/usage.md"
+      instructions: &agent-text >-
+        Agents read this text: the usage guide and the MCP tool descriptions.
+        Flag wording an agent could misread or apply in two different ways.
+    - path: "src/tools.ts"
+      instructions: *agent-text
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+    custom_checks:
+      - name: Suppressions explained
+        mode: warning
+        instructions: >-
+          FAIL if a changed line adds or broadens a directive that silences a
+          lint, type-check or formatter diagnostic (for example
+          `oxlint-disable`, `eslint-disable`, `@ts-expect-error`, `@ts-ignore`,
+          or a new ignore entry in `.oxlintrc.json`, `.oxfmtrc.json` or
+          `tsconfig.json`) without a comment on the same or the preceding line
+          that says why. PASS otherwise, including when the pull request adds
+          no such directive.
+      - name: Interface changes documented
+        mode: warning
+        instructions: >-
+          FAIL if the diff adds, removes or renames an MCP tool or one of its
+          arguments, a `swarmail` command or flag, or an environment variable,
+          and does not both update `docs/usage.md` or `README.md` and add an
+          entry under `## Unreleased` in `CHANGELOG.md`. PASS otherwise.
+
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      - "CONTRIBUTING.md"
+  learnings:
+    approval_delay: 7
