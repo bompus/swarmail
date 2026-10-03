@@ -10,8 +10,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   as `configure-mcp.ts` does. Claude's `settings.json` is written when any
   host that reads it (Claude Code, Cursor, Grok, Devin) is installed.
 - `docs/usage.md` says to tell the sender when you won't act on
-  `ack_required` mail, when pausing your own work for another session is
-  fine, and that `macro_start_session` takes `human_key`.
+  `ack_required` mail, when and how to pause your own work for another
+  session, and that `macro_start_session` takes `human_key`.
 
 ## 0.1.0 - 2026-10-02
 
