@@ -19,7 +19,7 @@ const ERROR_MS = 3000;
 const HELD_MS = 1000;
 
 // One module runs per session, so its state is the session's. `busy`: a main-loop turn is running. `held`: the hint
-// the server offered and this mod has not delivered yet, { hint, eventId, submitting }; no wait runs while one is held.
+// the server offered and this mod has not delivered yet, { hint, eventId, sid, submitting }; no wait runs while one is held.
 let busy = false;
 let held = null;
 let acked = 0;
@@ -88,7 +88,7 @@ async function wait($) {
       // Without a cursor the next wait can't acknowledge this hint.
       return ERROR_MS;
     }
-    held = { hint: res.text.trim(), eventId };
+    held = { hint: res.text.trim(), eventId, sid };
   }
   if (res.status === 200 || res.status === 204) {
     return 0;
@@ -105,6 +105,10 @@ async function wait($) {
 async function round($) {
   let delay;
   try {
+    if (held && (await $.session.id()) !== held.sid) {
+      // /clear replaced the session the hint is for.
+      held = null;
+    }
     if (!held) {
       delay = await wait($);
     } else {
@@ -150,7 +154,15 @@ export function register(on) {
 
   on("tool.call", async ($, e, next) => {
     const result = await next(e);
-    if (!held || held.submitting || e.agentId || !busy || typeof result?.deny === "string") {
+    const sid = held ? await $.session.id() : undefined;
+    if (
+      !held ||
+      held.sid !== sid ||
+      held.submitting ||
+      e.agentId ||
+      !busy ||
+      typeof result?.deny === "string"
+    ) {
       return result;
     }
     const { hint } = held;

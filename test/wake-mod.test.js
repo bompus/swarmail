@@ -160,6 +160,21 @@ test("drops a hint without a usable event id, or one for a session /clear replac
   expect(s.state.fetched.at(-1)).toContain("session=s-2&timeout=25&after=0");
 });
 
+test("drops a held hint once /clear replaces its session", async () => {
+  const s = session();
+  await s.start();
+  await s.turnStart();
+  s.state.responses.push(hint(6));
+  await s.tick();
+  s.state.sid = "s-2";
+  const plain = { result: "ok", ref: 1 };
+  expect(await s.toolCall({ tool: "Bash" }, plain)).toBe(plain);
+  await s.turnComplete();
+  await s.tick();
+  expect(s.state.submitted).toEqual([]);
+  expect(s.state.fetched.at(-1)).toContain("session=s-2&timeout=25&after=0");
+});
+
 test("does nothing in `claude -p`, which exits after one prompt", async () => {
   const s = session({ entrypoint: "sdk-cli" });
   await s.start();
