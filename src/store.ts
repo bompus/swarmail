@@ -27,6 +27,28 @@ export function pageLimit(value: unknown, field: string, fallback: number): numb
   return Math.min(limit, 1000);
 }
 
+/** A JSON number above zero and at most `max`, or `fallback` when absent; `integer` also requires a whole number. */
+export function num(
+  value: unknown,
+  field: string,
+  fallback: number,
+  { max = Number.MAX_SAFE_INTEGER, integer = false } = {},
+): number {
+  const n = value === undefined ? fallback : value;
+  if (typeof n !== "number" || !(n > 0 && n <= max) || (integer && !Number.isInteger(n))) {
+    throw new ToolError(
+      "INVALID_ARGUMENT",
+      `${field} must be a ${integer ? "whole number" : "number"} above 0 and at most ${max}`,
+      { field },
+    );
+  }
+  return n;
+}
+
+/** Reservation times in seconds: whole, above zero, up to 30 days. */
+export const reservationSeconds = (value: unknown, field: string, fallback: number) =>
+  num(value, field, fallback, { max: 30 * 86_400, integer: true });
+
 export type Args = Record<string, any>;
 export type Row = Record<string, any>;
 export interface Project {
@@ -708,14 +730,14 @@ export class MailStore {
       .all(projectId, now);
   }
 
-  reserve(p: Project, who: Agent, a: Args) {
+  reserve(p: Project, who: Agent, a: Args, ttlField = "ttl_seconds") {
     const paths = [...new Set(list(a.paths))];
     if (paths.length === 0) {
       throw new ToolError("INVALID_ARGUMENT", "paths is required", { field: "paths" });
     }
     const now = nowUs(),
       exclusive = a.exclusive ?? true;
-    const expires = now + Number(a.ttl_seconds ?? 3600) * 1_000_000;
+    const expires = now + reservationSeconds(a.ttl_seconds, ttlField, 3600) * 1_000_000;
     const active = this.activeReservations(p.id, now);
     const granted = [],
       conflicts = [];
