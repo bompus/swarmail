@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDatabase } from "../src/db.ts";
 
-test("a database from before the identity columns gets them backfilled from each tag, once", () => {
+test("identity columns are backfilled from each tag, and every open repairs rows an older build wrote", () => {
   const dir = mkdtempSync(join(tmpdir(), "swarmail-db-"));
   const path = join(dir, "mail.sqlite3");
   try {
@@ -45,8 +45,24 @@ test("a database from before the identity columns gets them backfilled from each
     expect(plan).toContain("idx_agents_t3_thread");
     db.close();
 
+    // A build from before the columns, run after a rollback, writes descriptions and leaves the columns as they were.
+    db = new Database(path);
+    db.exec(`
+      UPDATE agents SET task_description = '[claude:s-2 cwd:~/w] moved' WHERE id = 1;
+      INSERT INTO agents (id, project_id, name, program, model, task_description, inception_ts, last_active_ts)
+        VALUES (4, 1, 'JadeOwl', 'cursor', 'm', '[t3:th-4 cursor:c-4] new', 1, 1);
+    `);
+    db.close();
     db = openDatabase(path);
     expect(db.query("PRAGMA user_version").get().user_version).toBe(1);
+    expect(
+      db
+        .query("SELECT id, host, session_id, t3_thread FROM agents WHERE id IN (1, 4) ORDER BY id")
+        .all(),
+    ).toEqual([
+      { id: 1, host: "claude", session_id: "s-2", t3_thread: null },
+      { id: 4, host: "cursor", session_id: "c-4", t3_thread: "th-4" },
+    ]);
     db.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });

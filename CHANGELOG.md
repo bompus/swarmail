@@ -12,8 +12,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - The server stores each agent's session tag parts (`host`, `session_id`,
   `t3_thread`, `build`, `cwd`) as indexed columns of `agents`, set whenever a
   registration writes the task description. Opening an older database adds
-  and backfills them once and sets `PRAGMA user_version` to 1; older builds
-  still run on a migrated database. With 100 sessions waiting, a send costs
+  them and sets `PRAGMA user_version` to 1. Every open re-derives the columns
+  from the descriptions, so rows an older build wrote after a rollback are
+  repaired on the next upgrade. With 100 sessions waiting, a send costs
   the server about 40% less CPU, since each waiting session is now an index
   lookup instead of a scan of every description.
 - `list_agents` returns `host`, `session_id`, `t3_thread` and `cwd` for each
