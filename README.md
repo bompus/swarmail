@@ -47,9 +47,11 @@ needs the MIT notice kept (see `LICENSE`).
 
 ## Install
 
-Requires Linux with systemd and [Bun](https://bun.sh) 1.4.2 or newer. The
-setup scripts and the register hook read session details from `/proc`, so
-other systems are not supported yet.
+Requires Linux with systemd and [Bun](https://bun.sh) 1.4.2 or newer. WSL 2
+with systemd enabled counts, and step 3 can register Windows-side hosts
+against the server running in WSL. The setup scripts and the register hook
+read session details from `/proc`, so macOS and native Windows are not
+supported yet.
 
 1. Clone and install the dev tools:
 
