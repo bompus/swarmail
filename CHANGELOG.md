@@ -2,6 +2,14 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- The server no longer rewrites idempotency results stored in the
+  pre-0.1.0 message format when it opens the database. Every release since
+  0.1.0 stores the current format.
+- The README names WSL 2 as a supported Linux and says macOS and native
+  Windows are not supported yet.
+
 ## 0.1.4 - 2026-10-03
 
 - `src/cli.ts` exports `main(args, extra)`, so another entry file can

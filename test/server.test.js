@@ -244,7 +244,7 @@ test("a repeated idempotency key replays the first send; reusing it for another 
   expect(messageCount()).toBe(before + 1);
 });
 
-test("durable message retries preserve identity across cached results and restart orderings", async () => {
+test("durable message retries preserve identity across restart orderings", async () => {
   const events = ["retry", "conflict", "ack", "restart"];
   const sequences = [[]];
   for (let depth = 0; depth < 2; depth++) {
@@ -310,17 +310,6 @@ test("durable message retries preserve identity across cached results and restar
         idempotency_key: "durable-key",
       };
       const expected = await invoke(tool, args);
-      // A committed response from a previous Swarmail build, which the caller may not have received.
-      const wrapped = {
-        deliveries: [{ project: P, payload: { ...expected, attachments: [] } }],
-        count: 1,
-      };
-      const cached =
-        tool === "send_message" ? { ...wrapped, attachments: [] } : { ...expected, ...wrapped };
-      runtime.db.run("UPDATE idempotency_keys SET result=? WHERE tool=?", [
-        JSON.stringify(cached),
-        tool,
-      ]);
       const key = runtime.db
         .query("SELECT tool,agent_id,key,fingerprint,created_ts FROM idempotency_keys")
         .get();

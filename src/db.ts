@@ -95,14 +95,6 @@ export function openDatabase(
   db.run(`PRAGMA synchronous = ${synchronous.toUpperCase()}`);
   db.run("PRAGMA foreign_keys = ON");
   db.exec(schema);
-  // Keep durable retries in the current message format without changing their keys or fingerprints.
-  db.run(`UPDATE idempotency_keys
-    SET result = json_remove(
-      CASE WHEN tool = 'send_message' AND json_type(result, '$.deliveries') = 'array'
-        THEN json_extract(result, '$.deliveries[0].payload') ELSE result END,
-      '$.deliveries', '$.count', '$.attachments')
-    WHERE tool IN ('send_message', 'reply_message') AND
-      (json_type(result, '$.deliveries') IS NOT NULL OR json_type(result, '$.attachments') IS NOT NULL)`);
   return db;
 }
 
