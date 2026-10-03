@@ -81,10 +81,11 @@ other systems are not supported yet.
    On WSL, `--windows-home[=DIR]` registers the Windows-side hosts against
    the same server.
 
-4. Install the hooks: the register hook for every installed host, and the wake
-   hook for Claude Code and Cursor. A host counts as installed when its config
-   directory exists. Add `--dry-run` to preview the edits; the script takes no
-   other flags.
+4. Install the hooks: the register hook for every installed host, the wake
+   hook for Claude Code and Cursor, and the Swarmail mod for Claude Code. A
+   host counts as installed when its config directory exists. Add `--dry-run`
+   to preview the edits. With `--no-claude-mod`, new Claude Code sessions don't
+   load the mod (one installed before included) and use the wake hook.
 
    ```bash
    bun scripts/configure-hooks.ts
@@ -170,12 +171,24 @@ lives in `~/.local/state/swarmail-register/`.
 
 ## Waking sessions
 
-After each Claude Code or Cursor turn, the wake hook long-polls the server:
-for about 23 days in Claude Code and 8 hours in Cursor. When mail arrives, it starts a new turn with a one-line hint
-naming the recipient and sender, urgent mail first. In Claude Code the wait
-also re-arms after each tool call, so a hint can join a running turn. The
-server answers `swarmail ping` itself, so a ping never wakes the model.
-Sessions on other hosts see mail on their next `fetch_inbox`.
+Claude Code sessions wake through the Swarmail mod (`src/claude-wake-mod.js`),
+which waits for mail for as long as the session runs. The installer copies it to
+`~/.local/share/swarmail/claude-plugin` and adds that directory to
+`env.CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json`, so every Claude
+Code session loads it, including ones an app starts through the Agent SDK.
+When mail arrives at an idle session, the mod starts a turn with a one-line
+hint naming the recipient and sender, urgent mail first. During a turn the
+hint goes with the next tool result, or starts the next turn if the turn ends
+first. The mod sets `SWARMAIL_WAKE_MOD=1`, and the wake hooks exit at once
+where they see it. It was tested with Claude Code 2.1.288. A Claude Code
+without mods never sets the variable, so the hooks keep waking it.
+
+Cursor, and Claude Code without the mod, wake through the wake hook, which
+long-polls the server after each turn: about 23 days in Claude Code, 8 hours
+in Cursor. When mail arrives, it starts a new turn with the hint. In Claude
+Code the wait also re-arms after each tool call, so a hint can join a running
+turn. The server answers `swarmail ping` itself, so a ping never wakes the
+model. Sessions on other hosts see mail on their next `fetch_inbox`.
 
 ## Performance
 
