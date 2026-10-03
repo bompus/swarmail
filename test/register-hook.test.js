@@ -14,17 +14,15 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { primaryCheckout } from "../src/checkout.ts";
 import { hostProcess } from "../src/proc.ts";
+import { hookSession, targetDir } from "../src/register-hook.ts";
 import {
-  endSession,
   ensureRegistered,
-  hookSession,
   keptTask,
+  openRegistry,
   rowForSession,
-  t3ThreadId,
-  targetDir,
-} from "../src/register-hook.ts";
-import { withLock } from "../src/registry.ts";
-import { t3StatePath } from "../src/t3-state.ts";
+  withLock,
+} from "../src/registry.ts";
+import { t3StatePath, t3ThreadId } from "../src/t3-state.ts";
 import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.js";
 import { sessionTag } from "../src/tag.ts";
 import { createServer } from "../src/server.ts";
@@ -572,7 +570,8 @@ test("SessionEnd records the end and releases reservations in each project, keep
   const dir = mkdtempSync(join(tmpdir(), "end-"));
   try {
     const statePath = join(dir, "s1.json");
-    endSession(statePath, () => {
+    const registry = openRegistry(dir);
+    registry.end("s1", () => {
       throw new Error("no state, no release");
     });
     expect(JSON.parse(readFileSync(statePath, "utf8"))).toMatchObject({
@@ -583,8 +582,8 @@ test("SessionEnd records the end and releases reservations in each project, keep
 
     writeFileSync(statePath, JSON.stringify({ name: "TanOwl", projects: ["/a", "/b"] }));
     const released = [];
-    endSession(
-      statePath,
+    registry.end(
+      "s1",
       (project, name) => {
         released.push([project, name]);
         if (project === "/a") {

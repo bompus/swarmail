@@ -12,7 +12,7 @@
 // Names this session registered under (selfNames in registry.ts) are marked "(you)", and `self` in --json.
 
 import { Database } from "bun:sqlite";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { buildSource } from "./build.ts";
@@ -20,9 +20,8 @@ import { iso } from "./db.ts";
 import { primaryCheckout } from "./checkout.ts";
 import { callTool } from "./client.ts";
 import { hostAlive } from "./proc.ts";
-import { t3ThreadId } from "./register-hook.ts";
-import { registryDir, selfNames, type RegisterState } from "./registry.ts";
-import { isT3V2, T3_V2_THREADS, t3StatePath } from "./t3-state.ts";
+import { openRegistry, registryDir, selfNames } from "./registry.ts";
+import { t3StatePath, t3ThreadId, t3Threads, type T3Thread } from "./t3-state.ts";
 import { parseTag, withoutTag } from "./tag.ts";
 import { liveRoomPath } from "./who-extra.ts";
 
@@ -31,14 +30,6 @@ export interface RosterAgent {
   name: string;
   task_description?: string;
   last_active_ts?: string;
-}
-
-interface T3Thread {
-  thread_id: string;
-  title: string | null;
-  cwd: string | null;
-  status: string | null;
-  last_seen_at: string | null;
 }
 
 interface LiveRoom {
@@ -75,27 +66,6 @@ export interface WhoRow {
 
 const LIVE_ROOM_FRESH_MS = 5 * 60 * 1000;
 const RECENT_MS = 24 * 60 * 60 * 1000;
-
-/** The register hook's state for each session (file name = session id). */
-export function hookStates(stateDir: string): Array<RegisterState & { sessionId: string }> {
-  if (!existsSync(stateDir)) {
-    return [];
-  }
-  return readdirSync(stateDir)
-    .filter((file) => file.endsWith(".json"))
-    .flatMap((file) => {
-      try {
-        return [
-          {
-            sessionId: file.slice(0, -".json".length),
-            ...JSON.parse(readFileSync(join(stateDir, file), "utf8")),
-          },
-        ];
-      } catch {
-        return [];
-      }
-    });
-}
 
 /** Registered project keys (primary checkout paths), read from the server's database. */
 function projectKeys(dbPath: string): string[] {
@@ -155,41 +125,6 @@ export function resolveProject(target: string, keys: string[], checkout = primar
   );
 }
 
-/** T3's threads by id; none while the database is missing or mid-copy on V2's first start. */
-function t3Threads(dbPath: string): Map<string, T3Thread> {
-  if (!existsSync(dbPath)) {
-    return new Map();
-  }
-  let db: Database;
-  try {
-    db = new Database(dbPath, { readonly: true });
-  } catch {
-    return new Map();
-  }
-  try {
-    const rows = db
-      .query<T3Thread, []>(
-        isT3V2(db)
-          ? `
-      select thread_id, title, cwd, status, last_seen_at from (${T3_V2_THREADS})
-      where deleted_at is null`
-          : `
-      select t.thread_id, t.title, coalesce(t.worktree_path, p.workspace_root) as cwd,
-             r.status, r.last_seen_at
-      from projection_threads t
-      left join projection_projects p on p.project_id = t.project_id
-      left join provider_session_runtime r on r.thread_id = t.thread_id
-      where t.deleted_at is null`,
-      )
-      .all();
-    return new Map(rows.map((row) => [row.thread_id, row]));
-  } catch {
-    return new Map();
-  } finally {
-    db.close();
-  }
-}
-
 function liveRoom(path: string | null): LiveRoom | null {
   if (!path) {
     return null;
@@ -241,7 +176,7 @@ export function whoRows(
   threadOf = t3ThreadId,
   alive = hostAlive,
 ): WhoRow[] {
-  const states = hookStates(stateDir);
+  const states = openRegistry(stateDir).all();
   const rows = roster.map((agent): WhoRow => {
     const tag = parseTag(agent.task_description);
     const sessionId =

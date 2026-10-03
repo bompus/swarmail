@@ -9,7 +9,7 @@ import { nowUs, openDatabase } from "./db.ts";
 import { buildSource } from "./build.ts";
 import { createTools, TOOL_DEFINITIONS, ToolError, WAKES } from "./tools.ts";
 import { createWaiters, SESSION_RE } from "./wake.ts";
-import { pruneEndedRegistrations, registryDir } from "./registry.ts";
+import { openRegistry, registryDir } from "./registry.ts";
 
 const PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 
@@ -105,7 +105,7 @@ export function createServer(
     }
     pruneIdempotencyKeys(db, 7);
     if (registry) {
-      pruneEndedRegistrations(registry);
+      openRegistry(registry).prune();
     }
   };
   sweep();

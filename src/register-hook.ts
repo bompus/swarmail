@@ -5,16 +5,13 @@
 // roster find nothing. Never blocks the edit, and
 // prints nothing: Antigravity reads any stdout, even `{}`, as a decision and denies the call.
 
-import { Database } from "bun:sqlite";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { primaryCheckout } from "./checkout.ts";
-import { callTool, swarmailUrl } from "./client.ts";
 import { hostProcess, sameHost } from "./proc.ts";
-import { registryDir, withLock, type RegisterState } from "./registry.ts";
-import { parseTag, sessionMarker, sessionTag, withoutTag } from "./tag.ts";
-import { isT3V2, t3StatePath } from "./t3-state.ts";
+import { openRegistry, serverRegister, type Session } from "./registry.ts";
+import { sessionTag } from "./tag.ts";
+import { t3ThreadId } from "./t3-state.ts";
 
 /** A hook payload. Each host sends its own shape, so every field is checked before use. */
 export interface HookInput {
@@ -39,22 +36,6 @@ export interface HookInput {
   transcript_path?: unknown;
   hook_event_name?: unknown;
 }
-
-export interface Session {
-  host: string;
-  program: string;
-  model: string | null;
-  sessionId: string | null;
-  cwd: string | null;
-}
-
-/** A `list_agents` roster row, as far as the hook reads it. */
-export interface RosterRow {
-  name?: string;
-  task_description?: string;
-}
-
-type Register = (project: string, name: string | null) => string | null;
 
 /**
  * The directory to resolve: the edited file's folder when it exists, else the session cwd. Codex
@@ -85,48 +66,6 @@ export function targetDir(input: HookInput): string | null {
   return cwd;
 }
 
-/**
- * Registers `session` under `project` unless its state already lists it with this `tag`. A changed
- * tag, or state from before tags were recorded, registers again under the same name so the roster
- * row carries the current tag. Returns the new state, or the old one when nothing changed or the
- * server failed; `register` returns the agent name or null.
- */
-export function ensureRegistered(
-  state: RegisterState,
-  project: string,
-  tag: string,
-  register: Register,
-): RegisterState {
-  if (state.projects.includes(project) && state.tags?.[project] === tag) {
-    return state;
-  }
-  const name = register(project, state.name);
-  if (!name) {
-    return state;
-  }
-  const projects = state.projects.includes(project) ? state.projects : [...state.projects, project];
-  return { ...state, name, projects, tags: { ...state.tags, [project]: tag } };
-}
-
-/**
- * `ensureRegistered` that remembers a failure: when the server did not answer, the state keeps a
- * `pending` registration so the next prompt retries it, instead of the session staying
- * unregistered until an edit that may never come. Success clears it.
- */
-export function settleRegistration(
-  state: RegisterState,
-  project: string,
-  tag: string,
-  register: Register,
-): RegisterState {
-  const next = ensureRegistered(state, project, tag, register);
-  if (next.projects.includes(project) && next.tags?.[project] === tag) {
-    const { pending, ...rest } = next;
-    return pending?.project === project ? rest : next;
-  }
-  return { ...next, pending: { project, tag } };
-}
-
 /** The one line an agent sees when its registration failed. */
 export function failureNotice(project: string, tag: string): string {
   return (
@@ -144,74 +83,6 @@ export function hookOutput(host: string, event: unknown, text: string): string {
     return "";
   }
   return JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } });
-}
-
-/**
- * The task text of a roster description without its session tag, so a re-registration keeps what
- * the agent wrote. The hook's own placeholder, current or legacy, counts as no task.
- */
-export function keptTask(description: unknown): string {
-  const text = withoutTag(description)
-    .replace(/^(?:.* session [\w-]+ \()?registered on first edit\)?$/, "")
-    .trim();
-  return text || "registered on first edit";
-}
-
-/**
- * The roster row whose tag names `sessionId`, so a session registered by hand keeps its name. Under
- * T3, a row tagged with the same thread `t3` comes next: T3 can start a new provider session in a
- * thread, which keeps the thread's name instead of registering a second one. Rows come most recently
- * active first.
- */
-export function rowForSession(
-  rows: RosterRow[],
-  sessionId: string | null,
-  t3: string | null = null,
-): RosterRow | null {
-  if (!sessionId) {
-    return null;
-  }
-  const marker = sessionMarker(sessionId);
-  return (
-    rows.find((row) => marker.test(String(row.task_description ?? ""))) ??
-    (t3 ? rows.find((row) => parseTag(row.task_description)?.t3 === t3) : undefined) ??
-    null
-  );
-}
-
-/**
- * The T3 Code thread that runs provider session `sessionId`, or null outside T3. T3 passes no
- * thread id to the provider process, but V1's resume cursor for the thread and V2's native
- * thread reference hold the session id.
- */
-export function t3ThreadId(
-  sessionId: string,
-  dbPath = t3StatePath(join(homedir(), ".t3")),
-): string | null {
-  if (!existsSync(dbPath)) {
-    return null;
-  }
-  try {
-    const db = new Database(dbPath, { readonly: true });
-    try {
-      const row = isT3V2(db)
-        ? db
-            .query<{ thread_id: string }, [string]>(
-              "select thread_id from orchestration_v2_projection_provider_threads where thread_id is not null and json_extract(payload_json, '$.nativeThreadRef.nativeId') = ? order by updated_at desc limit 1",
-            )
-            .get(sessionId)
-        : db
-            .query<{ thread_id: string }, [string]>(
-              "select thread_id from provider_session_runtime where instr(resume_cursor_json, ?) > 0 order by last_seen_at desc limit 1",
-            )
-            .get(JSON.stringify(sessionId));
-      return row?.thread_id ?? null;
-    } finally {
-      db.close();
-    }
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -269,79 +140,6 @@ export function hookSession(input: HookInput, env: NodeJS.ProcessEnv = process.e
   return session("unknown");
 }
 
-export function serverRegister(session: Session, tag: string, url = swarmailUrl()): Register {
-  return (project, name) => {
-    try {
-      let rows: RosterRow[] = [];
-      try {
-        const listed = callTool("list_agents", { project_key: project, limit: 1000 }, url);
-        if (Array.isArray(listed)) {
-          rows = listed;
-        }
-      } catch {
-        // No roster read: register with the placeholder task.
-      }
-      const row = name
-        ? rows.find((r) => r.name === name)
-        : rowForSession(rows, session.sessionId, parseTag(tag)?.t3);
-      const reuse = name ?? row?.name;
-      return (
-        (
-          callTool(
-            "register_agent",
-            {
-              project_key: project,
-              program: session.program,
-              model: session.model || session.host,
-              task_description: `${tag} ${keptTask(row?.task_description)}`,
-              ...(reuse && { name: reuse }),
-            },
-            url,
-          ) as { name?: string }
-        ).name ?? null
-      );
-    } catch {
-      return null;
-    }
-  };
-}
-
-/**
- * SessionEnd: records when the session ended, then releases its file reservations in every project it
- * registered in, so `who` can say it ended and its claims stop blocking peers. The name stays registered:
- * a resumed session keeps its session id, and with it its name.
- */
-export function endSession(
-  statePath: string,
-  release: (project: string, name: string) => unknown = (project, name) =>
-    callTool("release_file_reservations", { project_key: project, agent_name: name }),
-  now = new Date(),
-): void {
-  mkdirSync(dirname(statePath), { recursive: true });
-  let state: RegisterState | undefined;
-  withLock(statePath + ".lock", () => {
-    try {
-      state = JSON.parse(readFileSync(statePath, "utf8"));
-    } catch {
-      state = { name: null, projects: [] };
-    }
-    if (state) {
-      // Serialize the end record with registration; release network calls run after unlocking.
-      writeFileSync(statePath, JSON.stringify({ ...state, ended: now.toISOString() }) + "\n");
-    }
-  });
-  if (!state?.name) {
-    return;
-  }
-  for (const project of state.projects) {
-    try {
-      release(project, state.name);
-    } catch {
-      // Server down: the reservations expire on their own.
-    }
-  }
-}
-
 /** Registers per the hook input; returns the text for the agent, if any. */
 function main(input: HookInput): string {
   const started = Date.now();
@@ -350,63 +148,31 @@ function main(input: HookInput): string {
   if (!sessionId || !/^[\w-]+$/.test(sessionId)) {
     return "";
   }
-  const stateDir = registryDir();
-  const statePath = join(stateDir, `${sessionId}.json`);
-  const readState = (): RegisterState => {
-    try {
-      return JSON.parse(readFileSync(statePath, "utf8"));
-    } catch {
-      return { name: null, projects: [] }; // First edit of this session.
-    }
-  };
-  let notice = "";
-  const settle = (project: string, tag: string) =>
-    withLock(`${statePath}.lock`, () => {
-      const state = readState();
-      if (state.ended && Date.parse(state.ended) > started) {
-        return;
-      }
-      const { ended, ...settled } = settleRegistration(
-        state,
-        project,
-        tag,
-        serverRegister(session, tag),
-      );
-      const next = { ...settled, host: hostProcess() };
-      if (JSON.stringify(next) !== JSON.stringify(state)) {
-        writeFileSync(statePath, JSON.stringify(next) + "\n");
-      }
-      if (next.pending?.project === project) {
-        notice = failureNotice(project, tag);
-      } else if (state.pending?.project === project) {
-        notice = `Swarmail: registered as ${next.name} in ${project}.`;
-      }
+  const registry = openRegistry();
+  const settle = (project: string, tag: string): string => {
+    const settled = registry.settle(sessionId, {
+      since: started,
+      project,
+      tag,
+      register: serverRegister(session, tag),
+      extra: { host: hostProcess() },
     });
+    if (settled?.after.pending?.project === project) {
+      return failureNotice(project, tag);
+    }
+    if (settled?.before.pending?.project === project) {
+      return `Swarmail: registered as ${settled.after.name} in ${project}.`;
+    }
+    return "";
+  };
   if (input.hook_event_name === "SessionEnd") {
-    endSession(statePath);
+    registry.end(sessionId);
     return "";
   }
-  // A prompt retries a failed registration and clears `ended` after a resume: one file read when neither applies.
+  // A prompt retries a failed registration and clears `ended` after a resume.
   if (input.hook_event_name === "UserPromptSubmit") {
-    let pending: RegisterState["pending"];
-    mkdirSync(stateDir, { recursive: true });
-    withLock(`${statePath}.lock`, () => {
-      const { pending: retry, ended, ...rest } = readState();
-      if (ended && Date.parse(ended) > started) {
-        return;
-      }
-      pending = retry;
-      if (ended) {
-        writeFileSync(
-          statePath,
-          JSON.stringify({ ...rest, ...(retry && { pending: retry }) }) + "\n",
-        );
-      }
-    });
-    if (pending) {
-      settle(pending.project, pending.tag);
-    }
-    return notice;
+    const pending = registry.resume(sessionId, started);
+    return pending ? settle(pending.project, pending.tag) : "";
   }
   const dir = targetDir({ ...input, cwd: session.cwd });
   const project = dir && primaryCheckout(dir);
@@ -416,13 +182,16 @@ function main(input: HookInput): string {
   const t3 = t3ThreadId(sessionId);
   const tag = sessionTag({ ...session, t3 }, session.cwd);
   // Most edits after the first find the project registered under this tag and skip the lock.
-  const known = readState();
-  if (!known.ended && known.tags?.[project] === tag && sameHost(known.host, hostProcess())) {
+  const known = registry.read(sessionId);
+  if (
+    known &&
+    !known.ended &&
+    known.tags?.[project] === tag &&
+    sameHost(known.host, hostProcess())
+  ) {
     return "";
   }
-  mkdirSync(stateDir, { recursive: true });
-  settle(project, tag);
-  return notice;
+  return settle(project, tag);
 }
 
 /** The variable each host sets in its shell to the session id; the README lists them. */

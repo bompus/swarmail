@@ -13,6 +13,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   no paths. A string TTL used to be accepted, a negative
   one granted an already expired reservation, and a bad `active_within_days`
   returned an empty list.
+- The register hook writes its session state to a temporary file and
+  renames it into place, so `swarmail who`, the git guard and the wake
+  hook never read a half-written file. The file format is unchanged.
 
 ## 0.1.2 - 2026-10-03
 

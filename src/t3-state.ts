@@ -1,8 +1,9 @@
 // T3 Code's state database. Orchestrator V2 copies V1's `state.sqlite` to `statev2.sqlite` on its
 // first start, then writes only the copy and keeps threads in `orchestration_v2_*` tables; the
 // copied V1 tables stay behind, frozen. V1 keeps writing `state.sqlite`.
-import type { Database } from "bun:sqlite";
+import { Database } from "bun:sqlite";
 import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 /** V2's database once a V2 server has created it, else V1's. */
@@ -39,3 +40,81 @@ export const T3_V2_THREADS = `
   left join projection_projects p on p.project_id = t.project_id
   left join orchestration_v2_projection_provider_threads pt
     on pt.provider_thread_id = t.active_provider_thread_id`;
+
+/**
+ * The T3 Code thread that runs provider session `sessionId`, or null outside T3. T3 passes no
+ * thread id to the provider process, but V1's resume cursor for the thread and V2's native
+ * thread reference hold the session id.
+ */
+export function t3ThreadId(
+  sessionId: string,
+  dbPath = t3StatePath(join(homedir(), ".t3")),
+): string | null {
+  if (!existsSync(dbPath)) {
+    return null;
+  }
+  try {
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      const row = isT3V2(db)
+        ? db
+            .query<{ thread_id: string }, [string]>(
+              "select thread_id from orchestration_v2_projection_provider_threads where thread_id is not null and json_extract(payload_json, '$.nativeThreadRef.nativeId') = ? order by updated_at desc limit 1",
+            )
+            .get(sessionId)
+        : db
+            .query<{ thread_id: string }, [string]>(
+              "select thread_id from provider_session_runtime where instr(resume_cursor_json, ?) > 0 order by last_seen_at desc limit 1",
+            )
+            .get(JSON.stringify(sessionId));
+      return row?.thread_id ?? null;
+    } finally {
+      db.close();
+    }
+  } catch {
+    return null;
+  }
+}
+
+export interface T3Thread {
+  thread_id: string;
+  title: string | null;
+  cwd: string | null;
+  status: string | null;
+  last_seen_at: string | null;
+}
+
+/** T3's threads by id; none while the database is missing or mid-copy on V2's first start. */
+export function t3Threads(dbPath: string): Map<string, T3Thread> {
+  if (!existsSync(dbPath)) {
+    return new Map();
+  }
+  let db: Database;
+  try {
+    db = new Database(dbPath, { readonly: true });
+  } catch {
+    return new Map();
+  }
+  try {
+    const rows = db
+      .query<T3Thread, []>(
+        isT3V2(db)
+          ? `
+      select thread_id, title, cwd, status, last_seen_at from (${T3_V2_THREADS})
+      where deleted_at is null`
+          : `
+      select t.thread_id, t.title, coalesce(t.worktree_path, p.workspace_root) as cwd,
+             r.status, r.last_seen_at
+      from projection_threads t
+      left join projection_projects p on p.project_id = t.project_id
+      left join provider_session_runtime r on r.thread_id = t.thread_id
+      where t.deleted_at is null`,
+      )
+      .all();
+    return new Map(rows.map((row) => [row.thread_id, row]));
+  } catch {
+    return new Map();
+  } finally {
+    db.close();
+  }
+}

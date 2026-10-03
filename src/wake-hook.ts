@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { registryDir } from "./registry.ts";
+import { openRegistry, registryDir } from "./registry.ts";
 
 interface Proc {
   ppid: number;
@@ -97,12 +97,8 @@ function claudeAgent(
   if (read(claude)?.args.some((arg) => arg === "-p" || arg === "--print")) {
     return null;
   }
-  try {
-    const registration = JSON.parse(readFileSync(join(registryDir(env), `${sid}.json`), "utf8"));
-    if (registration.ended) {
-      return null;
-    }
-  } catch {
+  const registration = openRegistry(registryDir(env)).read(sid);
+  if (!registration || registration.ended) {
     return null;
   }
   return claude;

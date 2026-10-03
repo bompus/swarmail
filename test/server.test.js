@@ -1041,7 +1041,7 @@ test("an unknown agent error names at most ten recent agents and says what to do
 
 test("the hourly sweep forgets old idempotency keys and long-ended registrations", async () => {
   const { pruneIdempotencyKeys } = await import("../src/server.ts");
-  const { pruneEndedRegistrations } = await import("../src/registry.ts");
+  const { openRegistry } = await import("../src/registry.ts");
   const now = Date.now();
   db.run("INSERT INTO idempotency_keys VALUES ('send_message', 1, 'old', 'f', '{}', ?)", [
     (now - 8 * 86_400_000) * 1000,
@@ -1072,6 +1072,6 @@ test("the hourly sweep forgets old idempotency keys and long-ended registrations
   write("live.json", { name: "LiveOwl", projects: [] });
   // Rewritten since it ended, so the sweep skips it without reading it.
   write("touched.json", { name: "TouchOwl", projects: [], ended: ended(15) }, 1);
-  expect(pruneEndedRegistrations(registry, 14, now)).toBe(1);
+  expect(openRegistry(registry).prune(14, now)).toBe(1);
   expect(readdirSync(registry).sort()).toEqual(["live.json", "recent.json", "touched.json"]);
 });

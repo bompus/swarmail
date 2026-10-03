@@ -1,0 +1,75 @@
+import { expect, test } from "bun:test";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { openRegistry } from "../src/registry.ts";
+
+const withRegistry = (fn) => {
+  const dir = mkdtempSync(join(tmpdir(), "registry-"));
+  try {
+    fn(openRegistry(dir), dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+};
+
+test("settle registers, keeps a failed registration pending for the next prompt, and skips a session that ended meanwhile", () => {
+  withRegistry((registry, dir) => {
+    let up = false;
+    const register = () => (up ? "TealFern" : null);
+    const settle = (since, project = "/r/a") =>
+      registry.settle("s1", { since, project, tag: "[t1]", register, extra: { wakeThread: "th" } });
+
+    expect(settle(1).after).toEqual({
+      name: null,
+      projects: [],
+      pending: { project: "/r/a", tag: "[t1]" },
+      wakeThread: "th",
+    });
+    up = true;
+    expect(registry.resume("s1", 2)).toEqual({ project: "/r/a", tag: "[t1]" });
+    const settled = settle(2);
+    expect(settled.before.pending).toEqual({ project: "/r/a", tag: "[t1]" });
+    expect(settled.after).toEqual({
+      name: "TealFern",
+      projects: ["/r/a"],
+      tags: { "/r/a": "[t1]" },
+      wakeThread: "th",
+    });
+
+    registry.end("s1", () => {}, new Date(5000));
+    // Ended at or after the caller's start: the end wins and nothing is written.
+    expect(settle(5000, "/r/b")).toBeNull();
+    expect(settle(4000, "/r/b")).toBeNull();
+    expect(registry.read("s1").ended).toBe(new Date(5000).toISOString());
+    // A later prompt or edit clears the end.
+    expect(settle(6000, "/r/b").after.ended).toBeUndefined();
+    expect(registry.read("s1").projects).toEqual(["/r/a", "/r/b"]);
+    expect(readdirSync(dir).sort()).toEqual(["s1.json"]);
+  });
+});
+
+test("resume clears an end from before the prompt and leaves one recorded after it", () => {
+  withRegistry((registry) => {
+    registry.end("s1", () => {}, new Date(5000));
+    expect(registry.resume("s1", 5000)).toBeUndefined();
+    expect(registry.read("s1").ended).toBeDefined();
+    expect(registry.resume("s1", 6000)).toBeUndefined();
+    expect(registry.read("s1")).toEqual({ name: null, projects: [] });
+  });
+});
+
+test("readers skip unreadable state and leftover temporary files", () => {
+  withRegistry((registry, dir) => {
+    writeFileSync(join(dir, "good.json"), JSON.stringify({ name: "GoldMoss", projects: [] }));
+    writeFileSync(join(dir, "torn.json"), '{"name": "Ha');
+    writeFileSync(join(dir, "left.json.tmp"), "{}");
+    expect(registry.all()).toEqual([{ sessionId: "good", name: "GoldMoss", projects: [] }]);
+    expect(registry.read("torn")).toBeNull();
+    expect(registry.read("missing")).toBeNull();
+    registry.end("good", () => {}, new Date(0));
+    expect(JSON.parse(readFileSync(join(dir, "good.json"), "utf8")).ended).toBe(
+      new Date(0).toISOString(),
+    );
+  });
+});
