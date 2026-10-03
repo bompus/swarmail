@@ -206,6 +206,8 @@ summary
 | Memory, idle | 33 MiB | 196 MiB | 154 MiB |
 | Memory, peak under load | 68 MiB | 706 MiB | 250 MiB |
 | CPU, idle | 0.06% of a core | 0.15% of a core | 0.13% of a core |
+| CPU time, all timed calls | 0.54 s | 85 s | 93 s |
+| Load 250 messages | 178 ms | 9.3 s | 17.7 s |
 
 mcp_agent_mail commits each send to a Git archive before it returns, so these
 numbers don't compare durability. Throughput varied by up to a quarter between
