@@ -36,8 +36,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   without regard to case or slash direction, and read process identity
   from kernel32 instead of `/proc`. A rebuild while the server runs moves
   the old `swarmail.exe` aside, since Windows refuses to replace a running
-  program. CI runs the checks and every test except the hook, MCP
-  registration and wake tests on `windows-latest`. The hook and MCP
+  program. CI runs the checks and every test except the hook installer, MCP
+  registration and wake hook tests on `windows-latest`. The hook and MCP
   installers, wake and a background service do not work on Windows yet.
 
 ## 0.1.4 - 2026-10-03

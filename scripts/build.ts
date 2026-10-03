@@ -65,9 +65,19 @@ function replaceBinary(next: string, out: string): void {
   }
   try {
     renameSync(next, out);
-  } catch {
-    renameSync(out, join(dir, `${stem}.old-${Date.now()}.exe`));
-    renameSync(next, out);
+  } catch (error) {
+    // Windows refuses to replace a running program; any other failure leaves the installed binary alone.
+    if (!["EPERM", "EBUSY", "EACCES"].includes((error as NodeJS.ErrnoException).code ?? "")) {
+      throw error;
+    }
+    const old = join(dir, `${stem}.old-${Date.now()}.exe`);
+    renameSync(out, old);
+    try {
+      renameSync(next, out);
+    } catch (failed) {
+      renameSync(old, out);
+      throw failed;
+    }
   }
 }
 

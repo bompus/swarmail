@@ -30,3 +30,10 @@ test.if(windows)("a gone process is not alive", async () => {
   await new Promise((resolve) => child.on("exit", resolve));
   expect(hostAlive(id)).toBe(false);
 });
+
+test("a host recorded without a start time never reads as alive", () => {
+  const gone = () => null;
+  expect(hostAlive({ name: "claude", pid: 4242, start: undefined }, gone)).toBe(false);
+  expect(hostAlive({ name: "claude", pid: 4242, start: "7" }, gone)).toBe(false);
+  expect(hostAlive({ name: "claude", pid: 4242, start: "7" }, () => ({ start: "7" }))).toBe(true);
+});

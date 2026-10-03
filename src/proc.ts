@@ -16,7 +16,7 @@ interface ProcStat {
   start: string | undefined;
 }
 
-const HOST_COMM = /^(claude|codex|opencode|devin|cursor-agent|grok|agy|antigravity)/;
+const HOST_COMM = /^(claude|codex|opencode|devin|cursor-agent|grok|agy|antigravity)/i;
 
 /** `/proc/<pid>/stat`: the command name, parent and start time (clock ticks since boot). */
 function readProcStat(pid: number): ProcStat | null {
@@ -65,7 +65,8 @@ export function processIdentity(pid: number): HostProcess | null {
 
 /** Whether a recorded host process is still the same running process. */
 export function hostAlive(host: HostProcess | null | undefined, read = readProcStat): boolean {
-  if (!host?.pid) {
+  // A start time that could not be read cannot tell this process from a later one with its PID.
+  if (!host?.pid || host.start === undefined) {
     return false;
   }
   return read(host.pid)?.start === host.start;
