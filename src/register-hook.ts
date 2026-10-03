@@ -13,7 +13,7 @@ import { primaryCheckout } from "./checkout.ts";
 import { callTool, swarmailUrl } from "./client.ts";
 import { hostProcess, sameHost } from "./proc.ts";
 import { registryDir, withLock, type RegisterState } from "./registry.ts";
-import { sessionMarker, sessionTag, withoutTag } from "./tag.ts";
+import { parseTag, sessionMarker, sessionTag, withoutTag } from "./tag.ts";
 import { isT3V2, t3StatePath } from "./t3-state.ts";
 
 /** A hook payload. Each host sends its own shape, so every field is checked before use. */
@@ -157,13 +157,26 @@ export function keptTask(description: unknown): string {
   return text || "registered on first edit";
 }
 
-/** The roster row whose tag names `sessionId`, so a session registered by hand keeps its name. */
-export function rowForSession(rows: RosterRow[], sessionId: string | null): RosterRow | null {
+/**
+ * The roster row whose tag names `sessionId`, so a session registered by hand keeps its name. Under
+ * T3, a row tagged with the same thread `t3` comes next: T3 can start a new provider session in a
+ * thread, which keeps the thread's name instead of registering a second one. Rows come most recently
+ * active first.
+ */
+export function rowForSession(
+  rows: RosterRow[],
+  sessionId: string | null,
+  t3: string | null = null,
+): RosterRow | null {
   if (!sessionId) {
     return null;
   }
   const marker = sessionMarker(sessionId);
-  return rows.find((row) => marker.test(String(row.task_description ?? ""))) ?? null;
+  return (
+    rows.find((row) => marker.test(String(row.task_description ?? ""))) ??
+    (t3 ? rows.find((row) => parseTag(row.task_description)?.t3 === t3) : undefined) ??
+    null
+  );
 }
 
 /**
@@ -268,7 +281,9 @@ export function serverRegister(session: Session, tag: string, url = swarmailUrl(
       } catch {
         // No roster read: register with the placeholder task.
       }
-      const row = name ? rows.find((r) => r.name === name) : rowForSession(rows, session.sessionId);
+      const row = name
+        ? rows.find((r) => r.name === name)
+        : rowForSession(rows, session.sessionId, parseTag(tag)?.t3);
       const reuse = name ?? row?.name;
       return (
         (
@@ -410,16 +425,27 @@ function main(input: HookInput): string {
   return notice;
 }
 
+/** The variable each host sets in its shell to the session id; the README lists them. */
+const SESSION_ENV: Record<string, string> = {
+  claude: "CLAUDE_CODE_SESSION_ID",
+  codex: "CODEX_THREAD_ID",
+  cursor: "CURSOR_CONVERSATION_ID",
+  grok: "GROK_SESSION_ID",
+  agy: "ANTIGRAVITY_CONVERSATION_ID",
+};
+
 /**
  * `swarmail register`: the hook itself, reading the host's JSON on stdin and always exiting 0.
- * `swarmail register --tag <host> [session id]` prints the tag for a manual `register_agent` from the current directory.
+ * `swarmail register --tag <host> [session id]` prints the tag for a manual `register_agent` from the current directory,
+ * taking the session id from the host's shell variable when omitted.
  */
 export function registerHook(args: string[]): void {
   if (args[0] === "--tag") {
-    const [host, sessionId] = args.slice(1);
+    const host = args[1];
     if (!host) {
       throw new Error("Usage: swarmail register --tag <host> [session id]");
     }
+    const sessionId = args[2] || process.env[SESSION_ENV[host] ?? ""] || undefined;
     console.log(
       sessionTag({ host, sessionId, t3: sessionId ? t3ThreadId(sessionId) : null }, process.cwd()),
     );

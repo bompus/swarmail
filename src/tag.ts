@@ -72,6 +72,20 @@ export const leadingTag = (text: string): string | undefined =>
 export const withoutTag = (text: unknown): string =>
   String(text ?? "").replace(/^\[[^\]]*\]\s*/, "");
 
+/**
+ * Whether two tags name one session: the same T3 thread when both have one, since a thread keeps
+ * its identity when T3 starts a new provider session in it; otherwise the same `<host>:<session>`.
+ */
+export function sameSession(a: Tag | null, b: Tag | null): boolean {
+  if (!a || !b) {
+    return false;
+  }
+  if (a.t3 && b.t3) {
+    return a.t3 === b.t3;
+  }
+  return !!a.sessionId && a.host === b.host && a.sessionId === b.sessionId;
+}
+
 /** Matches a description whose tag names `sessionId`, as `<host>:<sessionId>`. */
 export const sessionMarker = (sessionId: string): RegExp =>
   new RegExp(`^\\[[^\\]]*:${sessionId}[ \\]]`);

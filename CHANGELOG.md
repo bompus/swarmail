@@ -2,6 +2,21 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.2 - 2026-10-03
+
+- A session keeps one name. `register_agent` or `macro_start_session`
+  without a name, whose task description starts with a session tag a live
+  agent already has, now updates that agent instead of creating a second
+  one. Tags match on the same T3 Code thread, or else on the same host and
+  session id. Retired agents are not reused.
+- The register hook keeps a T3 Code thread's name when T3 starts a new
+  provider session in that thread. It used to register the new session
+  under a new name while mail kept going to the old one.
+- `swarmail register --tag <host>` reads the session id from the host's
+  shell variable (`$CLAUDE_CODE_SESSION_ID`, `$CODEX_THREAD_ID`,
+  `$CURSOR_CONVERSATION_ID` and so on) when none is given, so a manual tag
+  names the session.
+
 ## 0.1.1 - 2026-10-02
 
 - `configure-hooks.ts` and `configure-mcp.ts` print usage for `--help` and

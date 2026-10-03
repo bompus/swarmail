@@ -59,7 +59,9 @@ export const TOOL_DEFINITIONS = [
   tool(
     "register_agent",
     "Register or update an agent identity in a project. Omit name to get a generated " +
-      "adjective+noun name; re-registering an existing name updates its program, model and task.",
+      "adjective+noun name, unless task_description starts with a session tag a live agent " +
+      "already has; then that agent is updated. Re-registering an existing name updates its " +
+      "program, model and task.",
     {
       project_key: PROJECT,
       program: s("string"),

@@ -726,6 +726,46 @@ test("register_agent rejects a descriptive name and generates one when omitted",
   expect(generated.name).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
 });
 
+test("a registration without a name keeps the name of the session or T3 thread its tag names", async () => {
+  const project = "/w/one-identity";
+  const start = (task, extra = {}) =>
+    call("macro_start_session", {
+      human_key: project,
+      program: "codex",
+      model: "m",
+      task_description: task,
+      ...extra,
+    }).then((r) => r.agent.name);
+  await call("register_agent", {
+    project_key: project,
+    program: "codex",
+    model: "m",
+    name: "IndigoHill",
+    task_description: "[t3:thread-1 codex:s1 cwd:~/w] hook registration",
+  });
+  // The same session, then a new provider session in the same T3 thread.
+  expect(await start("[t3:thread-1 codex:s1 cwd:~/w] manual")).toBe("IndigoHill");
+  expect(await start("[t3:thread-1 codex:s2 cwd:~/w] after a T3 restart")).toBe("IndigoHill");
+  // Outside T3 the session id decides; another thread or session gets its own name.
+  await call("register_agent", {
+    project_key: project,
+    program: "claude-code",
+    model: "m",
+    name: "AmberFox",
+    task_description: "[claude:c1 cwd:~/w] plain",
+  });
+  expect(await start("[claude:c1 cwd:~/w] again")).toBe("AmberFox");
+  const others = [
+    await start("[t3:thread-2 codex:s3 cwd:~/w] other thread"),
+    await start("[claude:c2 cwd:~/w] other session"),
+    await start("untagged"),
+  ];
+  expect(others).not.toContain("IndigoHill");
+  expect(others).not.toContain("AmberFox");
+  await call("retire_agent", { project_key: project, agent_name: "AmberFox" });
+  expect(await start("[claude:c1 cwd:~/w] after retiring")).not.toBe("AmberFox");
+});
+
 test("SWARMAIL_SYNCHRONOUS picks normal or full durability and rejects anything else", () => {
   const dir = mkdtempSync(join(tmpdir(), "swarmail-sync-"));
   try {
