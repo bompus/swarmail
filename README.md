@@ -179,17 +179,38 @@ Sessions on other hosts see mail on their next `fetch_inbox`.
 
 ## Performance
 
-Measured on one machine against two similar local mail servers, with the same
-small workload:
+Measured on one machine with one small workload (40 agents, 860 messages),
+each server started on empty storage. Each number is the median of at least
+three rounds.
 
-| Median | Swarmail | mcp_agent_mail_rust | mcp_agent_mail |
+```
+summary
+  Swarmail
+    76× faster sends than mcp_agent_mail_rust, 138× faster than mcp_agent_mail
+    91× more sends per second than mcp_agent_mail_rust, 437× more than mcp_agent_mail
+    10× less peak memory than mcp_agent_mail_rust, 3.7× less than mcp_agent_mail
+```
+
+| | Swarmail | mcp_agent_mail_rust | mcp_agent_mail |
 | --- | --- | --- | --- |
-| Send | 0.488 ms | 37.2 ms | 67.3 ms |
-| Search | 0.648 ms | 67.7 ms | 10.6 ms |
-| Idle memory | 33.0 MiB | 196 MiB | 154 MiB |
+| **Latency, p50** | | | |
+| Send | 0.49 ms | 37 ms | 67 ms |
+| Fetch inbox | 0.54 ms | 16 ms | 20 ms |
+| Search | 0.65 ms | 68 ms | 11 ms |
+| **Throughput, 8 clients** | | | |
+| Send | 4,900 req/s | 54 req/s | 11 req/s |
+| Fetch inbox | 6,500 req/s | 364 req/s | 28 req/s |
+| Search | 4,100 req/s | 84 req/s | 46 req/s |
+| **Footprint** | | | |
+| Startup | 18 ms | 1.5 s | 0.9 s |
+| Memory, idle | 33 MiB | 196 MiB | 154 MiB |
+| Memory, peak under load | 68 MiB | 706 MiB | 250 MiB |
+| CPU, idle | 0.06% of a core | 0.15% of a core | 0.13% of a core |
 
-Swarmail starts in 18 ms. mcp_agent_mail also commits each send to a Git
-archive, so these numbers don't compare durability.
+mcp_agent_mail commits each send to a Git archive before it returns, so these
+numbers don't compare durability. Throughput varied by up to a quarter between
+rounds. Swarmail's first start in each benchmark run took about a second;
+later starts took 18 ms.
 
 ## Development
 
