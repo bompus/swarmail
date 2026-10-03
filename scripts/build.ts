@@ -1,12 +1,13 @@
 #!/usr/bin/env bun
-// Compiles the swarmail command (src/cli.ts, with bytecode and an embedded source map) into
-// ~/.local/bin/swarmail, which the service, the host hooks and the git guard run. The binary carries a hash of the
-// server's sources and the Bun that built it, so `--if-stale` rebuilds only after a source change or a Bun upgrade.
+// Compiles the swarmail command (src/cli.ts, or main.ts beside it when a build adds its own
+// commands there, with bytecode and an embedded source map) into ~/.local/bin/swarmail, which the service, the host
+// hooks and the git guard run. The binary carries a hash of the server's sources and the Bun that built it, so
+// `--if-stale` rebuilds only after a source change or a Bun upgrade.
 // A running server keeps its old build until the service restarts.
 // Usage: bun scripts/build.ts [--if-stale] [--out path]
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -38,6 +39,12 @@ export function binarySource(bin = defaultBinary()): string | null {
   return run.status === 0 ? run.stdout.trim() : null;
 }
 
+/** The file the binary is built from: src/main.ts, an entry that passes cli.ts extra commands, when it exists. */
+export function buildEntry(root = REPO_ROOT): string {
+  const src = join(root, "src");
+  return existsSync(join(src, "main.ts")) ? join(src, "main.ts") : join(src, "cli.ts");
+}
+
 export function buildSwarmail(root = REPO_ROOT, out = defaultBinary()): string {
   const source = sourceHash(root);
   const next = `${out}.new`;
@@ -52,7 +59,7 @@ export function buildSwarmail(root = REPO_ROOT, out = defaultBinary()): string {
       "--sourcemap",
       "--define",
       `SWARMAIL_SOURCE=${JSON.stringify(source)}`,
-      join(root, "src", "cli.ts"),
+      buildEntry(root),
       "--outfile",
       next,
     ],

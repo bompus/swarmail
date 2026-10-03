@@ -2,6 +2,16 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## 0.1.4 - 2026-10-03
+
+- `src/cli.ts` exports `main(args, extra)`, so another entry file can
+  import it and add subcommands of its own. An extra subcommand with a
+  built-in's name is ignored. `scripts/build.ts` compiles `src/main.ts` in
+  place of `src/cli.ts` when that file exists.
+- `src/cli-extra.ts` and `src/who-extra.ts` are gone. `swarmail who`
+  reads `SWARMAIL_LIVE_ROOM` itself, as before, and the README lists it
+  under Settings.
+
 ## 0.1.3 - 2026-10-03
 
 - Claude Code sessions now wake through the Swarmail mod, a Claude Code

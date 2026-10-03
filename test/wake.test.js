@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../src/server.ts";
 
+// Run from a session that has the Claude Code mod, the hooks spawned here would inherit this and stand down.
+delete process.env.SWARMAIL_WAKE_MOD;
+
 const P = "/w/project";
 // $0 of the shell that stands in for the host.
 const script = "wake-host";
