@@ -1,5 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -48,11 +56,40 @@ test("adds the Codex hook once beside existing hooks, and a dry run writes nothi
   expect(configureSwarmailHooks(dir).changed).toEqual([]);
 });
 
+test("skips hosts that aren't installed; Cursor alone still gets the Claude settings it reads", () => {
+  const empty = home();
+  expect(configureSwarmailHooks(empty).changed).toEqual([]);
+  expect(readdirSync(empty)).toEqual([]);
+
+  const dir = home();
+  mkdirSync(join(dir, ".cursor"));
+  expect(configureSwarmailHooks(dir).changed).toEqual([
+    join(dir, ".claude", "settings.json"),
+    join(dir, ".cursor", "hooks.json"),
+  ]);
+  expect(readdirSync(dir).sort()).toEqual([".claude", ".cursor"]);
+});
+
+test("the CLI refuses --help and unknown flags before writing", () => {
+  const dir = home();
+  mkdirSync(join(dir, ".claude"));
+  const script = Bun.fileURLToPath(new URL("../scripts/configure-hooks.ts", import.meta.url));
+  for (const args of [["--help"], ["--hosts", "claude-code,codex"]]) {
+    const res = Bun.spawnSync([process.execPath, script, ...args], {
+      env: { ...process.env, HOME: dir },
+    });
+    expect(res.exitCode).not.toBe(0);
+    expect(res.stderr.toString()).toContain("Usage:");
+  }
+  expect(existsSync(join(dir, ".claude", "settings.json"))).toBe(false);
+});
+
 test("writes the OpenCode plugin and an Antigravity hook group beside existing groups", () => {
   const dir = home();
   const agy = join(dir, ".gemini", "config", "hooks.json");
   mkdirSync(join(dir, ".gemini", "config"), { recursive: true });
   writeFileSync(agy, JSON.stringify({ "lint-checker": { PostToolUse: [] } }));
+  mkdirSync(join(dir, ".config", "opencode"), { recursive: true });
 
   configureSwarmailHooks(dir);
   const groups = JSON.parse(readFileSync(agy, "utf8"));
@@ -151,6 +188,7 @@ test("adds the Cursor wake hook beside existing stop hooks", () => {
     { command: `"${join(dir, ".local/bin/swarmail")}" hook wake cursor`, timeout: 28900 },
   ]);
   const fresh = home();
+  mkdirSync(join(fresh, ".cursor"));
   configureSwarmailHooks(fresh);
   expect(JSON.parse(readFileSync(join(fresh, ".cursor", "hooks.json"), "utf8")).version).toBe(1);
 });

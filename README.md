@@ -81,8 +81,10 @@ other systems are not supported yet.
    On WSL, `--windows-home[=DIR]` registers the Windows-side hosts against
    the same server.
 
-4. Install the hooks: the register hook for every host, and the wake hook for
-   Claude Code and Cursor.
+4. Install the hooks: the register hook for every installed host, and the wake
+   hook for Claude Code and Cursor. A host counts as installed when its config
+   directory exists. Add `--dry-run` to preview the edits; the script takes no
+   other flags.
 
    ```bash
    bun scripts/configure-hooks.ts
