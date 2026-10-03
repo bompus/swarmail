@@ -112,9 +112,17 @@ function readPid(path: string): number {
   }
 }
 
+/**
+ * How long each host's hook waits after a turn. Claude cancels an asyncRewake hook at its settings timeout, which the
+ * installer sets 100 s above this; about 23 days keeps that timeout under the 2^31 ms a JavaScript timer holds.
+ */
+export const WAKE_SECONDS = { claude: 1_999_900, cursor: 28_800 };
+// The server ends each /wait after at most a day (server.ts), so a longer hook waits again.
+const MAX_WAIT = 86_400;
+
 export async function wakeHook(
   host: string | undefined,
-  seconds = 28800,
+  seconds?: number,
   input = "",
   env = process.env,
 ): Promise<number> {
@@ -157,7 +165,8 @@ export async function wakeHook(
   }
 
   const base = env.SWARMAIL_WAKE_URL || "http://127.0.0.1:18765";
-  const end = Date.now() + seconds * 1000;
+  const end =
+    Date.now() + (seconds ?? WAKE_SECONDS[host === "claude" ? "claude" : "cursor"]) * 1000;
   let request = new AbortController();
   // Checking the host in-process costs nothing, so one wait covers the whole timeout instead of chunks.
   const watch = setInterval(
@@ -173,7 +182,7 @@ export async function wakeHook(
   try {
     // Only the watcher aborts `request`, so an aborted one means the host has gone.
     while (!request.signal.aborted && end - Date.now() >= 1000) {
-      const left = Math.floor((end - Date.now()) / 1000);
+      const left = Math.min(Math.floor((end - Date.now()) / 1000), MAX_WAIT);
       request = new AbortController();
       try {
         // The wait itself has no connect timeout, and a closed port can hang instead of refusing (WSL's mirrored
@@ -187,11 +196,15 @@ export async function wakeHook(
         const res = await fetch(`${base}/wait?session=${sid}&timeout=${left}${retry}`, {
           signal: AbortSignal.any([request.signal, AbortSignal.timeout((left + 5) * 1000)]),
         });
-        // 200 carries the hint; 204 is the timeout, and an HTTP error (409: a newer wait replaced this one) ends it too.
+        retry = "";
+        // 200 carries the hint, and an HTTP error (409: a newer wait replaced this one) ends the hook too.
+        // 204 ends one wait; the loop waits again until the hook's own time is up.
         if (res.status === 200) {
           hint = (await res.text()).trim();
         }
-        break;
+        if (res.status !== 204) {
+          break;
+        }
       } catch {
         if (request.signal.aborted) {
           break;

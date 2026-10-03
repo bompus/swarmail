@@ -126,14 +126,16 @@ test("adds the Claude register and wake hooks once, keeping other hooks", () => 
   );
   const wake = ours("Stop");
   expect(wake).toHaveLength(1);
+  // Claude cancels an asyncRewake hook at its timeout; this one is about 23 days, under the 2^31 ms timer limit.
   expect(wake[0].hooks[0]).toMatchObject({
     asyncRewake: true,
     command: `"${join(dir, ".local/bin/swarmail")}" hook wake claude`,
+    timeout: 2_000_000,
   });
   const rearm = ours("PostToolUse");
   expect(rearm).toHaveLength(1);
   expect(rearm[0].matcher).toBeUndefined();
-  expect(rearm[0].hooks[0]).toMatchObject({ asyncRewake: true, timeout: 28900 });
+  expect(rearm[0].hooks[0]).toMatchObject({ asyncRewake: true, timeout: 2_000_000 });
 });
 
 test("the PostToolUse re-arm starts a wait only for a registered session with no live waiter", () => {

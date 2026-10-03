@@ -4,6 +4,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- An idle Claude Code session now wakes on new mail for about 23 days
+  after its last turn, up from 8 hours. Claude Code cancels the wake hook
+  at its settings timeout, so rerun `bun scripts/configure-hooks.ts` to
+  raise it to 2000000 seconds. The hook also starts a new wait when the
+  server ends one after a day. Cursor still waits 8 hours.
 - A tool call that fails partway writes nothing. A `macro_start_session`
   whose reservation fails used to leave its project and agent behind.
 - `ttl_seconds`, `file_reservation_ttl_seconds` and `extend_seconds` must

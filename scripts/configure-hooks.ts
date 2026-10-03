@@ -12,6 +12,7 @@ import {
   withHook as withOwnedHook,
   writeChanged,
 } from "./lib/config-files.ts";
+import { WAKE_SECONDS } from "../src/wake-hook.ts";
 
 const marker = "swarmail-register-hook";
 // Replaces hooks that invoke the Swarmail binary.
@@ -69,12 +70,13 @@ export function withClaudeHooks(
   );
   next = withHook(next, "UserPromptSubmit", entry());
   next = withHook(next, "SessionEnd", entry());
-  // The script waits up to 8 h (28800 s); the timeout only has to outlast it.
+  // Claude cancels an asyncRewake hook at this timeout, so it only has to outlast the script's own wait.
+  const timeout = WAKE_SECONDS.claude + 100;
   next = withHook(next, "PostToolUse", {
-    hooks: [{ type: "command", command: rearmCommand, asyncRewake: true, timeout: 28900 }],
+    hooks: [{ type: "command", command: rearmCommand, asyncRewake: true, timeout }],
   });
   return withHook(next, "Stop", {
-    hooks: [{ type: "command", command: wakeCommand, asyncRewake: true, timeout: 28900 }],
+    hooks: [{ type: "command", command: wakeCommand, asyncRewake: true, timeout }],
   });
 }
 
@@ -137,7 +139,10 @@ export function configureSwarmailHooks(home: string = homedir(), { dryRun = fals
     // loop of agents waking each other.
     {
       ...planJson(join(home, ".cursor", "hooks.json"), home, (config) =>
-        withHook({ version: 1, ...config }, "stop", { command: wake("cursor"), timeout: 28900 }),
+        withHook({ version: 1, ...config }, "stop", {
+          command: wake("cursor"),
+          timeout: WAKE_SECONDS.cursor + 100,
+        }),
       ),
       hosts: [".cursor"],
     },
