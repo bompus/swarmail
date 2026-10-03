@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
-// The swarmail command, and the entry for a single binary on Linux, macOS or Windows. scripts/build.ts builds
-// ~/.local/bin/swarmail; for another platform add --target=bun-windows-x64|bun-darwin-arm64|... to its `bun build`.
+// The swarmail command, and the entry for its single binary: scripts/build.ts builds ~/.local/bin/swarmail.
+// It runs on Linux only, since sessions are identified through /proc.
 // Modules load on demand, so a waiting hook does not load the server's. No top-level await: `--bytecode` builds CommonJS.
 import { EXTRA_COMMANDS } from "./cli-extra.ts";
 

@@ -27,6 +27,7 @@ function fixture() {
 /** Creates each host's config directory, as installing the seven hosts would. */
 function installHosts(home) {
   for (const dir of [
+    ".claude",
     ".codex",
     ".cursor",
     ".grok",
@@ -160,17 +161,43 @@ test("registers only installed hosts", () => {
   const { home } = fixture();
   mkdirSync(join(home, ".codex"));
   const byClient = Object.fromEntries(configureSwarmailMcp(home).map((r) => [r.client, r.status]));
-  // Claude's config sits in the home directory itself, so it always counts as installed.
+  // Home always exists, so it does not make Claude count as installed.
   expect(byClient).toEqual({
     codex: "added",
-    claude: "added",
+    claude: "skipped-absent",
     cursor: "skipped-absent",
     grok: "skipped-absent",
     antigravity: "skipped-absent",
     devin: "skipped-absent",
     opencode: "skipped-absent",
   });
-  expect(readdirSync(home).sort()).toEqual([".claude.json", ".codex", ".local"]);
+  expect(readdirSync(home).sort()).toEqual([".codex", ".local"]);
+});
+
+test("registers Claude when its ~/.claude directory exists", () => {
+  const { home } = fixture();
+  mkdirSync(join(home, ".claude"));
+  const claude = configureSwarmailMcp(home).find((r) => r.client === "claude");
+  expect(claude.status).toBe("added");
+  expect(JSON.parse(readFileSync(join(home, ".claude.json"), "utf8")).mcpServers.swarmail).toEqual({
+    type: "http",
+    url: managedUrl,
+  });
+});
+
+test("the CLI prints usage for --help and refuses unknown arguments before writing", () => {
+  const { home } = fixture();
+  mkdirSync(join(home, ".claude"));
+  const script = Bun.fileURLToPath(new URL("../scripts/configure-mcp.ts", import.meta.url));
+  const run = (args) =>
+    Bun.spawnSync([process.execPath, script, ...args], { env: { ...process.env, HOME: home } });
+  const help = run(["--help"]);
+  expect(help.exitCode).toBe(0);
+  expect(help.stdout.toString()).toContain("Usage:");
+  const bad = run(["--hosts", "claude"]);
+  expect(bad.exitCode).toBe(64);
+  expect(bad.stderr.toString()).toStartWith("Usage:");
+  expect(existsSync(join(home, ".claude.json"))).toBe(false);
 });
 
 test("windows mode registers only installed hosts", () => {

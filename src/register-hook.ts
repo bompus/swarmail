@@ -14,6 +14,7 @@ import { callTool, swarmailUrl } from "./client.ts";
 import { hostProcess, sameHost } from "./proc.ts";
 import { registryDir, withLock, type RegisterState } from "./registry.ts";
 import { sessionMarker, sessionTag, withoutTag } from "./tag.ts";
+import { isT3V2, t3StatePath } from "./t3-state.ts";
 
 /** A hook payload. Each host sends its own shape, so every field is checked before use. */
 export interface HookInput {
@@ -167,11 +168,12 @@ export function rowForSession(rows: RosterRow[], sessionId: string | null): Rost
 
 /**
  * The T3 Code thread that runs provider session `sessionId`, or null outside T3. T3 passes no
- * thread id to the provider process, but its resume cursor for the thread holds the session id.
+ * thread id to the provider process, but V1's resume cursor for the thread and V2's native
+ * thread reference hold the session id.
  */
 export function t3ThreadId(
   sessionId: string,
-  dbPath = join(homedir(), ".t3", "userdata", "state.sqlite"),
+  dbPath = t3StatePath(join(homedir(), ".t3")),
 ): string | null {
   if (!existsSync(dbPath)) {
     return null;
@@ -179,11 +181,17 @@ export function t3ThreadId(
   try {
     const db = new Database(dbPath, { readonly: true });
     try {
-      const row = db
-        .query<{ thread_id: string }, [string]>(
-          "select thread_id from provider_session_runtime where instr(resume_cursor_json, ?) > 0 order by last_seen_at desc limit 1",
-        )
-        .get(JSON.stringify(sessionId));
+      const row = isT3V2(db)
+        ? db
+            .query<{ thread_id: string }, [string]>(
+              "select thread_id from orchestration_v2_projection_provider_threads where thread_id is not null and json_extract(payload_json, '$.nativeThreadRef.nativeId') = ? order by updated_at desc limit 1",
+            )
+            .get(sessionId)
+        : db
+            .query<{ thread_id: string }, [string]>(
+              "select thread_id from provider_session_runtime where instr(resume_cursor_json, ?) > 0 order by last_seen_at desc limit 1",
+            )
+            .get(JSON.stringify(sessionId));
       return row?.thread_id ?? null;
     } finally {
       db.close();

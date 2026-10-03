@@ -81,7 +81,7 @@ export function withClaudeHooks(
 /**
  * The OpenCode plugin: forwards edit-tool calls to `swarmail register` without waiting on it.
  * One default export serves both majors: OpenCode 2 calls `setup(ctx)`, OpenCode 1 (1.18.29+)
- * calls `server(input)`. T3 Code still drives OpenCode 1, which shares this plugin directory,
+ * calls `server(input)`. T3 Code V1 drives OpenCode 1, which shares this plugin directory,
  * and OpenCode 2 still discovers the singular `plugin/` directory.
  */
 export function openCodePlugin(bin: string): string {
@@ -193,10 +193,12 @@ if (import.meta.main) {
   if (process.platform !== "linux" || process.getuid?.() === 0) {
     throw new Error("Run as your normal Linux user.");
   }
-  // Any other argument, --help included, stops before a write.
+  // Any other argument stops before a write: --help prints usage, anything else is an error.
   const args = process.argv.slice(2);
   if (args.some((arg) => arg !== "--dry-run")) {
-    throw new Error("Usage: bun scripts/configure-hooks.ts [--dry-run]");
+    const help = args.some((arg) => arg === "--help" || arg === "-h");
+    (help ? console.log : console.error)("Usage: bun scripts/configure-hooks.ts [--dry-run]");
+    process.exit(help ? 0 : 64);
   }
   console.log(JSON.stringify(configureSwarmailHooks(homedir(), { dryRun: args.length > 0 })));
 }

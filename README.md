@@ -146,6 +146,10 @@ anywhere prints usage and runs nothing.
 | `SWARMAIL_GUARD` | `block` | `warn` only reports, `off` skips |
 | `SWARMAIL_AGENT` | from hook state | Name used by `inbox`, `send`, `ping`, `guard` and `who` |
 
+`scripts/enable.sh`, the service unit and `configure-mcp.ts` use port 18765.
+Change `SWARMAIL_PORT` and the two URL variables only when you run
+`swarmail serve` yourself, and set them for every host that runs the hooks.
+
 With `normal`, a power loss can lose the most recent writes. Retired agents
 come back on their next tool call.
 
