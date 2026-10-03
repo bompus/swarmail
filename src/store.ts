@@ -27,7 +27,7 @@ export function pageLimit(value: unknown, field: string, fallback: number): numb
   return Math.min(limit, 1000);
 }
 
-/** A JSON number above zero and at most `max` (named only when set), or `fallback` when absent; `integer` also requires a whole number. */
+/** A JSON number above zero and at most `max` (named when finite and set), or `fallback` when absent; `integer` also requires a whole number. */
 export function num(
   value: unknown,
   field: string,
@@ -38,7 +38,7 @@ export function num(
   if (typeof n !== "number" || !(n > 0 && n <= max) || (integer && !Number.isInteger(n))) {
     throw new ToolError(
       "INVALID_ARGUMENT",
-      `${field} must be a ${integer ? "whole number" : "number"} above 0${max < Number.MAX_SAFE_INTEGER ? ` and at most ${max}` : ""}`,
+      `${field} must be a ${integer ? "whole number" : "number"} above 0${Number.isFinite(max) && max !== Number.MAX_SAFE_INTEGER ? ` and at most ${max}` : ""}`,
       { field },
     );
   }
