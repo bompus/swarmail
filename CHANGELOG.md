@@ -2,6 +2,17 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- A tool call that fails partway writes nothing. A `macro_start_session`
+  whose reservation fails used to leave its project and agent behind.
+- `ttl_seconds`, `file_reservation_ttl_seconds` and `extend_seconds` must
+  be whole JSON numbers from 1 to 2592000 (30 days), and
+  `active_within_days` a number above 0. Anything else is an
+  `INVALID_ARGUMENT` error. A string TTL used to be accepted, a negative
+  one granted an already expired reservation, and a bad `active_within_days`
+  returned an empty list.
+
 ## 0.1.2 - 2026-10-03
 
 - A session keeps one name. `register_agent` or `macro_start_session`

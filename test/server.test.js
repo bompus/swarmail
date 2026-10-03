@@ -737,7 +737,7 @@ test("a call that fails partway writes nothing", async () => {
     call("register_agent", { project_key: key, program: "codex", model: "m", name: "not a name" }),
   ).rejects.toMatchObject({ type: "INVALID_AGENT_NAME" });
   expect(rows()).toEqual({ projects: 0, agents: 0 });
-  // The project and agent come before the reservation, whose NOT NULL expiry rejects a TTL of "soon".
+  // The project and agent come before the reservation, whose TTL check rejects "soon".
   await expect(
     call("macro_start_session", {
       human_key: key,
@@ -747,8 +747,51 @@ test("a call that fails partway writes nothing", async () => {
       file_reservation_paths: ["src/*"],
       file_reservation_ttl_seconds: "soon",
     }),
-  ).rejects.toMatchObject({ type: "INTERNAL" });
+  ).rejects.toMatchObject({
+    type: "INVALID_ARGUMENT",
+    data: { field: "file_reservation_ttl_seconds" },
+  });
   expect(rows()).toEqual({ projects: 0, agents: 0 });
+});
+
+test("a reservation time or activity window that is not a usable number is an argument error and writes nothing", async () => {
+  const key = "/w/bad-numbers";
+  await call("register_agent", {
+    project_key: key,
+    program: "codex",
+    model: "m",
+    name: "CoralRidge",
+  });
+  const as = { project_key: key, agent_name: "CoralRidge" };
+  await call("file_reservation_paths", { ...as, paths: ["a/*"], ttl_seconds: 30 * 86_400 });
+  const state = () => ({
+    reservations: db
+      .query("SELECT path_pattern, expires_ts FROM file_reservations ORDER BY id")
+      .all(),
+    agents: db.query("SELECT name, last_active_ts FROM agents ORDER BY id").all(),
+  });
+  const before = state();
+  const bad = ["30", 0, -60, 1.5, 30 * 86_400 + 1, 1e300, null];
+  for (const ttl_seconds of bad) {
+    await expect(
+      call("file_reservation_paths", { ...as, paths: ["b/*"], ttl_seconds }),
+    ).rejects.toMatchObject({ type: "INVALID_ARGUMENT", data: { field: "ttl_seconds" } });
+  }
+  for (const extend_seconds of bad) {
+    await expect(call("renew_file_reservations", { ...as, extend_seconds })).rejects.toMatchObject({
+      type: "INVALID_ARGUMENT",
+      data: { field: "extend_seconds" },
+    });
+  }
+  for (const active_within_days of ["1", 0, -1, null]) {
+    await expect(
+      call("list_agents", { project_key: key, active_within_days }),
+    ).rejects.toMatchObject({ type: "INVALID_ARGUMENT", data: { field: "active_within_days" } });
+  }
+  expect(state()).toEqual(before);
+  expect(
+    (await call("list_agents", { project_key: key, active_within_days: 0.5 })).map((a) => a.name),
+  ).toEqual(["CoralRidge"]);
 });
 
 test("a registration without a name keeps the name of the session or T3 thread its tag names", async () => {
