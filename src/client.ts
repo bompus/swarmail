@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
 
-/** Swarmail's MCP endpoint. Hooks run without the shell profile, so the default is the local server. */
-export const swarmailUrl = (env: NodeJS.ProcessEnv = process.env): string =>
-  env.SWARMAIL_URL || "http://127.0.0.1:18765/mcp/";
+import { swarmailUrl } from "./paths.ts";
+
+export { swarmailUrl };
 
 /**
  * Calls a Swarmail tool over MCP (stateless HTTP) and returns its parsed result; throws when the

@@ -6,6 +6,7 @@
 //   swarmail search <words...> [--limit N] [--cursor CURSOR] [--json | --json-page]  project mail matching every word, best match first
 //   swarmail thread <id> [--limit N] [--json]                   a thread's messages, oldest first; needs no sender name
 // The sender is --as, else SWARMAIL_AGENT, else the name the register hook recorded for the agent host above this shell.
+import { swarmailUrl } from "./paths.ts";
 import { primaryCheckout } from "./checkout.ts";
 import { selfNames } from "./registry.ts";
 import { PING_SUBJECT, PONG_SUBJECT } from "./wake.ts";
@@ -28,7 +29,7 @@ export async function call(
   args: Record<string, unknown>,
   signal?: AbortSignal,
 ): Promise<any> {
-  const url = env.SWARMAIL_URL || "http://127.0.0.1:18765/mcp/";
+  const url = swarmailUrl(env);
   let body: any;
   let status: number | undefined;
   try {

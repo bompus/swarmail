@@ -24,7 +24,7 @@ import {
 } from "../src/registry.ts";
 import { t3StatePath, t3ThreadId } from "../src/t3-state.ts";
 import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.js";
-import { sessionTag } from "../src/tag.ts";
+import { parseTag, sessionTag } from "../src/tag.ts";
 import { createServer } from "../src/server.ts";
 
 /** A stand-in Swarmail MCP endpoint: `handler(tool, args)` returns the tool result and every call is recorded. */
@@ -132,9 +132,13 @@ test("finds a hand-registered row by the session id in its tag", () => {
     },
     { name: "DarkDune", task_description: "[claude:a5ff cwd:~/w] TLA+ pilot" },
   ];
-  expect(rowForSession(rows, "a5ff")?.name).toBe("DarkDune");
-  expect(rowForSession(rows, "a5ff-46")?.name).toBe("WildDeer");
-  expect(rowForSession(rows, "zzzz")).toBeNull();
+  const find = (tag) => rowForSession(rows, parseTag(tag))?.name ?? null;
+  expect(find("[claude:a5ff cwd:~/w]")).toBe("DarkDune");
+  expect(find("[claude:a5ff-46 cwd:~/w]")).toBe("WildDeer");
+  expect(find("[claude:zzzz cwd:~/w]")).toBeNull();
+  // A new provider session in the same T3 thread keeps the thread's row; another thread with the same session does not.
+  expect(find("[t3:c86a claude:b6ee cwd:~/w]")).toBe("WildDeer");
+  expect(find("[t3:d97b claude:a5ff-46 cwd:~/w]")).toBeNull();
 });
 
 test("tags the registration with ADE and session ids and a home-relative cwd", () => {

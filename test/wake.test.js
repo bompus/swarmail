@@ -431,3 +431,11 @@ for (const [name, hook] of Object.entries(HOOKS)) {
     }, 20000);
   });
 }
+
+// Last: it leaves GreenCastle mail unread, which the tests above count.
+test("a wait by T3 thread id wakes the thread's agent", async () => {
+  await send("GreenCastle"); // tag t3:th-1
+  const res = await wait("th-1", 1);
+  expect(res.status).toBe(200);
+  expect(await res.text()).toContain("for GreenCastle");
+});

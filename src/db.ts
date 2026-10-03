@@ -1,6 +1,8 @@
 // Swarmail storage with microsecond timestamps, SQLite WAL and FTS5 search.
 import { Database } from "bun:sqlite";
+import { identity } from "./tag.ts";
 
+// The schema as first released. MIGRATIONS bring it, or an older database, up to date.
 const schema = `
 CREATE TABLE IF NOT EXISTS projects (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -80,6 +82,52 @@ CREATE TRIGGER IF NOT EXISTS messages_fts_insert AFTER INSERT ON messages BEGIN
 END;
 `;
 
+/**
+ * Schema changes after the first release, applied in order; PRAGMA user_version counts how many a database has.
+ * Append to this list and never edit a released entry.
+ */
+const MIGRATIONS: ((db: Database) => void)[] = [
+  // Session identity as columns, parsed once from the leading tag of task_description (tag.ts), so wake routing and
+  // re-registration look sessions up by index instead of scanning descriptions.
+  (db) => {
+    for (const column of ["host", "session_id", "t3_thread", "build", "cwd"]) {
+      db.run(`ALTER TABLE agents ADD COLUMN ${column} TEXT`);
+    }
+    const set = db.query<unknown, (string | number | null)[]>(
+      "UPDATE agents SET host = ?, session_id = ?, t3_thread = ?, build = ?, cwd = ? WHERE id = ?",
+    );
+    for (const row of db
+      .query<{ id: number; task_description: string }, []>(
+        "SELECT id, task_description FROM agents",
+      )
+      .all()) {
+      const id = identity(row.task_description);
+      set.run(id.host, id.session_id, id.t3_thread, id.build, id.cwd, row.id);
+    }
+    db.run("CREATE INDEX idx_agents_session ON agents(session_id) WHERE session_id IS NOT NULL");
+    db.run("CREATE INDEX idx_agents_t3_thread ON agents(t3_thread) WHERE t3_thread IS NOT NULL");
+  },
+];
+
+/**
+ * Applies the migrations `db` lacks in one transaction. A database a newer build migrated further is left alone, and
+ * an older build keeps working on a migrated one, since migrations only add columns and indexes.
+ */
+function migrate(db: Database): void {
+  db.transaction(() => {
+    const { user_version: done } = db
+      .query<{ user_version: number }, []>("PRAGMA user_version")
+      .get()!;
+    if (done >= MIGRATIONS.length) {
+      return;
+    }
+    for (const step of MIGRATIONS.slice(done)) {
+      step(db);
+    }
+    db.run(`PRAGMA user_version = ${MIGRATIONS.length}`);
+  }).immediate();
+}
+
 export function openDatabase(
   path: string,
   synchronous = process.env.SWARMAIL_SYNCHRONOUS || "normal",
@@ -95,6 +143,7 @@ export function openDatabase(
   db.run(`PRAGMA synchronous = ${synchronous.toUpperCase()}`);
   db.run("PRAGMA foreign_keys = ON");
   db.exec(schema);
+  migrate(db);
   return db;
 }
 

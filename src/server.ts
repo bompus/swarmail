@@ -1,9 +1,10 @@
 #!/usr/bin/env bun
 // Swarmail server: MCP over streamable HTTP (stateless JSON responses) on 127.0.0.1.
 //   bun server.ts                      serve (SWARMAIL_DB, SWARMAIL_PORT, SWARMAIL_SYNCHRONOUS, SWARMAIL_RETIRE_DAYS: 0 keeps idle agents and gone projects); GET /wait is the wake long poll (wake.ts)
+import { databasePath, DEFAULT_PORT } from "./paths.ts";
 import type { Database } from "bun:sqlite";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import { nowUs, openDatabase } from "./db.ts";
 import { buildSource } from "./build.ts";
@@ -227,12 +228,12 @@ export function main(args: string[]): void {
     throw new Error("usage: bun server.ts");
   }
   const env = (name: string) => process.env[`SWARMAIL_${name}`];
-  const databasePath = env("DB") ?? join(homedir(), ".local", "share", "swarmail", "mail.sqlite3");
-  const { server } = createServer(databasePath, Number(env("PORT") ?? 18765), {
+  const database = databasePath();
+  const { server } = createServer(database, Number(env("PORT") ?? DEFAULT_PORT), {
     retireIdleDays: Number(env("RETIRE_DAYS") ?? 7),
     registry: registryDir(),
   });
-  console.log(`swarmail listening on ${server.url} (${databasePath})`);
+  console.log(`swarmail listening on ${server.url} (${database})`);
 }
 
 if (import.meta.main) {

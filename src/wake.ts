@@ -1,6 +1,6 @@
 // Wake delivery: an idle session's hook long-polls GET /wait?session=<host session id> and gets a
-// one-line hint when unread mail arrives for any agent whose roster tag names that session
-// (`[t3:… claude:<session id> cwd:…]`, written by the register hook). The hint names recipients and
+// one-line hint when unread mail arrives for any agent whose roster tag names that session or T3 thread
+// (`[t3:… claude:<session id> cwd:…]`, written by the register hook and stored as columns by the store). The hint names recipients and
 // senders only, never a subject or body: hosts show it to the model as hook output. Recipients with
 // urgent or high mail come first, with that count, so the woken session reads those first.
 //
@@ -9,7 +9,6 @@
 // no one either. `swarmail ping` uses this to prove a session's wake path is alive.
 import type { Database } from "bun:sqlite";
 import { nowUs } from "./db.ts";
-import { sessionMarker } from "./tag.ts";
 
 export const SESSION_RE = /^[\w:-]+$/;
 export const PING_SUBJECT = "swarmail ping";
@@ -137,8 +136,9 @@ function wakeCursor(db: Database) {
 // Sends and registrations call notify(), so a waiter wakes as soon as its mail commits. The poll is only a fallback
 // for writes this process does not see, such as another server on the same database.
 export function createWaiters(db: Database, pollMs = 30_000) {
-  const tagged = db.query<{ id: number; task_description: string }, [string]>(
-    "SELECT id, task_description FROM agents WHERE retired_at IS NULL AND instr(task_description, ?) > 0",
+  // A waiter names its host session or its T3 thread (tag.ts); the identity columns hold both, indexed.
+  const tagged = db.query<{ id: number }, [string]>(
+    "SELECT id FROM agents WHERE retired_at IS NULL AND (session_id = ?1 OR t3_thread = ?1)",
   );
   const unread = db.query<Unread, [string, number]>(`
     SELECT m.id, s.name AS sender, s.id AS sender_id, a.name AS recipient, a.id AS recipient_id,
@@ -158,11 +158,7 @@ export function createWaiters(db: Database, pollMs = 30_000) {
   let scheduled = false;
 
   function pending(session: string): WakeOffer | null {
-    const marker = sessionMarker(session);
-    const ids = tagged
-      .all(`:${session}`)
-      .filter((a) => marker.test(a.task_description))
-      .map((a) => a.id);
+    const ids = tagged.all(session).map((a) => a.id);
     if (!ids.length) {
       return null;
     }

@@ -11,6 +11,7 @@
 // Without --all, rows with no live host process or running T3 Code thread and no activity in the last day are left out.
 // Names this session registered under (selfNames in registry.ts) are marked "(you)", and `self` in --json.
 
+import { databasePath } from "./paths.ts";
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -255,8 +256,7 @@ export function main(args: string[]): void {
   const json = args.includes("--json");
   const all = args.includes("--all");
   const target = args.find((arg) => !arg.startsWith("--")) ?? process.cwd();
-  const dbPath =
-    process.env.SWARMAIL_DB || join(homedir(), ".local", "share", "swarmail", "mail.sqlite3");
+  const dbPath = databasePath();
   const project = resolveProject(target, projectKeys(dbPath));
   const roster = callTool("list_agents", { project_key: project, limit: 1000 }) as RosterAgent[];
   const home = homedir();

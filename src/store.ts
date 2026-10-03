@@ -4,7 +4,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { primaryCheckout } from "./checkout.ts";
 import { overlaps } from "./glob.ts";
-import { leadingTag, parseTag, sameSession } from "./tag.ts";
+import { identity, leadingTag, parseTag, sameSessionRow, tagOf, type Identity } from "./tag.ts";
 import { InvalidTimestamp, iso, nowUs, parseIso } from "./db.ts";
 
 /** A tool failure reported to the caller as `{"error": {type, message, recoverable, data}}`. */
@@ -57,7 +57,7 @@ export interface Project {
   human_key: string;
   created_at: number;
 }
-export interface Agent {
+export interface Agent extends Identity {
   id: number;
   project_id: number;
   name: string;
@@ -262,8 +262,8 @@ const queries = (db: Database) => ({
     "SELECT * FROM agents WHERE project_id = ? AND name = ? COLLATE NOCASE",
   ),
   agentById: db.query<Agent, [number]>("SELECT * FROM agents WHERE id = ?"),
-  liveAgentsMentioning: db.query<Agent, [number, string]>(
-    "SELECT * FROM agents WHERE project_id = ? AND retired_at IS NULL AND instr(task_description, ?) > 0 ORDER BY last_active_ts DESC, id DESC",
+  liveAgentsInSession: db.query<Agent, [number, string | null, string | null]>(
+    "SELECT * FROM agents WHERE project_id = ?1 AND retired_at IS NULL AND (t3_thread = ?2 OR session_id = ?3) ORDER BY last_active_ts DESC, id DESC",
   ),
   agentNames: db.query<{ name: string }, [number]>(
     "SELECT name FROM agents WHERE project_id = ? AND retired_at IS NULL ORDER BY last_active_ts DESC, id DESC",
@@ -435,17 +435,11 @@ export class MailStore {
    */
   private agentForTag(projectId: number, task: unknown): Agent | null {
     const tag = parseTag(leadingTag(String(task ?? "")));
-    for (const key of [tag?.t3, tag?.sessionId]) {
-      const hit = key
-        ? this.q.liveAgentsMentioning
-            .all(projectId, `:${key}`)
-            .find((agent) => sameSession(parseTag(agent.task_description), tag))
-        : undefined;
-      if (hit) {
-        return hit;
-      }
+    if (!tag?.t3 && !tag?.sessionId) {
+      return null;
     }
-    return null;
+    const rows = this.q.liveAgentsInSession.all(projectId, tag.t3, tag.sessionId);
+    return sameSessionRow(rows, tag, tagOf);
   }
 
   register(p: Project, a: Args): Agent {
@@ -469,26 +463,46 @@ export class MailStore {
       const tag = leadingTag(existing.task_description);
       const task = String(a.task_description ?? "");
       const description = tag && !leadingTag(task) ? `${tag} ${task}`.trim() : task;
+      const id = identity(description);
       this.db.run(
-        `UPDATE agents SET program = ?, model = ?, task_description = ?, last_active_ts = ?, retired_at = NULL
-        WHERE id = ?`,
-        [str(a.program, "program"), str(a.model, "model"), description, now, existing.id],
+        `UPDATE agents SET program = ?, model = ?, task_description = ?, last_active_ts = ?, retired_at = NULL,
+        host = ?, session_id = ?, t3_thread = ?, build = ?, cwd = ? WHERE id = ?`,
+        [
+          str(a.program, "program"),
+          str(a.model, "model"),
+          description,
+          now,
+          id.host,
+          id.session_id,
+          id.t3_thread,
+          id.build,
+          id.cwd,
+          existing.id,
+        ],
       );
       return this.q.agentById.get(existing.id)!;
     }
+    const description = String(a.task_description ?? "");
+    const id = identity(description);
     return this.db
-      .query<Agent, [number, string, string, string, string, number, number]>(
-        `INSERT INTO agents (project_id, name, program, model, task_description, inception_ts, last_active_ts)
-       VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+      .query<Agent, (string | number | null)[]>(
+        `INSERT INTO agents (project_id, name, program, model, task_description, inception_ts, last_active_ts,
+         host, session_id, t3_thread, build, cwd)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       )
       .get(
         p.id,
         name ?? this.uniqueName(p.id),
         str(a.program, "program"),
         str(a.model, "model"),
-        a.task_description ?? "",
+        description,
         now,
         now,
+        id.host,
+        id.session_id,
+        id.t3_thread,
+        id.build,
+        id.cwd,
       )!;
   }
 

@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { swarmailUrl } from "../src/paths.ts";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { object, present, readConfig } from "./lib/config-files.ts";
@@ -17,7 +18,7 @@ import {
 
 // The server's own name; tools appear to agents as `mcp__swarmail__<tool>` and the like.
 const serverName = "swarmail";
-const managedUrl = "http://127.0.0.1:18765/mcp/";
+const managedUrl = swarmailUrl({});
 // Replaces a `[mcp_servers.<name>]` table in place; appending would produce a
 // duplicate table header, which is invalid TOML.
 function replaceTomlSection(
