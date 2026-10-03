@@ -9,7 +9,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - `ttl_seconds`, `file_reservation_ttl_seconds` and `extend_seconds` must
   be whole JSON numbers from 1 to 2592000 (30 days), and
   `active_within_days` a number above 0. Anything else is an
-  `INVALID_ARGUMENT` error. A string TTL used to be accepted, a negative
+  `INVALID_ARGUMENT` error, even from a `macro_start_session` that reserves
+  no paths. A string TTL used to be accepted, a negative
   one granted an already expired reservation, and a bad `active_within_days`
   returned an empty list.
 

@@ -752,6 +752,20 @@ test("a call that fails partway writes nothing", async () => {
     data: { field: "file_reservation_ttl_seconds" },
   });
   expect(rows()).toEqual({ projects: 0, agents: 0 });
+  // Without paths nothing is reserved, but the TTL is still checked.
+  await expect(
+    call("macro_start_session", {
+      human_key: key,
+      program: "codex",
+      model: "m",
+      agent_name: "AmberFinch",
+      file_reservation_ttl_seconds: "soon",
+    }),
+  ).rejects.toMatchObject({
+    type: "INVALID_ARGUMENT",
+    data: { field: "file_reservation_ttl_seconds" },
+  });
+  expect(rows()).toEqual({ projects: 0, agents: 0 });
 });
 
 test("a reservation time or activity window that is not a usable number is an argument error and writes nothing", async () => {

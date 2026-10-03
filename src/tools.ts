@@ -183,6 +183,11 @@ export const TOOLS: Tool[] = [
     wakes: true,
     run: (s, a) => {
       const limit = pageLimit(a.inbox_limit, "inbox_limit", 10);
+      const ttl = reservationSeconds(
+        a.file_reservation_ttl_seconds,
+        "file_reservation_ttl_seconds",
+        3600,
+      );
       const p = s.ensureProject(a.human_key);
       const who = s.register(p, { ...a, name: a.agent_name });
       const reservations = list(a.file_reservation_paths).length
@@ -192,7 +197,7 @@ export const TOOLS: Tool[] = [
             {
               paths: a.file_reservation_paths,
               reason: a.file_reservation_reason,
-              ttl_seconds: a.file_reservation_ttl_seconds,
+              ttl_seconds: ttl,
             },
             "file_reservation_ttl_seconds",
           )
