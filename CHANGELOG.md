@@ -4,6 +4,16 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Claude Code sessions now wake through the Swarmail mod, a Claude Code
+  plugin. `bun scripts/configure-hooks.ts` copies it to
+  `~/.local/share/swarmail/claude-plugin` and adds that directory to
+  `env.CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json`, keeping
+  directories already listed there. The mod waits for mail for as long as
+  the session runs, with no hook process beside it (about 38 MB each).
+  Mail during a turn arrives with the next tool result. The wake hooks
+  stand down in a session that runs the mod. Cursor, and a Claude Code
+  without mods, keep the hooks. With `--no-claude-mod`, new sessions go
+  back to the hooks. Tested with Claude Code 2.1.288.
 - An idle Claude Code session now wakes on new mail for about 23 days
   after its last turn, up from 8 hours. Claude Code cancels the wake hook
   at its settings timeout, so rerun `bun scripts/configure-hooks.ts` to

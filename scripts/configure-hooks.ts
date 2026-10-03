@@ -1,11 +1,14 @@
 #!/usr/bin/env bun
 // Installs the Swarmail hooks (`swarmail register`, `swarmail hook wake`) for every host: Claude settings, which Cursor, Devin and Grok also load; Cursor's own hooks.json for its
 // wake hook; Codex (~/.codex/hooks.json), OpenCode (a plugin) and Antigravity
-// (~/.gemini/config/hooks.json). Linux home only. A host whose directory doesn't exist is
+// (~/.gemini/config/hooks.json). Claude Code also gets the Swarmail mod, its wake without a waiting hook process,
+// unless --no-claude-mod. Linux home only. A host whose directory doesn't exist is
 // skipped, so a host that isn't installed gets no config directory.
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import {
+  object,
   planJson,
   present,
   readConfig,
@@ -28,12 +31,56 @@ export function swarmailHookPaths(home: string) {
     // (measured 2026-09-28), for one code path on every host.
     wake: (host: string) => `"${bin}" hook wake ${host}`,
     // PostToolUse runs after every tool call, so the shell skips the binary unless this is a registered session
-    // with no live waiter: one that already delivered its hint this turn, or a first turn before any Stop.
+    // with no live waiter (one that already delivered its hint this turn, or a first turn before any Stop) and no
+    // Swarmail mod doing the waiting.
     rearm:
+      '[ "$SWARMAIL_WAKE_MOD" = 1 ] && exit 0; ' +
       's="${XDG_STATE_HOME:-$HOME/.local/state}"; i="$CLAUDE_CODE_SESSION_ID"; ' +
       '[ -n "$i" ] && [ -f "$s/swarmail-register/$i.json" ] || exit 0; ' +
       '{ read -r p < "$s/swarmail-wake/$i"; } 2>/dev/null && kill -0 "$p" 2>/dev/null && exit 0; ' +
       `exec "${bin}" hook wake claude`,
+  };
+}
+
+/** The plugin directory that holds the Swarmail mod, and its files. */
+export function claudeModPlugin(home: string) {
+  const dir = join(home, ".local", "share", "swarmail", "claude-plugin");
+  const source = readFileSync(new URL("../src/claude-wake-mod.js", import.meta.url), "utf8");
+  const json = (value: object) => JSON.stringify(value, null, 2) + "\n";
+  return {
+    dir,
+    files: {
+      [join(dir, ".claude-plugin", "plugin.json")]: json({
+        name: "swarmail-wake",
+        description: "Wakes this Claude Code session when Swarmail mail arrives",
+      }),
+      [join(dir, "hooks", "hooks.json")]: json({ modules: ["./register.js"] }),
+      [join(dir, "hooks", "register.js")]:
+        "// Installed by the Swarmail hooks installer from claude-wake-mod.js; edits here are overwritten.\n" +
+        source,
+    },
+  };
+}
+
+/**
+ * Claude settings' env.CLAUDE_CODE_PLUGIN_DIRS, ":"-separated, with `dir` added (or removed when `add` is false)
+ * and the user's own directories kept. Claude Code loads each listed directory as `--plugin-dir` would.
+ */
+export function withPluginDir(settings: Record<string, unknown>, dir: string, add: boolean) {
+  const env = settings.env === undefined ? {} : object(settings.env, "env");
+  const { CLAUDE_CODE_PLUGIN_DIRS: listed, ...rest } = env;
+  const dirs = String(listed ?? "")
+    .split(":")
+    .filter((entry) => entry && entry !== dir);
+  if (add) {
+    dirs.push(dir);
+  }
+  if (!dirs.length && settings.env === undefined) {
+    return settings;
+  }
+  return {
+    ...settings,
+    env: dirs.length ? { ...rest, CLAUDE_CODE_PLUGIN_DIRS: dirs.join(":") } : rest,
   };
 }
 
@@ -121,18 +168,30 @@ export default {
 `;
 }
 
-export function configureSwarmailHooks(home: string = homedir(), { dryRun = false } = {}) {
+export function configureSwarmailHooks(
+  home: string = homedir(),
+  { dryRun = false, claudeMod = true } = {},
+) {
   home = resolve(home);
   const { bin, command, wake, rearm } = swarmailHookPaths(home);
+  const mod = claudeModPlugin(home);
+  // Only Claude Code loads the mod; Cursor, Devin and Grok keep the wake hooks.
+  const withMod = claudeMod && !!present(join(home, ".claude"));
   const hookEntry = { type: "command", command, timeout: 15 };
   // Each plan lists the home directories that mean its host is installed.
   const plans: { path: string; original: string; next: string; hosts: string[] }[] = [
     {
       ...planJson(join(home, ".claude", "settings.json"), home, (config) =>
-        withClaudeHooks(config, command, wake("claude"), rearm),
+        withPluginDir(withClaudeHooks(config, command, wake("claude"), rearm), mod.dir, withMod),
       ),
       hosts: [".claude", ".cursor", ".grok", ".config/devin"],
     },
+    ...(withMod ? Object.entries(mod.files) : []).map(([path, next]) => ({
+      path,
+      original: readConfig(path, home),
+      next,
+      hosts: [".claude"],
+    })),
     // Cursor runs the Claude Stop hook too, where the script exits at once (no CLAUDE_PID ancestor).
     // Its own stop hook holds the idle turn open, and a followup_message starts the next one. Cursor
     // stops auto-continuing after 5 follow-ups with no user prompt (loop_limit), which also ends a
@@ -200,10 +259,19 @@ if (import.meta.main) {
   }
   // Any other argument stops before a write: --help prints usage, anything else is an error.
   const args = process.argv.slice(2);
-  if (args.some((arg) => arg !== "--dry-run")) {
+  if (args.some((arg) => arg !== "--dry-run" && arg !== "--no-claude-mod")) {
     const help = args.some((arg) => arg === "--help" || arg === "-h");
-    (help ? console.log : console.error)("Usage: bun scripts/configure-hooks.ts [--dry-run]");
+    (help ? console.log : console.error)(
+      "Usage: bun scripts/configure-hooks.ts [--dry-run] [--no-claude-mod]",
+    );
     process.exit(help ? 0 : 64);
   }
-  console.log(JSON.stringify(configureSwarmailHooks(homedir(), { dryRun: args.length > 0 })));
+  console.log(
+    JSON.stringify(
+      configureSwarmailHooks(homedir(), {
+        dryRun: args.includes("--dry-run"),
+        claudeMod: !args.includes("--no-claude-mod"),
+      }),
+    ),
+  );
 }

@@ -261,13 +261,14 @@ for (const [name, hook] of Object.entries(HOOKS)) {
         { cmd: underClaude("--resume", "s-1", "/h/.grok/sessions/s-1.jsonl") }, // Grok or Devin started by Claude
         { cmd: [...hook, "claude", "5"], CLAUDE_PID: "", session: "s-1" }, // Devin or Cursor running ~/.claude/settings.json hooks
         { cmd: [...hook, "claude", "5"], CLAUDE_PID: String(unrelated.pid), session: "s-1" }, // ... started from a Claude session
+        { cmd: underClaude("--resume", "s-1"), extra: { SWARMAIL_WAKE_MOD: "1" } }, // the Swarmail mod waits instead
       ];
       try {
-        for (const { cmd, CLAUDE_PID, session } of cases) {
+        for (const { cmd, CLAUDE_PID, session, extra } of cases) {
           const started = Date.now();
           const run = Bun.spawn(cmd, {
             stdin: session ? new Blob([input(session)]) : "ignore",
-            env: CLAUDE_PID === undefined ? env : { ...env, CLAUDE_PID },
+            env: { ...env, ...(CLAUDE_PID !== undefined && { CLAUDE_PID }), ...extra },
           });
           expect(await run.exited).toBe(0);
           expect(Date.now() - started).toBeLessThan(2000);

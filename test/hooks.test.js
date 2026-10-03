@@ -11,9 +11,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  claudeModPlugin,
   configureSwarmailHooks,
   openCodePlugin,
   swarmailHookPaths,
+  withPluginDir,
 } from "../scripts/configure-hooks.ts";
 
 const homes = [];
@@ -145,7 +147,7 @@ test("the PostToolUse re-arm starts a wait only for a registered session with no
   mkdirSync(join(dir, ".local/bin"), { recursive: true });
   // Stands in for the binary: records that the shell got past its checks.
   writeFileSync(bin, `#!/bin/sh\necho "$@" > "${dir}/ran"\n`, { mode: 0o755 });
-  const run = (session) => {
+  const run = (session, extra = {}) => {
     rmSync(join(dir, "ran"), { force: true });
     const res = Bun.spawnSync(["sh", "-c", rearm], {
       env: {
@@ -153,6 +155,7 @@ test("the PostToolUse re-arm starts a wait only for a registered session with no
         HOME: dir,
         XDG_STATE_HOME: state,
         CLAUDE_CODE_SESSION_ID: session,
+        ...extra,
       },
     });
     expect(res.exitCode).toBe(0);
@@ -164,12 +167,55 @@ test("the PostToolUse re-arm starts a wait only for a registered session with no
   expect(run("")).toBe(false); // no session id
   expect(run("s-1")).toBe(true); // registered, no waiter yet
   expect(readFileSync(join(dir, "ran"), "utf8").trim()).toBe("hook wake claude");
+  expect(run("s-1", { SWARMAIL_WAKE_MOD: "1" })).toBe(false); // the Swarmail mod waits instead
   mkdirSync(join(state, "swarmail-wake"));
   writeFileSync(join(state, "swarmail-wake/s-1"), `${process.pid}\n`);
   expect(run("s-1")).toBe(false); // a live waiter
   const gone = Bun.spawnSync(["sh", "-c", "echo $$"]).stdout.toString().trim();
   writeFileSync(join(state, "swarmail-wake/s-1"), `${gone}\n`);
   expect(run("s-1")).toBe(true); // its waiter exited without cleaning up
+});
+
+test("installs the Swarmail mod for Claude Code beside the user's plugin directories, and --no-claude-mod removes it", () => {
+  const dir = home();
+  const path = join(dir, ".claude", "settings.json");
+  mkdirSync(join(dir, ".claude"));
+  writeFileSync(path, JSON.stringify({ env: { CLAUDE_CODE_PLUGIN_DIRS: "/opt/mine", FOO: "1" } }));
+  const { dir: plugin, files } = claudeModPlugin(dir);
+
+  configureSwarmailHooks(dir);
+  configureSwarmailHooks(dir);
+  expect(JSON.parse(readFileSync(path, "utf8")).env).toEqual({
+    CLAUDE_CODE_PLUGIN_DIRS: `/opt/mine:${plugin}`,
+    FOO: "1",
+  });
+  for (const [file, text] of Object.entries(files)) {
+    expect(readFileSync(file, "utf8")).toBe(text);
+  }
+  expect(JSON.parse(readFileSync(join(plugin, "hooks/hooks.json"), "utf8"))).toEqual({
+    modules: ["./register.js"],
+  });
+  expect(readFileSync(join(plugin, "hooks/register.js"), "utf8")).toContain(
+    readFileSync(new URL("../src/claude-wake-mod.js", import.meta.url), "utf8"),
+  );
+  expect(configureSwarmailHooks(dir).changed).toEqual([]);
+
+  configureSwarmailHooks(dir, { claudeMod: false });
+  expect(JSON.parse(readFileSync(path, "utf8")).env).toEqual({
+    CLAUDE_CODE_PLUGIN_DIRS: "/opt/mine",
+    FOO: "1",
+  });
+});
+
+test("withPluginDir adds and removes only its own directory", () => {
+  expect(withPluginDir({}, "/p", true)).toEqual({ env: { CLAUDE_CODE_PLUGIN_DIRS: "/p" } });
+  expect(withPluginDir({}, "/p", false)).toEqual({});
+  expect(withPluginDir({ env: { CLAUDE_CODE_PLUGIN_DIRS: "/p" } }, "/p", false)).toEqual({
+    env: {},
+  });
+  expect(withPluginDir({ env: { CLAUDE_CODE_PLUGIN_DIRS: "/a:/p::/b" } }, "/p", true)).toEqual({
+    env: { CLAUDE_CODE_PLUGIN_DIRS: "/a:/b:/p" },
+  });
 });
 
 test("adds the Cursor wake hook beside existing stop hooks", () => {

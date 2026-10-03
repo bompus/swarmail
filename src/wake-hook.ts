@@ -4,6 +4,7 @@
 //     PostToolUse re-arms the wait mid-turn after a hint used it up; exit 2 there queues the hint into the running turn.
 //     While it waits, $XDG_STATE_HOME/swarmail-wake/<session> holds its PID, so the PostToolUse command can skip
 //     starting a second waiter from the shell.
+//     A session that runs the Swarmail mod (claude-wake-mod.js) has SWARMAIL_WAKE_MOD=1, and the hook exits at once.
 //   cursor: stop hook in hooks.json; a {"followup_message": ...} reply starts a turn, {} otherwise.
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -78,10 +79,11 @@ function claudeAgent(
   env: NodeJS.ProcessEnv,
   read: ReturnType<typeof processReader>,
 ): number | null {
-  // Wait only in a registered Claude session that is not `-p` and is this hook's
+  // Wait only in a registered Claude session that is not `-p`, has no Swarmail mod waiting, and is this hook's
   // ancestor, since Devin, Grok and Cursor also run Claude's hooks and can inherit CLAUDE_PID.
   const claude = Number(env.CLAUDE_PID);
   if (
+    env.SWARMAIL_WAKE_MOD === "1" ||
     !claude ||
     !sid ||
     !/[\\/]\.claude[\\/]projects[\\/]/.test(String(payload.transcript_path ?? ""))
