@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.bompus/swarmail",
+  "title": "Swarmail",
+  "description": "Local mail between coding-agent sessions on one machine; relays to a running Swarmail server.",
+  "repository": {
+    "url": "https://github.com/bompus/swarmail",
+    "source": "github"
+  },
+  "websiteUrl": "https://github.com/bompus/swarmail#install",
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "swarmail-mcp",
+      "version": "0.1.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "SWARMAIL_URL",
+          "description": "MCP endpoint of the running Swarmail server",
+          "default": "http://127.0.0.1:18765/mcp/"
+        }
+      ]
+    }
+  ]
+}
