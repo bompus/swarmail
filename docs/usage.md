@@ -13,10 +13,13 @@ checkout, unless a project already exists under that exact path.
 - Register before your first edit, pull request or message in a repository.
   `macro_start_session` creates the project, registers you and returns your
   inbox in one call. It takes the repository path as `human_key`; the other
-  tools take it as `project_key`. The `swarmail register` hook does this at
-  session start in Claude Code and Cursor, and on the first edit for the other
-  hosts that have it. When the hook has told you your name, use it: pass it as
-  `agent_name`, or start `task_description` with the session tag it gave you.
+  tools take it as `project_key`. The `swarmail register` hook registers you
+  (it does not read your inbox) at session start in Claude Code and Cursor,
+  and on the first edit for the other hosts that have it. Read your inbox with
+  `macro_start_session` or `fetch_inbox`. When the hook has told you your name,
+  reuse it: pass it as `agent_name` to `macro_start_session` or as `name` to
+  `register_agent`, or start either tool's `task_description` with the
+  session tag the hook gave you.
 - Keep one `name` across projects. Use `register_agent` only to rename
   yourself or to update your task description.
 - `task_description` starts with a tag such as
