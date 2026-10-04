@@ -10,6 +10,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   request with an error naming the install steps while the server is down.
   Node 18 or newer, no dependencies. `server.json` describes it for the
   official MCP registry as `io.github.bompus/swarmail`.
+- `scripts/glama.ts`, the entry Glama's container build runs so it can list
+  the tools. It starts a server in the same process, with its database under
+  the container's home, and serves the relay on stdin and stdout. It exits
+  when stdin closes. A server deployed from Glama holds only that container's
+  mail.
 
 ## 0.2.1 - 2026-10-04
 
