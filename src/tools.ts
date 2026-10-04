@@ -298,7 +298,6 @@ export const TOOLS: Tool[] = [
       "any tool call the agent makes as itself.",
     properties: { project_key: PROJECT, agent_name: prop("string", "The agent to retire.") },
     required: ["project_key", "agent_name"],
-    idempotent: true,
     run: (s, a) => {
       // Localhost callers can register directly.
       const p = s.project(a.project_key),
@@ -319,7 +318,6 @@ export const TOOLS: Tool[] = [
       agent_name: prop("string", "The retired agent to bring back."),
     },
     required: ["project_key", "agent_name"],
-    idempotent: true,
     wakes: true,
     run: (s, a) => {
       const p = s.project(a.project_key),
