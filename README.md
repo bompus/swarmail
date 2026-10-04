@@ -280,55 +280,84 @@ wake an idle session.
 Measured on one machine with one small workload (40 agents, 250 seed messages,
 1,560 messages by the end), each server started on empty storage. Startup is
 hyperfine's mean of 20 runs; every other number is the median of three rounds,
-with latency from Tinybench and requests per second from oha. The multipliers
-are computed from those values. [docs/benchmarks.md](docs/benchmarks.md) has
+with latency from Tinybench and requests per second from oha. [docs/benchmarks.md](docs/benchmarks.md) has
 the method, a sixth server, each tool's raw output and a feature comparison
 with seven other local agent-mail servers.
 
 <a href="docs/assets/benchmark-light.png"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-dark.png">
-  <img src="docs/assets/benchmark-light.png" alt="Bar charts comparing Swarmail with mcp_agent_mail_rust, mcp_agent_mail, agentbus and Project Relay. Send p50: 0.46 ms, 39 ms, 70 ms, 2.3 ms and 2.5 ms. Search p50: 0.65 ms, 56 ms and 12 ms; agentbus and Project Relay have no search tool. Startup: 38 ms, 1.5 s, 0.86 s, 408 ms and 123 ms. Idle memory: 32 MiB, 190 MiB, 154 MiB, 81 MiB and 121 MiB." width="100%">
+  <img src="docs/assets/benchmark-light.png" alt="Bar charts sorted from best to worst for each metric. Send p50: Swarmail 0.46 ms, agentbus 2.3 ms, Project Relay 2.5 ms, Rust Agent Mail 39 ms, Python Agent Mail 70 ms. Search p50: Swarmail 0.65 ms, Python Agent Mail 12 ms, Rust Agent Mail 56 ms; agentbus and Project Relay have no search tool. Startup: Swarmail 38 ms, Project Relay 123 ms, agentbus 408 ms, Python Agent Mail 0.86 s, Rust Agent Mail 1.5 s. Idle memory: Swarmail 32 MiB, agentbus 81 MiB, Project Relay 121 MiB, Python Agent Mail 154 MiB, Rust Agent Mail 190 MiB." width="100%">
 </picture></a>
 
-| | Swarmail | mcp_agent_mail_rust | mcp_agent_mail | agentbus | Project Relay |
-| --- | --- | --- | --- | --- | --- |
-| **Latency, p50** | | | | | |
-| Send | 0.46 ms | 39 ms (84×) | 70 ms (154×) | 2.3 ms (5.1×) | 2.5 ms (5.5×) |
-| Fetch inbox | 0.50 ms | 12 ms (25×) | 23 ms (45×) | 1.1 ms (2.2×) | 1.4 ms (2.9×) |
-| Search | 0.65 ms | 56 ms (87×) | 12 ms (18×) | no search tool | no search tool |
-| **Throughput, 8 clients** | | | | | |
-| Send | 5,500 req/s | 50 req/s (109×) | 9.7 req/s (563×) | 876 req/s (6.2×) | 482 req/s (11×) |
-| Fetch inbox | 6,300 req/s | 416 req/s (15×) | 27 req/s (235×) | 1,600 req/s (4.0×) | 1,100 req/s (5.9×) |
-| Search | 4,300 req/s | 90 req/s (48×) | 44 req/s (97×) | no search tool | no search tool |
-| **Footprint** | | | | | |
-| Startup | 38 ms | 1.5 s (41×) | 0.86 s (23×) | 408 ms (11×) | 123 ms (3.3×) |
-| Memory, idle | 32 MiB | 190 MiB (5.9×) | 154 MiB (4.8×) | 81 MiB (2.5×) | 121 MiB (3.8×) |
-| Memory, peak under load | 67 MiB | 688 MiB (10×) | 258 MiB (3.9×) | 96 MiB (1.4×) | 296 MiB (4.5×) |
-| CPU, idle | 0.07% of a core | 0.15% of a core | 0.13% of a core | 0.13% of a core | under 0.02% of a core |
-| CPU time, timed calls* | 1.0 s | 183 s (183×) | 263 s (263×) | 2.6 s (2.6×) | 4.6 s (4.6×) |
-| Load 250 messages | 168 ms | 9.5 s (57×) | 17.7 s (106×) | 618 ms (3.7×) | 797 ms (4.8×) |
+Each chart is sorted from lowest to highest. The tables below put servers in
+rows and units in headings. Rust Agent Mail and Python Agent Mail are
+`mcp_agent_mail_rust` and `mcp_agent_mail`.
 
-\* 5,240 calls on the servers with search and 3,930 on agentbus and Project
-Relay, so their CPU multipliers compare fewer calls with Swarmail's 5,240.
+### Latency
 
-Startup as hyperfine reports it. Each run starts the server, waits for its
-health check, then kills it; `wrapper only` is the harness without a server,
-and hyperfine's `Relative` column compares against that row:
+Median latency in milliseconds; lower is better. Rows are sorted by send
+latency. Search has a different ranking. A dash means no search tool.
 
-| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
-|:---|---:|---:|---:|---:|
-| `wrapper only` | 7.2 ± 0.6 | 6.6 | 8.5 | 1.00 |
-| `Swarmail` | 37.7 ± 0.7 | 37.1 | 39.3 | 5.27 ± 0.43 |
-| `mcp_agent_mail_rust` | 1530.3 ± 14.9 | 1509.6 | 1562.8 | 213.82 ± 17.27 |
-| `mcp_agent_mail` | 857.7 ± 38.7 | 803.5 | 925.7 | 119.84 ± 11.03 |
-| `agent-inbox` | 263.0 ± 11.4 | 252.0 | 297.9 | 36.75 ± 3.35 |
-| `agentbus` | 408.2 ± 15.6 | 385.1 | 443.3 | 57.03 ± 5.06 |
-| `Project Relay` | 122.9 ± 5.3 | 113.8 | 132.7 | 17.17 ± 1.56 |
+| Server | Send ↓ | Inbox ↓ | Search ↓ |
+| :--- | ---: | ---: | ---: |
+| **Swarmail** | **0.46** | **0.50** | **0.65** |
+| agentbus | 2.3 | 1.1 | — |
+| Project Relay | 2.5 | 1.4 | — |
+| Rust Agent Mail | 39 | 12 | 56 |
+| Python Agent Mail | 70 | 23 | 12 |
 
-hyperfine timed all six servers, so agent-inbox appears here but not in the
-table above. Its inbox pages hold 50 messages instead of 20, its roster is
-global and its search matches substrings, so its fetch, list and search do
-different work. [docs/benchmarks.md](docs/benchmarks.md) has its full column.
+### Throughput
+
+Requests per second with eight clients; higher is better. Rows are sorted by
+send throughput. Search has a different ranking.
+
+| Server | Send ↑ | Inbox ↑ | Search ↑ |
+| :--- | ---: | ---: | ---: |
+| **Swarmail** | **5,500** | **6,300** | **4,300** |
+| agentbus | 876 | 1,600 | — |
+| Project Relay | 482 | 1,100 | — |
+| Rust Agent Mail | 50 | 416 | 90 |
+| Python Agent Mail | 9.7 | 27 | 44 |
+
+### Memory
+
+Resident memory in MiB; lower is better. Rows are sorted by idle memory.
+Peak memory has a different ranking.
+
+| Server | Idle ↓ | Peak under load ↓ |
+| :--- | ---: | ---: |
+| **Swarmail** | **32** | **67** |
+| agentbus | 81 | 96 |
+| Project Relay | 121 | 296 |
+| Python Agent Mail | 154 | 258 |
+| Rust Agent Mail | 190 | 688 |
+
+CPU usage, seed-loading times and the full ratios are in the
+[detailed results](docs/benchmarks.md#summary).
+
+### Startup
+
+Mean startup time in milliseconds across 20 hyperfine runs; lower is better.
+Rows are sorted by mean time. Each run starts the server, waits for its health
+check, then stops it.
+
+| Server | Mean ± SD ↓ | Min | Max |
+| :--- | ---: | ---: | ---: |
+| **Swarmail** | **37.7 ± 0.7** | **37.1** | **39.3** |
+| Project Relay | 122.9 ± 5.3 | 113.8 | 132.7 |
+| agent-inbox* | 263.0 ± 11.4 | 252.0 | 297.9 |
+| agentbus | 408.2 ± 15.6 | 385.1 | 443.3 |
+| Python Agent Mail | 857.7 ± 38.7 | 803.5 | 925.7 |
+| Rust Agent Mail | 1530.3 ± 14.9 | 1509.6 | 1562.8 |
+
+The harness without a server takes 7.2 ± 0.6 ms (min 6.6, max 8.5).
+Hyperfine's raw `Relative` column compares against that harness, not Swarmail;
+see the [startup output](docs/benchmarks.md#startup-hyperfine).
+
+\* agent-inbox appears only in startup here. Its inbox pages hold 50 messages
+instead of 20, its roster is global and its search matches substrings, so its
+fetch, list and search do different work. The
+[detailed comparison](docs/benchmarks.md) has its full column.
 
 mcp_agent_mail commits each send to a Git archive before it returns, so these
 numbers don't compare durability. Requests per second varied by up to 29%
