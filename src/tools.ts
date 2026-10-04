@@ -148,7 +148,8 @@ export const TOOLS: Tool[] = [
       "Register or update an agent identity in a project. Omit name to get a generated " +
       "adjective+noun name, unless task_description starts with a session tag a live agent " +
       "already has; then that agent is updated. Re-registering an existing name updates its " +
-      "program, model and task.",
+      "program, model and task. If the register hook already told you your name, pass it as " +
+      "name, or start task_description with the session tag it gave you.",
     properties: {
       project_key: PROJECT,
       program: prop("string"),
@@ -164,7 +165,9 @@ export const TOOLS: Tool[] = [
     name: "macro_start_session",
     description:
       "Start a session in one call: ensure the project, register the agent, optionally " +
-      "reserve paths, and return the latest inbox without marking it read.",
+      "reserve paths, and return the latest inbox without marking it read. If the register " +
+      "hook already told you your name, pass it as agent_name, or start task_description with " +
+      "the session tag it gave you; otherwise you get a second name.",
     properties: {
       human_key: PROJECT,
       program: prop("string"),

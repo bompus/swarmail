@@ -123,11 +123,12 @@ test("re-registers under the same name when the tag changed or state predates ta
 test("keeps the agent's task text and drops the hook's placeholders", () => {
   expect(keptTask("[t3:x claude:s cwd:~/w] TLA+ pilot")).toBe("TLA+ pilot");
   expect(keptTask("Claude Code session c583830b (registered on first edit)")).toBe(
-    "registered on first edit",
+    "registered by hook",
   );
-  expect(keptTask("[claude:s cwd:~/w] registered on first edit")).toBe("registered on first edit");
+  expect(keptTask("[claude:s cwd:~/w] registered on first edit")).toBe("registered by hook");
+  expect(keptTask("[claude:s cwd:~/w] registered by hook")).toBe("registered by hook");
   expect(keptTask("Room C90 validation")).toBe("Room C90 validation");
-  expect(keptTask(undefined)).toBe("registered on first edit");
+  expect(keptTask(undefined)).toBe("registered by hook");
 });
 
 test("finds a hand-registered row by the session id in its tag", () => {
@@ -534,7 +535,7 @@ test("a failed registration tells Claude, then the next prompt retries against t
     expect(roster).toEqual([
       {
         name,
-        task_description: `[claude:retry-1 cwd:${join("~", "repo")}] registered on first edit`,
+        task_description: `[claude:retry-1 cwd:${join("~", "repo")}] registered by hook`,
       },
     ]);
     const state = JSON.parse(
@@ -546,6 +547,110 @@ test("a failed registration tells Claude, then the next prompt retries against t
   } finally {
     server?.server.stop(true);
     server?.db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("a session registers at start, keeps that one name through edits, restarts and hand registration", async () => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-start-")));
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const server = createServer(join(dir, "mail.sqlite3"), port);
+  try {
+    const repo = join(dir, "repo");
+    Bun.spawnSync(["git", "init", "-q", repo]);
+    const { CLAUDECODE, ...parent } = process.env;
+    const env = {
+      ...parent,
+      SWARMAIL_URL: `http://127.0.0.1:${port}/mcp/`,
+      XDG_STATE_HOME: join(dir, "state"),
+      HOME: dir,
+    };
+    const run = async (input) => {
+      const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
+        stdin: new Blob([JSON.stringify(input)]),
+        env,
+      });
+      await proc.exited;
+      const out = (await new Response(proc.stdout).text()).trim();
+      return out && JSON.parse(out);
+    };
+    const roster = () =>
+      server.db.query("SELECT name, task_description FROM agents ORDER BY id").all();
+    const claude = {
+      session_id: "start-1",
+      cwd: repo,
+      transcript_path: join(dir, ".claude/projects/-repo/start-1.jsonl"),
+    };
+    const start = { ...claude, hook_event_name: "SessionStart", source: "startup" };
+
+    const started = (await run(start)).hookSpecificOutput;
+    expect(started.hookEventName).toBe("SessionStart");
+    const name = /registered as (\w+) in/.exec(started.additionalContext)?.[1];
+    expect(started.additionalContext).toContain(`Use ${name} as your agent name`);
+    const tag = `[claude:start-1 cwd:${join("~", "repo")}]`;
+    expect(roster()).toEqual([{ name, task_description: `${tag} registered by hook` }]);
+
+    const edit = {
+      ...claude,
+      hook_event_name: "PreToolUse",
+      tool_input: { file_path: join(repo, "a.txt") },
+    };
+    expect(await run(edit)).toBe("");
+    // After compaction the session has lost its name, so the start hook repeats it.
+    const again = (await run({ ...start, source: "compact" })).hookSpecificOutput;
+    expect(again.additionalContext).toContain(`registered as ${name} in ${repo}`);
+
+    // The agent registering by hand with its tag, and no name, gets the same agent back.
+    // The server runs in this process, so the call can't block on curl the way the hook's does.
+    const res = await fetch(env.SWARMAIL_URL, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "macro_start_session",
+          arguments: {
+            human_key: repo,
+            program: "claude-code",
+            model: "test",
+            task_description: `${tag} README edits`,
+          },
+        },
+      }),
+    });
+    const hand = JSON.parse((await res.json()).result.content[0].text);
+    expect(hand.agent.name).toBe(name);
+    expect(roster()).toHaveLength(1);
+
+    // Cursor's own sessionStart payload (captured from the Cursor CLI) gets Cursor's flat output.
+    const cursor = await run({
+      conversation_id: "13ff971f-ae2c-474b-b587-12f163fba67e",
+      session_id: "13ff971f-ae2c-474b-b587-12f163fba67e",
+      hook_event_name: "sessionStart",
+      is_background_agent: false,
+      workspace_roots: [repo],
+      transcript_path: null,
+    });
+    const cursorName = /registered as (\w+) in/.exec(cursor.additional_context)?.[1];
+    expect(cursorName).toBeTruthy();
+    expect(cursorName).not.toBe(name);
+    expect(roster().map((row) => row.name)).toEqual([name, cursorName]);
+
+    // Outside a repository there is nothing to register in, so the session learns its tag.
+    const home = join(dir, "elsewhere");
+    mkdirSync(home);
+    const loose = (await run({ ...start, session_id: "start-2", cwd: home })).hookSpecificOutput
+      .additionalContext;
+    expect(loose).toContain("your session tag is [claude:start-2 cwd:");
+    expect(roster()).toHaveLength(2);
+  } finally {
+    server.server.stop(true);
+    server.db.close();
     rmSync(dir, { recursive: true, force: true });
   }
 }, 30000);

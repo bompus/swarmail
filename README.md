@@ -210,10 +210,15 @@ come back on their next tool call.
 ## Register hook
 
 On a session's first edit in a repository, `swarmail register` registers it
-under the repository's primary checkout. The registration starts with a tag
+under the repository's primary checkout. Claude Code and Cursor also run it
+when a session starts. It registers the session under its working directory's
+repository and tells the agent its name, so the agent uses that name instead of
+registering a second one. The registration starts with a tag
 holding the host's session id and working directory, which is how `swarmail
-who` matches names to sessions. A failure is retried on the next edit. State
+who` matches names to sessions. A failure is retried on the next prompt or edit. State
 lives in `~/.local/state/swarmail-register/`, under your profile on Windows.
+After upgrading, run `bun scripts/configure-hooks.ts` again to add the
+session-start hook.
 
 | Host | Session id in the shell |
 | --- | --- |

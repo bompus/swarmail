@@ -2,8 +2,10 @@
 // plugin) OpenCode: registers the session in Swarmail under the primary checkout of the repository it is about to edit, once per session
 // and repository, keeping one agent name per session. Sessions that start in the home directory
 // and edit through worktrees otherwise register late or never, and peers reading the repository's
-// roster find nothing. Never blocks the edit, and
-// prints nothing: Antigravity reads any stdout, even `{}`, as a decision and denies the call.
+// roster find nothing. Claude Code and Cursor also run it at session start, which registers under the
+// working directory's repository and tells the agent its name, so the agent uses that name instead of
+// registering a second one. Never blocks the edit, and prints nothing for hosts whose output rules are
+// unverified: Antigravity reads any stdout, even `{}`, as a decision and denies the call.
 
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
@@ -74,16 +76,39 @@ export function failureNotice(project: string, tag: string): string {
   );
 }
 
+/** What a session learns at start: its name, or, outside a repository, the tag that keeps its name. */
+export function startNotice(tag: string, name?: string | null, project?: string): string {
+  if (!name) {
+    return (
+      `Swarmail: your session tag is ${tag}. When you register (macro_start_session or register_agent), ` +
+      "start task_description with it so the register hook keeps the name you get."
+    );
+  }
+  return (
+    `Swarmail: you are registered as ${name} in ${project}. Use ${name} as your agent name; do not call ` +
+    `macro_start_session or register_agent to get another one. In another repository, register with name ${name}.`
+  );
+}
+
 /**
- * The hook's stdout. Only Claude gets JSON (`additionalContext` reaches the model); Cursor, Devin,
- * Grok and Antigravity read this output with their own rules, and Antigravity denies the edit on any.
+ * The hook's stdout. Claude gets JSON (`additionalContext` reaches the model), and Cursor's own sessionStart hook gets
+ * its flat `additional_context`. Cursor's other events, Devin, Grok and Antigravity read this output with their own
+ * rules, and Antigravity denies the edit on any.
  */
 export function hookOutput(host: string, event: unknown, text: string): string {
-  if (!text || host !== "claude" || (event !== "PreToolUse" && event !== "UserPromptSubmit")) {
+  if (text && host === "cursor" && event === "sessionStart") {
+    return JSON.stringify({ additional_context: text });
+  }
+  const events = ["PreToolUse", "UserPromptSubmit", "SessionStart"];
+  if (!text || host !== "claude" || !events.includes(String(event))) {
     return "";
   }
   return JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } });
 }
+
+/** The event in Claude's spelling: Cursor's hooks.json sends `sessionStart` and `sessionEnd`. */
+const eventName = (event: unknown): unknown =>
+  event === "sessionStart" || event === "sessionEnd" ? `S${String(event).slice(1)}` : event;
 
 /**
  * Which host sent the hook input. Cursor, Devin and Grok also run hooks from
@@ -168,33 +193,36 @@ function main(input: HookInput): string {
     }
     return "";
   };
-  if (input.hook_event_name === "SessionEnd") {
+  const event = eventName(input.hook_event_name);
+  if (event === "SessionEnd") {
     registry.end(sessionId);
     return "";
   }
   // A prompt retries a failed registration and clears `ended` after a resume.
-  if (input.hook_event_name === "UserPromptSubmit") {
+  if (event === "UserPromptSubmit") {
     const pending = registry.resume(sessionId, started);
     return pending ? settle(pending.project, pending.tag) : "";
   }
   const dir = targetDir({ ...input, cwd: session.cwd });
   const project = dir && primaryCheckout(dir);
-  if (!project) {
-    return "";
-  }
   const t3 = t3ThreadId(sessionId);
   const tag = sessionTag({ ...session, t3 }, session.cwd);
+  const starting = event === "SessionStart";
+  if (!project) {
+    return starting ? startNotice(tag) : "";
+  }
   // Most edits after the first find the project registered under this tag and skip the lock.
   const known = registry.read(sessionId);
-  if (
-    known &&
-    !known.ended &&
-    known.tags?.[project] === tag &&
-    sameHost(known.host, hostProcess())
-  ) {
-    return "";
+  const text =
+    known && !known.ended && known.tags?.[project] === tag && sameHost(known.host, hostProcess())
+      ? ""
+      : settle(project, tag);
+  // Every start names the session, registered just now or before: a compacted or resumed session has lost its name.
+  const state = starting ? registry.read(sessionId) : null;
+  if (!state?.name || state.pending?.project === project) {
+    return text;
   }
-  return settle(project, tag);
+  return startNotice(tag, state.name, project);
 }
 
 /** The variable each host sets in its shell to the session id; the README lists them. */

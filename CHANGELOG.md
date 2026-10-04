@@ -2,6 +2,18 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- Claude Code and Cursor sessions register when they start, and the agent is
+  told its Swarmail name. Before, the register hook ran only on the first edit,
+  so an agent that registered itself first got one name and the hook gave the
+  same session a second. A session started outside a repository is told its
+  session tag instead, which keeps its name when it registers by hand. Run the
+  hooks installer again to add the hook. `macro_start_session` and
+  `register_agent` say to reuse the name the hook gave.
+- The register hook's placeholder task reads "registered by hook" instead of
+  "registered on first edit".
+
 ## 0.2.0 - 2026-10-03
 
 - LICENSE names the copyright holder as Aaron Queen instead of the GitHub
