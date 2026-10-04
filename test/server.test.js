@@ -1079,6 +1079,25 @@ test("an unknown agent error names the project where that name is registered", a
   expect(self.message).toContain("pass that project_key.");
 });
 
+test("an unknown agent registered in several projects gets plural advice", async () => {
+  await register("PluralSender");
+  for (const project_key of ["/w/one", "/w/two"]) {
+    await call("register_agent", {
+      project_key,
+      program: "claude-code",
+      model: "m",
+      name: "TwiceAgent",
+    });
+  }
+  const error = await call("whois", { project_key: P, agent_name: "TwiceAgent" }).catch((e) => e);
+  expect(error.type).toBe("NOT_FOUND");
+  expect(error.message).toContain("'TwiceAgent' is registered in projects '/w/");
+  expect(error.message).toContain("'/w/one'");
+  expect(error.message).toContain("'/w/two'");
+  expect(error.message).toContain("pass one of those project_keys.");
+  expect(error.message).not.toContain("that project_key");
+});
+
 test("the hourly sweep forgets old idempotency keys and long-ended registrations", async () => {
   const { pruneIdempotencyKeys } = await import("../src/server.ts");
   const { openRegistry } = await import("../src/registry.ts");

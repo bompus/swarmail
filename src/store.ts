@@ -377,12 +377,13 @@ export class MailStore {
       const usable = matches
         .filter((r) => field !== "to" || r.retired_at == null)
         .map((r) => `'${r.human_key}'`);
+      const several = usable.length > 1;
       const advice = usable.length
-        ? `'${n}' is registered in project ${usable.join(", ")}; pass that project_key${
-            field === "to" ? ", registering there first if you are not" : ""
-          }.`
+        ? `'${n}' is registered in ${several ? "projects" : "project"} ${usable.join(", ")}; pass ${
+            several ? "one of those project_keys" : "that project_key"
+          }${field === "to" ? ", registering there first if you are not" : ""}.`
         : elsewhere.length
-          ? `'${n}' is retired in project ${elsewhere.map((k) => `'${k}'`).join(", ")} and accepts no messages until it registers again.`
+          ? `'${n}' is retired in ${elsewhere.length > 1 ? "projects" : "project"} ${elsewhere.map((k) => `'${k}'`).join(", ")} and accepts no messages until it registers again.`
           : field === "to"
             ? "Check the recipient's spelling; list_agents shows every agent."
             : "Find your name with `swarmail who`, or call register_agent without a name to get one.";
