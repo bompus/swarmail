@@ -2,8 +2,11 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.2.3 - 2026-10-04
 
+- Tool descriptions distinguish preserved message timestamps from refreshed agent
+  activity on repeated acknowledgements, and explain when to release reservations
+  instead of renewing them and how release filters combine.
 - The release guide covers Glama Auto-Release and the delay before its public
   listing and scores update.
 - Roster entries include an edit location with the repository, worktree, current
