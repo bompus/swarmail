@@ -289,8 +289,9 @@ with seven other local agent-mail servers.
   <img src="docs/assets/benchmark-light.png" alt="Bar charts sorted from best to worst for each metric. Send p50: Swarmail 0.46 ms, agentbus 2.3 ms, Project Relay 2.5 ms, Rust Agent Mail 39 ms, Python Agent Mail 70 ms. Search p50: Swarmail 0.65 ms, Python Agent Mail 12 ms, Rust Agent Mail 56 ms; agentbus and Project Relay have no search tool. Startup: Swarmail 38 ms, Project Relay 123 ms, agentbus 408 ms, Python Agent Mail 0.86 s, Rust Agent Mail 1.5 s. Idle memory: Swarmail 32 MiB, agentbus 81 MiB, Project Relay 121 MiB, Python Agent Mail 154 MiB, Rust Agent Mail 190 MiB." width="100%">
 </picture></a>
 
-Each chart is sorted from lowest to highest. The tables below put servers in
-rows and units in headings. Rust Agent Mail and Python Agent Mail are
+Each chart ranks its metric from best to worst. Lower values are better in
+all four charts. The tables below put servers in rows and units in headings.
+Rust Agent Mail and Python Agent Mail are
 `mcp_agent_mail_rust` and `mcp_agent_mail`.
 
 ### Latency
