@@ -38,7 +38,10 @@ function schedule($, ms) {
 }
 
 async function registered($, sid) {
-  const state = (await $.env.get("XDG_STATE_HOME")) || `${await $.env.get("HOME")}/.local/state`;
+  // The register hook's directory (stateHome in paths.ts): HOME, or the user profile on Windows, where HOME is
+  // usually unset.
+  const home = (await $.env.get("HOME")) || (await $.env.get("USERPROFILE"));
+  const state = (await $.env.get("XDG_STATE_HOME")) || `${home}/.local/state`;
   try {
     return !JSON.parse(await $.fs.read(`${state}/swarmail-register/${sid}.json`)).ended;
   } catch {

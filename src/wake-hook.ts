@@ -6,10 +6,14 @@
 //     starting a second waiter from the shell.
 //     A session that runs the Swarmail mod (claude-wake-mod.js) has SWARMAIL_WAKE_MOD=1, and the hook exits at once.
 //   cursor: stop hook in hooks.json; a {"followup_message": ...} reply starts a turn, {} otherwise.
+// `swarmail hook rearm` is the PostToolUse re-arm for hosts with no POSIX shell (Windows): the checks the Linux
+// installer writes as shell, then the Claude wait.
 import { stateHome, wakeUrl } from "./paths.ts";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { hostAlive, processIdentity, type HostProcess } from "./proc.ts";
+import { readWindowsProcess } from "./proc-win32.ts";
 import { openRegistry, registryDir } from "./registry.ts";
 
 interface Proc {
@@ -17,8 +21,34 @@ interface Proc {
   args: string[];
 }
 
-/** Parent and argv of a process: /proc on Linux, one `ps` or PowerShell snapshot of the process table elsewhere. */
+/**
+ * Parent and argv of a process: /proc on Linux; kernel32 for the parent on Windows, with the command line asked of
+ * PowerShell (about 440 ms) only when read; one `ps` snapshot of the process table elsewhere.
+ */
 export function processReader(platform = process.platform): (pid: number) => Proc | null {
+  if (platform === "win32") {
+    return (pid) => {
+      const entry = readWindowsProcess(pid);
+      if (!entry) {
+        return null;
+      }
+      return {
+        ppid: entry.ppid,
+        get args() {
+          const out = spawnSync(
+            "powershell",
+            [
+              "-NoProfile",
+              "-Command",
+              `(Get-CimInstance Win32_Process -Filter "ProcessId=${pid}").CommandLine`,
+            ],
+            { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], windowsHide: true },
+          ).stdout as string | null;
+          return (out ?? "").trim().split(/\s+/);
+        },
+      };
+    };
+  }
   if (platform === "linux") {
     return (pid) => {
       try {
@@ -36,15 +66,7 @@ export function processReader(platform = process.platform): (pid: number) => Pro
   let table: Map<number, Proc> | null = null;
   return (pid) => {
     if (!table) {
-      const cmd =
-        platform === "win32"
-          ? [
-              "powershell",
-              "-NoProfile",
-              "-Command",
-              'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId) $($_.CommandLine)" }',
-            ]
-          : ["ps", "-A", "-o", "pid=,ppid=,args="];
+      const cmd = ["ps", "-A", "-o", "pid=,ppid=,args="];
       const out =
         (spawnSync(cmd[0]!, cmd.slice(1), { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
           .stdout as string | null) ?? "";
@@ -60,14 +82,21 @@ export function processReader(platform = process.platform): (pid: number) => Pro
   };
 }
 
-const alive = (pid: number) => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
+/** Whether the host is still running: the same process by start time where it can be read, else its PID. */
+function liveCheck(pid: number): () => boolean {
+  const host: HostProcess | null = processIdentity(pid);
+  if (host?.start !== undefined) {
+    return () => hostAlive(host);
   }
-};
+  return () => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+}
 
 /** The PID of the Claude session to wait for, or null when this hook should not wait. */
 const stateDir = stateHome;
@@ -170,12 +199,9 @@ export async function wakeHook(
     Date.now() + (seconds ?? WAKE_SECONDS[host === "claude" ? "claude" : "cursor"]) * 1000;
   let request = new AbortController();
   // Checking the host in-process costs nothing, so one wait covers the whole timeout instead of chunks.
+  const alive = liveCheck(agent);
   const watch = setInterval(
-    () => {
-      if (!alive(agent)) {
-        request.abort();
-      }
-    },
+    () => alive() || request.abort(),
     Number(env.SWARMAIL_WAKE_CHUNK || 5) * 1000,
   );
   let hint = "";
@@ -231,4 +257,30 @@ export async function wakeHook(
   }
   console.log(JSON.stringify({ followup_message: hint }));
   return 0;
+}
+
+/**
+ * The PostToolUse re-arm without a shell: waits only in a registered Claude session with no Swarmail mod and no
+ * live waiter, the same checks the Linux installer writes as shell around `hook wake claude`.
+ */
+export async function rearmHook(input = "", env = process.env): Promise<number> {
+  const sid = env.CLAUDE_CODE_SESSION_ID ?? "";
+  const state = stateDir(env);
+  if (
+    env.SWARMAIL_WAKE_MOD === "1" ||
+    !/^[\w-]+$/.test(sid) ||
+    !existsSync(join(state, "swarmail-register", `${sid}.json`))
+  ) {
+    return 0;
+  }
+  const waiter = readPid(join(state, "swarmail-wake", sid));
+  if (waiter) {
+    try {
+      process.kill(waiter, 0);
+      return 0;
+    } catch {
+      // No live waiter: start one.
+    }
+  }
+  return wakeHook("claude", undefined, input, env);
 }

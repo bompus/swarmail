@@ -56,6 +56,10 @@ export const databasePath = (env: NodeJS.ProcessEnv = process.env): string =>
 export const stateHome = (env: NodeJS.ProcessEnv = process.env): string =>
   env.XDG_STATE_HOME || join(homeDir(env), ".local", "state");
 
+/** The running server's PID and start time, which Windows has no service manager to keep (scripts/enable-windows.ts). */
+export const serverRecordPath = (env: NodeJS.ProcessEnv = process.env): string =>
+  join(stateHome(env), "swarmail-server.json");
+
 /** Swarmail's MCP endpoint. Hooks run without the shell profile, so the default is the local server. */
 export const swarmailUrl = (env: NodeJS.ProcessEnv = process.env): string =>
   env.SWARMAIL_URL || `http://127.0.0.1:${DEFAULT_PORT}/mcp/`;

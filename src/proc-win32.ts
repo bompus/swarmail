@@ -23,6 +23,7 @@ const symbols = {
     returns: FFIType.i32,
   },
   CloseHandle: { args: [FFIType.u64], returns: FFIType.i32 },
+  GetShortPathNameW: { args: [FFIType.ptr, FFIType.ptr, FFIType.u32], returns: FFIType.u32 },
 } as const;
 
 let kernel32: ReturnType<typeof dlopen<typeof symbols>>["symbols"] | null = null;
@@ -103,4 +104,17 @@ export function readWindowsProcess(
   const reused =
     start !== undefined && parentStart !== undefined && BigInt(parentStart) > BigInt(start);
   return { comm: entry.name, ppid: reused ? 0 : entry.ppid, start };
+}
+
+/**
+ * The 8.3 form of an existing path, or the path unchanged when the volume keeps no short names. Every component
+ * that is not already a valid short name is shortened, a leading-dot `.local` included.
+ */
+export function shortPath(path: string): string {
+  const wide = (text: string) => new Uint8Array(Buffer.from(text + "\0", "utf16le"));
+  const out = new Uint8Array(2 * 32_768);
+  const length = lib().GetShortPathNameW(wide(path), out, out.length / 2);
+  return length > 0 && length < out.length / 2
+    ? Buffer.from(out.subarray(0, length * 2)).toString("utf16le")
+    : path;
 }

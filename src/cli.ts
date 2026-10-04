@@ -32,14 +32,20 @@ const serve: Command = {
 const COMMANDS: Record<string, Command> = {
   serve,
   hook: {
-    usage: ["swarmail hook wake <claude|cursor> [seconds]     the wake hook (wake-hook.ts)"],
+    usage: [
+      "swarmail hook wake <claude|cursor> [seconds]     the wake hook (wake-hook.ts)",
+      "swarmail hook rearm                              the Claude PostToolUse re-arm where there is no shell",
+    ],
     run: async ([kind, host, seconds]) => {
-      if (kind !== "wake") {
+      if (kind !== "wake" && kind !== "rearm") {
         usage(64);
       }
-      const { wakeHook } = await import("./wake-hook.ts");
+      const { rearmHook, wakeHook } = await import("./wake-hook.ts");
+      const input = await Bun.stdin.text();
       process.exit(
-        await wakeHook(host, seconds ? Number(seconds) : undefined, await Bun.stdin.text()),
+        kind === "rearm"
+          ? await rearmHook(input)
+          : await wakeHook(host, seconds ? Number(seconds) : undefined, input),
       );
     },
   },

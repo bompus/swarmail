@@ -2,11 +2,14 @@
 // Installs the Swarmail hooks (`swarmail register`, `swarmail hook wake`) for every host: Claude settings, which Cursor, Devin and Grok also load; Cursor's own hooks.json for its
 // wake hook; Codex (~/.codex/hooks.json), OpenCode (a plugin) and Antigravity
 // (~/.gemini/config/hooks.json). Claude Code also gets the Swarmail mod, its wake without a waiting hook process,
-// unless --no-claude-mod. Linux home only. A host whose directory doesn't exist is
-// skipped, so a host that isn't installed gets no config directory.
+// unless --no-claude-mod. On Windows every hook command is one unquoted path, which Git Bash, PowerShell and cmd
+// all run alike. A host whose directory doesn't exist is skipped, so a host that isn't installed gets no config
+// directory.
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve, win32 } from "node:path";
+import { binaryPath } from "../src/paths.ts";
+import { shortPath } from "../src/proc-win32.ts";
 import {
   object,
   planJson,
@@ -18,27 +21,60 @@ import {
 import { WAKE_SECONDS } from "../src/wake-hook.ts";
 
 const marker = "swarmail-register-hook";
-// Replaces hooks that invoke the Swarmail binary.
-const ours = /\.local\/bin\/swarmail\b/;
+// Replaces hooks that invoke the Swarmail binary, by either slash (JSON doubles a backslash).
+const ours = /\.local[\\/]+bin[\\/]+swarmail\b/i;
+// What a hook shell takes as one word with no quoting.
+const SHELL_WORD = /^[\w.:/~-]+$/;
 
-/** The `swarmail` binary (scripts/enable.sh builds it) and the hook commands that run it. */
-export function swarmailHookPaths(home: string) {
-  const bin = join(home, ".local", "bin", "swarmail");
+/**
+ * The binary as it appears in a hook command. Windows hosts run the command through Git Bash, PowerShell or cmd,
+ * and a quoted path is a parse error in PowerShell and cmd, so the path goes unquoted with forward slashes. A
+ * profile path with a space or other shell character is replaced by its 8.3 short name.
+ */
+export function hookBinary(
+  home: string,
+  platform: NodeJS.Platform = process.platform,
+  short: (path: string) => string = shortPath,
+): string {
+  if (platform !== "win32") {
+    return `"${binaryPath(home, platform)}"`;
+  }
+  const word = (dir: string) =>
+    win32.join(dir, ".local", "bin", "swarmail.exe").replaceAll("\\", "/");
+  let bin = word(home);
+  if (!SHELL_WORD.test(bin)) {
+    bin = word(short(home));
+  }
+  if (!SHELL_WORD.test(bin)) {
+    throw new Error(
+      `${bin}: hooks can't run a path with spaces or shell characters, and this volume has no short name for it`,
+    );
+  }
+  return bin;
+}
+
+/** The `swarmail` binary (scripts/build.ts builds it) and the hook commands that run it. */
+export function swarmailHookPaths(home: string, platform: NodeJS.Platform = process.platform) {
+  const bin = binaryPath(home, platform);
+  const run = hookBinary(home, platform);
   return {
     bin,
-    command: `"${bin}" register`,
+    command: `${run} register`,
     // The compiled binary rather than a shell script: about 9.4 MB per waiting session against 3.2 MB
     // (measured 2026-09-28), for one code path on every host.
-    wake: (host: string) => `"${bin}" hook wake ${host}`,
+    wake: (host: string) => `${run} hook wake ${host}`,
     // PostToolUse runs after every tool call, so the shell skips the binary unless this is a registered session
     // with no live waiter (one that already delivered its hint this turn, or a first turn before any Stop) and no
     // Swarmail mod doing the waiting.
+    // Windows has no shell to count on, so the binary makes the same checks itself.
     rearm:
-      '[ "$SWARMAIL_WAKE_MOD" = 1 ] && exit 0; ' +
-      's="${XDG_STATE_HOME:-$HOME/.local/state}"; i="$CLAUDE_CODE_SESSION_ID"; ' +
-      '[ -n "$i" ] && [ -f "$s/swarmail-register/$i.json" ] || exit 0; ' +
-      '{ read -r p < "$s/swarmail-wake/$i"; } 2>/dev/null && kill -0 "$p" 2>/dev/null && exit 0; ' +
-      `exec "${bin}" hook wake claude`,
+      platform === "win32"
+        ? `${run} hook rearm`
+        : '[ "$SWARMAIL_WAKE_MOD" = 1 ] && exit 0; ' +
+          's="${XDG_STATE_HOME:-$HOME/.local/state}"; i="$CLAUDE_CODE_SESSION_ID"; ' +
+          '[ -n "$i" ] && [ -f "$s/swarmail-register/$i.json" ] || exit 0; ' +
+          '{ read -r p < "$s/swarmail-wake/$i"; } 2>/dev/null && kill -0 "$p" 2>/dev/null && exit 0; ' +
+          `exec ${run} hook wake claude`,
   };
 }
 
@@ -63,14 +99,20 @@ export function claudeModPlugin(home: string) {
 }
 
 /**
- * Claude settings' env.CLAUDE_CODE_PLUGIN_DIRS, ":"-separated, with `dir` added (or removed when `add` is false)
- * and the user's own directories kept. Claude Code loads each listed directory as `--plugin-dir` would.
+ * Claude settings' env.CLAUDE_CODE_PLUGIN_DIRS, split on the platform's path delimiter as Claude Code splits it
+ * (";" on Windows), with `dir` added (or removed when `add` is false) and the user's own directories kept. Claude
+ * Code loads each listed directory as `--plugin-dir` would.
  */
-export function withPluginDir(settings: Record<string, unknown>, dir: string, add: boolean) {
+export function withPluginDir(
+  settings: Record<string, unknown>,
+  dir: string,
+  add: boolean,
+  separator = delimiter,
+) {
   const env = settings.env === undefined ? {} : object(settings.env, "env");
   const { CLAUDE_CODE_PLUGIN_DIRS: listed, ...rest } = env;
   const dirs = String(listed ?? "")
-    .split(":")
+    .split(separator)
     .filter((entry) => entry && entry !== dir);
   if (add) {
     dirs.push(dir);
@@ -80,13 +122,13 @@ export function withPluginDir(settings: Record<string, unknown>, dir: string, ad
   }
   return {
     ...settings,
-    env: dirs.length ? { ...rest, CLAUDE_CODE_PLUGIN_DIRS: dirs.join(":") } : rest,
+    env: dirs.length ? { ...rest, CLAUDE_CODE_PLUGIN_DIRS: dirs.join(separator) } : rest,
   };
 }
 
 /** The Codex hooks/list entry for the register hook, whose trust Codex checks before running it. */
 export const isRegisterCommand = (command: string | undefined) =>
-  !!command?.includes('swarmail" register');
+  /swarmail(\.exe)?"? register\b/i.test(command ?? "");
 
 /** Replaces this installer's entry in a `hooks.<event>` list, keeping every other hook. */
 export const withHook = (config: Record<string, unknown>, event: string, entry: object) =>
@@ -174,6 +216,7 @@ export function configureSwarmailHooks(
 ) {
   home = resolve(home);
   const { bin, command, wake, rearm } = swarmailHookPaths(home);
+  const windows = process.platform === "win32";
   const mod = claudeModPlugin(home);
   // Only Claude Code loads the mod; Cursor, Devin and Grok keep the wake hooks.
   const withMod = claudeMod && !!present(join(home, ".claude"));
@@ -184,7 +227,8 @@ export function configureSwarmailHooks(
       ...planJson(join(home, ".claude", "settings.json"), home, (config) =>
         withPluginDir(withClaudeHooks(config, command, wake("claude"), rearm), mod.dir, withMod),
       ),
-      hosts: [".claude", ".cursor", ".grok", ".config/devin"],
+      // Devin keeps its own config under AppData on Windows (scripts/lib/mcp-hosts.ts).
+      hosts: [".claude", ".cursor", ".grok", windows ? "AppData/Roaming/devin" : ".config/devin"],
     },
     ...(withMod ? Object.entries(mod.files) : []).map(([path, next]) => ({
       path,
@@ -254,8 +298,8 @@ export function configureSwarmailHooks(
 }
 
 if (import.meta.main) {
-  if (process.platform !== "linux" || process.getuid?.() === 0) {
-    throw new Error("Run as your normal Linux user.");
+  if (!["linux", "win32"].includes(process.platform) || process.getuid?.() === 0) {
+    throw new Error("Run as your normal user, on Linux or Windows.");
   }
   // Any other argument stops before a write: --help prints usage, anything else is an error.
   const args = process.argv.slice(2);

@@ -149,8 +149,8 @@ export function configureSwarmailMcp(
 }
 
 if (import.meta.main) {
-  if (process.platform !== "linux" || process.getuid?.() === 0) {
-    throw new Error("Run as your normal Linux user.");
+  if (!["linux", "win32"].includes(process.platform) || process.getuid?.() === 0) {
+    throw new Error("Run as your normal user, on Linux or Windows.");
   }
   const { dryRun, home, windowsHome, positional } = parseConfigureArgs(process.argv.slice(2));
   if (positional.length > 0) {
@@ -162,7 +162,10 @@ if (import.meta.main) {
   }
   console.log(
     JSON.stringify(
-      configureSwarmailMcp(windowsHome ?? home, { dryRun, windows: windowsHome !== null }),
+      configureSwarmailMcp(windowsHome ?? home, {
+        dryRun,
+        windows: windowsHome !== null || process.platform === "win32",
+      }),
       null,
       2,
     ),
