@@ -169,37 +169,63 @@ test("who keeps edit location separate from the launch directory and T3 title", 
   const dir = mkdtempSync(join(tmpdir(), "who-location-"));
   try {
     const label = { repo: "repo", worktree: "/w/edit", branch: "feature", title: "Edit task" };
-    const [row] = whoRows(
-      {
-        project: "/r",
-        stateDir: dir,
-        roster: [
+    writeFileSync(
+      join(dir, "s.json"),
+      JSON.stringify({ name: "BlueBranch", projects: ["/r"], worktrees: { "/r": "/w/older" } }),
+    );
+    const context = {
+      project: "/r",
+      stateDir: dir,
+      roster: [
+        {
+          name: "BlueBranch",
+          task_description: "[t3:th claude:s cwd:/launch] task",
+          location: label,
+        },
+      ],
+      threads: new Map([
+        [
+          "th",
           {
-            name: "BlueBranch",
-            task_description: "[t3:th claude:s cwd:/launch] task",
-            location: label,
+            thread_id: "th",
+            title: "Edit task",
+            cwd: "/launch",
+            status: "running",
+            last_seen_at: null,
           },
         ],
-        threads: new Map([
-          [
-            "th",
-            {
-              thread_id: "th",
-              title: "Edit task",
-              cwd: "/launch",
-              status: "running",
-              last_seen_at: null,
-            },
-          ],
-        ]),
-        room: null,
-      },
+      ]),
+      room: null,
+    };
+    const [row] = whoRows(
+      context,
       () => null,
       () => false,
     );
     expect(row.location).toEqual(label);
     expect(row.cwd).toBe("/launch");
     expect(row.title).toBe("Edit task");
+    context.roster[0].location = null;
+    expect(
+      whoRows(
+        context,
+        () => null,
+        () => false,
+      )[0].location,
+    ).toBeNull();
+    delete context.roster[0].location;
+    expect(
+      whoRows(
+        context,
+        () => null,
+        () => false,
+      )[0].location,
+    ).toEqual({
+      repo: "r",
+      worktree: "/w/older",
+      branch: null,
+      title: "Edit task",
+    });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

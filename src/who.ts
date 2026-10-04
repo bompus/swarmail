@@ -197,7 +197,9 @@ export function whoRows(
     return {
       name: agent.name,
       location:
-        agent.location ?? location(project, state?.worktrees?.[project], thread?.title ?? null),
+        agent.location === undefined
+          ? location(project, state?.worktrees?.[project], thread?.title ?? null)
+          : agent.location,
       sessionId,
       t3,
       title: thread?.title ?? null,

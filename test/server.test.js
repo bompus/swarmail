@@ -1257,9 +1257,14 @@ test("locations follow the edited checkout while messages keep their sender snap
     expect(replay.sender_location).toEqual(first.sender_location);
     const second = await call("send_message", { ...message, idempotency_key: "location-second" });
     expect(second.sender_location.branch).toBe("renamed");
+    server.stop(true);
+    db.close();
+    ({ server, db } = createServer(join(dir, "mail.sqlite3"), 0));
+    url = `http://127.0.0.1:${server.port}/mcp/`;
     const inbox = await call("fetch_inbox", { project_key: repo, agent_name: "GreenBranch" });
     expect(inbox.find((m) => m.id === first.id).sender_location).toEqual(first.sender_location);
     expect(inbox.find((m) => m.id === second.id).sender_location.worktree).toBe(other);
+    expect(inbox.find((m) => m.id === second.id).sender_location).toEqual(second.sender_location);
     await expect(
       call("register_agent", { ...registration, worktree: unrelated }),
     ).rejects.toMatchObject({ type: "INVALID_ARGUMENT" });
