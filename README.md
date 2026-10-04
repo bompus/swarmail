@@ -70,10 +70,12 @@ yet.
 
 Native Windows is a preview. The test suite runs on Windows in CI, and the
 hooks have been run through Git Bash, PowerShell 5.1, pwsh 7, cmd and
-Cursor's PowerShell form against a real server. The hooks have not yet run
-inside a live Claude Code or Cursor session on Windows, and the logon task
-has not yet started a server at a real logon. If something fails there,
-please open an issue.
+Cursor's PowerShell form against a real server. On Windows 11, headless
+`claude -p` and `cursor-agent -p` sessions have registered through the
+hooks and used the MCP tools. Not yet verified on Windows: an idle session
+waking when mail arrives, which a headless session exits too soon to show,
+and the logon task starting a server at a real logon. If something fails
+there, please open an issue.
 
 1. Clone and install the dev tools:
 
