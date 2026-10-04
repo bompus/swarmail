@@ -265,6 +265,9 @@ const queries = (db: Database) => ({
   liveAgentsInSession: db.query<Agent, [number, string | null, string | null]>(
     "SELECT * FROM agents WHERE project_id = ?1 AND retired_at IS NULL AND (t3_thread = ?2 OR session_id = ?3) ORDER BY last_active_ts DESC, id DESC",
   ),
+  agentProjects: db.query<{ human_key: string; retired_at: number | null }, [string, number]>(
+    "SELECT p.human_key, a.retired_at FROM agents a JOIN projects p ON p.id = a.project_id WHERE a.name = ? COLLATE NOCASE AND a.project_id != ? ORDER BY a.last_active_ts DESC",
+  ),
   agentNames: db.query<{ name: string }, [number]>(
     "SELECT name FROM agents WHERE project_id = ? AND retired_at IS NULL ORDER BY last_active_ts DESC, id DESC",
   ),
@@ -367,16 +370,33 @@ export class MailStore {
       const recent = active.slice(0, 10);
       const more =
         active.length > recent.length ? ` and ${active.length - recent.length} more` : "";
-      const advice =
-        field === "to"
-          ? "Check the recipient's spelling; list_agents shows every agent."
-          : "Find your name with `swarmail who`, or call register_agent without a name to get one.";
+      // A name registered under another project_key is the usual cause, not a misspelling.
+      // A retired recipient takes no messages there either; an agent's own retired name comes back when it acts.
+      const matches = this.q.agentProjects.all(n, p.id);
+      const elsewhere = matches.map((r) => r.human_key);
+      const usable = matches
+        .filter((r) => field !== "to" || r.retired_at == null)
+        .map((r) => `'${r.human_key}'`);
+      const advice = usable.length
+        ? `'${n}' is registered in project ${usable.join(", ")}; pass that project_key${
+            field === "to" ? ", registering there first if you are not" : ""
+          }.`
+        : elsewhere.length
+          ? `'${n}' is retired in project ${elsewhere.map((k) => `'${k}'`).join(", ")} and accepts no messages until it registers again.`
+          : field === "to"
+            ? "Check the recipient's spelling; list_agents shows every agent."
+            : "Find your name with `swarmail who`, or call register_agent without a name to get one.";
       throw new ToolError(
         "NOT_FOUND",
         `Agent '${n}' not found in project '${p.human_key}'. Recently active: ${
           recent.map((x) => `'${x}'`).join(", ") || "none"
         }${more}. ${advice}`,
-        { agent_name: n, available_agents: recent, active_agents: active.length },
+        {
+          agent_name: n,
+          available_agents: recent,
+          active_agents: active.length,
+          registered_in: elsewhere,
+        },
       );
     }
     return a;

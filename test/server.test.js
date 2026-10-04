@@ -1044,6 +1044,41 @@ test("an unknown agent error names at most ten recent agents and says what to do
   expect(recipient.message).toContain("recipient's spelling");
 });
 
+test("an unknown agent error names the project where that name is registered", async () => {
+  await register("HomeSender");
+  await call("register_agent", {
+    project_key: "/w/other",
+    program: "claude-code",
+    model: "m",
+    name: "AwayAgent",
+  });
+  const recipient = await call("send_message", {
+    project_key: P,
+    sender_name: "HomeSender",
+    to: ["awayagent"],
+    subject: "x",
+    body_md: "y",
+  }).catch((e) => e);
+  expect(recipient.type).toBe("NOT_FOUND");
+  expect(recipient.message).toContain("'awayagent' is registered in project '/w/other'");
+  expect(recipient.message).not.toContain("spelling");
+  expect(recipient.data.registered_in).toEqual(["/w/other"]);
+  db.query("UPDATE agents SET retired_at = 1 WHERE name = 'AwayAgent'").run();
+  const retired = await call("send_message", {
+    project_key: P,
+    sender_name: "HomeSender",
+    to: ["AwayAgent"],
+    subject: "x",
+    body_md: "y",
+  }).catch((e) => e);
+  expect(retired.message).toContain("'AwayAgent' is retired in project '/w/other'");
+  expect(retired.data.registered_in).toEqual(["/w/other"]);
+  const self = await call("fetch_inbox", { project_key: P, agent_name: "AwayAgent" }).catch(
+    (e) => e,
+  );
+  expect(self.message).toContain("pass that project_key.");
+});
+
 test("the hourly sweep forgets old idempotency keys and long-ended registrations", async () => {
   const { pruneIdempotencyKeys } = await import("../src/server.ts");
   const { openRegistry } = await import("../src/registry.ts");
