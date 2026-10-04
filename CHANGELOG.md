@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.2.1 - 2026-10-04
 
 - Claude Code and Cursor sessions register when they start, and the agent is
   told its Swarmail name. Before, the register hook ran only on the first edit,
@@ -13,11 +13,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   `register_agent` say to reuse the name the hook gave.
 - The register hook's placeholder task reads "registered by hook" instead of
   "registered on first edit".
+- LICENSE names the copyright holder as Aaron Queen instead of the GitHub
+  handle bompus. The license terms are unchanged.
 
 ## 0.2.0 - 2026-10-03
 
-- LICENSE names the copyright holder as Aaron Queen instead of the GitHub
-  handle bompus. The license terms are unchanged.
 - On native Windows, `swarmail who` can tell whether a Cursor CLI session is
   still running. The Cursor CLI runs there as a `node.exe` under its
   `cursor-agent` directory, which the register hook did not recognize as the
