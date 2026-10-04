@@ -27,3 +27,22 @@ The maintainer squash-merges pull requests into `main`; the squashed commit
 keeps you as its author. Contributions are licensed under the MIT licence in
 `LICENSE`. When you adapt someone else's work, credit it in
 `THIRD_PARTY_NOTICES.md` and beside the adapted text.
+
+## Releasing
+
+The maintainer cuts each release from `main`:
+
+1. Open a pull request that sets `version` in `package.json` and renames the
+   `Unreleased` heading in `CHANGELOG.md` to `X.Y.Z - YYYY-MM-DD`.
+2. After it merges, tag the squash commit `vX.Y.Z`, push the tag, and publish
+   a GitHub release from it, marked latest, with that changelog section as its
+   notes.
+3. When `packages/mcp-relay/` changed since its last version, set the new
+   version in its `package.json` and in both places in `server.json`. Then run
+   `npm publish` in `packages/mcp-relay/` and `mcp-publisher publish` in the
+   repository root.
+4. On Glama's [admin page](https://glama.ai/mcp/servers/bompus/swarmail/admin/dockerfile),
+   click Sync Server, then Deploy. When the build test passes, click Make
+   Release and enter `X.Y.Z`. The saved build spec (build steps
+   `["npm install -g bun@1.4.2"]`, CMD `["bun", "scripts/glama.ts"]`) needs a
+   change only when the Bun version CI uses or `scripts/glama.ts` changes.
