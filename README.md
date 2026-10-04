@@ -263,7 +263,8 @@ Measured on one machine with one small workload (40 agents, 250 seed messages,
 hyperfine's mean of 20 runs; every other number is the median of three rounds,
 with latency from Tinybench and requests per second from oha. The multipliers
 are computed from those values. [docs/benchmarks.md](docs/benchmarks.md) has
-the method, a fourth server and each tool's raw output.
+the method, a fourth server, each tool's raw output and a feature comparison
+with seven other local agent-mail servers.
 
 <a href="docs/assets/benchmark-light.png"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-dark.png">
