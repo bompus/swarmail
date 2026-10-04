@@ -280,6 +280,11 @@ and hyperfine's `Relative` column compares against that row:
 | `mcp_agent_mail` | 872.6 ± 46.8 | 814.3 | 981.1 | 103.10 ± 9.19 |
 | `agent-inbox` | 276.7 ± 12.1 | 255.7 | 300.6 | 32.69 ± 2.73 |
 
+hyperfine timed all four servers, so agent-inbox appears here but not in the
+table above. Its inbox pages hold 50 messages instead of 20, its roster is
+global and its search matches substrings, so its fetch, list and search do
+different work. [docs/benchmarks.md](docs/benchmarks.md) has its full column.
+
 mcp_agent_mail commits each send to a Git archive before it returns, so these
 numbers don't compare durability. Requests per second varied by up to a
 quarter between rounds of the same server.
