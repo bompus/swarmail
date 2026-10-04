@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // The swarmail command, and the entry for its single binary: scripts/build.ts builds ~/.local/bin/swarmail.
-// It runs on Linux only, since sessions are identified through /proc. Another entry can import main() and pass it
+// It runs on Linux and Windows. Another entry can import main() and pass it
 // commands of its own.
 // Modules load on demand, so a waiting hook does not load the server's. No top-level await: `--bytecode` builds CommonJS.
 
@@ -10,13 +10,19 @@ export interface Command {
   run: (args: string[]) => Promise<void>;
 }
 
+/**
+ * Standard input as text. Bun.stdin.text() does not hold the event loop open on Windows (Bun 1.4.2) outside a
+ * top-level await, so the process exits before reading; reading the stream does.
+ */
+const stdin = () => new Response(Bun.stdin.stream()).text();
+
 const mail = (name: string, usage: string): [string, Command] => [
   name,
   {
     usage: [usage],
     run: async (args) => {
       const { mail } = await import("./mail.ts");
-      process.exit(await mail([name, ...args], () => Bun.stdin.text()));
+      process.exit(await mail([name, ...args], stdin));
     },
   },
 ];
@@ -41,7 +47,7 @@ const COMMANDS: Record<string, Command> = {
         usage(64);
       }
       const { rearmHook, wakeHook } = await import("./wake-hook.ts");
-      const input = await Bun.stdin.text();
+      const input = await stdin();
       process.exit(
         kind === "rearm"
           ? await rearmHook(input)
@@ -64,7 +70,7 @@ const COMMANDS: Record<string, Command> = {
     ],
     run: async ([hook]) => {
       const { guard } = await import("./guard.ts");
-      process.exit(guard(hook, hook === "pre-push" ? await Bun.stdin.text() : ""));
+      process.exit(guard(hook, hook === "pre-push" ? await stdin() : ""));
     },
   },
   who: {

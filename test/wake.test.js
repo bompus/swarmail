@@ -8,8 +8,8 @@ import { createServer } from "../src/server.ts";
 delete process.env.SWARMAIL_WAKE_MOD;
 
 const P = "/w/project";
-// $0 of the shell that stands in for the host.
-const script = "wake-host";
+// Stands in for the host that runs the hook.
+const HOST = join(import.meta.dir, "fixtures/wake-host.js");
 const HOOKS = {
   "swarmail hook wake": [process.execPath, join(import.meta.dir, "../src/cli.ts"), "hook", "wake"],
 };
@@ -70,6 +70,23 @@ const send = (to) =>
     subject: "secret subject",
     body_md: "secret body",
   });
+/**
+ * The PID in the Claude hook's PID file for session s-1 once it names `pid` (or any PID), or 0 after 5 s. On Windows
+ * the hook reads its host's command line through PowerShell before it waits, which takes about half a second.
+ */
+async function waiting(pid) {
+  for (let i = 0; i < 50; i++) {
+    const found = Number(
+      existsSync(join(dir, "state/swarmail-wake/s-1")) &&
+        readFileSync(join(dir, "state/swarmail-wake/s-1"), "utf8"),
+    );
+    if (found && (pid === undefined || found === pid)) {
+      return found;
+    }
+    await Bun.sleep(100);
+  }
+  return 0;
+}
 const wait = (session, timeout = 5) => fetch(`${base}/wait?session=${session}&timeout=${timeout}`);
 
 test("wakes a session for unread mail to its tagged agent only, naming recipient and sender but not the subject", async () => {
@@ -187,10 +204,54 @@ test("a ping is answered while the hook waits and wakes no one", async () => {
   expect(unread.some((m) => m.subject === "swarmail ping")).toBe(false);
 });
 
+test("the shell-free re-arm starts a wait only for a registered session with no live waiter", async () => {
+  const state = join(dir, "rearm-state");
+  const env = {
+    ...process.env,
+    SWARMAIL_WAKE_URL: base,
+    CLAUDE_PID: String(process.pid),
+    CLAUDE_CODE_SESSION_ID: "s-1",
+    XDG_STATE_HOME: state,
+  };
+  const input = JSON.stringify({
+    session_id: "s-1",
+    transcript_path: "/h/.claude/projects/w/s-1.jsonl",
+  });
+  const rearm = (extra = {}) =>
+    Bun.spawn([process.execPath, join(import.meta.dir, "../src/cli.ts"), "hook", "rearm"], {
+      stdin: new Blob([input]),
+      env: { ...env, ...extra },
+      stderr: "pipe",
+    });
+  const skips = async (extra) => {
+    const started = Date.now();
+    expect(await rearm(extra).exited).toBe(0);
+    expect(Date.now() - started).toBeLessThan(3000);
+  };
+  const pidFile = join(state, "swarmail-wake/s-1");
+  await skips(); // not registered
+  mkdirSync(join(state, "swarmail-register"), { recursive: true });
+  writeFileSync(join(state, "swarmail-register/s-1.json"), "{}");
+  await skips({ CLAUDE_CODE_SESSION_ID: "" });
+  await skips({ SWARMAIL_WAKE_MOD: "1" }); // the Swarmail mod waits instead
+  mkdirSync(join(state, "swarmail-wake"));
+  writeFileSync(pidFile, `${process.pid}\n`);
+  await skips(); // a live waiter
+  const gone = Bun.spawn([process.execPath, "-e", ""]);
+  await gone.exited;
+  writeFileSync(pidFile, `${gone.pid}\n`); // its waiter exited without cleaning up
+  const waits = rearm();
+  for (let i = 0; i < 50 && readFileSync(pidFile, "utf8").trim() !== String(waits.pid); i++) {
+    await Bun.sleep(100);
+  }
+  expect(Number(readFileSync(pidFile, "utf8"))).toBe(waits.pid);
+  await send("GreenCastle");
+  expect(await waits.exited).toBe(2);
+  expect(await new Response(waits.stderr).text()).toContain("for GreenCastle");
+}, 20000);
+
 for (const [name, hook] of Object.entries(HOOKS)) {
   describe(name, () => {
-    const shell = hook.map((arg) => `"${arg}"`).join(" ");
-
     test("the hook script wakes Claude with exit 2 and Cursor with a followup message", async () => {
       mkdirSync(join(dir, "state/swarmail-register"), { recursive: true });
       writeFileSync(join(dir, "state/swarmail-register/s-1.json"), "{}");
@@ -213,10 +274,9 @@ for (const [name, hook] of Object.entries(HOOKS)) {
         hook_event_name: "Stop",
       });
       const cursor = run("cursor", { conversation_id: "c-1", hook_event_name: "stop" });
-      await Bun.sleep(300);
       // The waiting Claude hook advertises its PID for the PostToolUse re-arm, and clears it on exit.
       const pidFile = join(dir, "state/swarmail-wake/s-1");
-      expect(Number(readFileSync(pidFile, "utf8"))).toBe(claude.pid);
+      expect(await waiting(claude.pid)).toBe(claude.pid);
       await send("GreenCastle");
       await send("PinkFox");
       expect(await claude.exited).toBe(2);
@@ -241,44 +301,46 @@ for (const [name, hook] of Object.entries(HOOKS)) {
 
     test("the Claude hook exits at once outside a registered, long-lived Claude session", async () => {
       // Claude holds `claude -p` open, and a one-prompt SDK process ~30 s, while an async hook runs.
-      const unrelated = Bun.spawn(["sleep", "30"]);
+      const unrelated = Bun.spawn([process.execPath, "-e", "await Bun.sleep(30000)"]);
       const env = { ...process.env, SWARMAIL_WAKE_URL: base, XDG_STATE_HOME: join(dir, "state") };
       const input = (session, transcript = `/h/.claude/projects/w/${session}.jsonl`) =>
-        JSON.stringify({ session_id: session, transcript_path: transcript }).replaceAll("'", "");
-      // The parent shell stands in for Claude: CLAUDE_PID names it, and its command line ends in `claude <flag>`.
-      const underClaude = (flag, session, transcript) => [
-        "sh",
-        "-c",
-        `CLAUDE_PID=$$ ${shell} claude 5 <<'EOF'\n${input(session, transcript)}\nEOF`,
-        script,
-        flag,
-      ];
+        JSON.stringify({ session_id: session, transcript_path: transcript });
+      // The host stands in for Claude: CLAUDE_PID names it, and its command line ends in the flag.
+      const underClaude = (flag, session, transcript) => ({
+        cmd: [process.execPath, HOST, flag],
+        host: {
+          HOST_HOOK: JSON.stringify([...hook, "claude", "5"]),
+          HOST_INPUT: input(session, transcript),
+        },
+      });
       writeFileSync(
         join(dir, "state/swarmail-register/s-ended.json"),
         JSON.stringify({ name: null, projects: [], ended: "2026-09-30T23:00:00Z" }),
       );
       const cases = [
-        { cmd: underClaude("--resume", "s-ended") }, // End record before any registration.
-        { cmd: underClaude("-p", "s-1") }, // `claude -p`
-        { cmd: underClaude("--resume", "s-unregistered") }, // no register-hook state
-        { cmd: underClaude("--resume", "s-1", "/h/.grok/sessions/s-1.jsonl") }, // Grok or Devin started by Claude
+        underClaude("--resume", "s-ended"), // End record before any registration.
+        underClaude("-p", "s-1"), // `claude -p`
+        underClaude("--resume", "s-unregistered"), // no register-hook state
+        underClaude("--resume", "s-1", "/h/.grok/sessions/s-1.jsonl"), // Grok or Devin started by Claude
         { cmd: [...hook, "claude", "5"], CLAUDE_PID: "", session: "s-1" }, // Devin or Cursor running ~/.claude/settings.json hooks
         { cmd: [...hook, "claude", "5"], CLAUDE_PID: String(unrelated.pid), session: "s-1" }, // ... started from a Claude session
-        { cmd: underClaude("--resume", "s-1"), extra: { SWARMAIL_WAKE_MOD: "1" } }, // the Swarmail mod waits instead
+        { ...underClaude("--resume", "s-1"), extra: { SWARMAIL_WAKE_MOD: "1" } }, // the Swarmail mod waits instead
       ];
       try {
-        for (const { cmd, CLAUDE_PID, session, extra } of cases) {
+        for (const { cmd, host, CLAUDE_PID, session, extra } of cases) {
           const started = Date.now();
           const run = Bun.spawn(cmd, {
             stdin: session ? new Blob([input(session)]) : "ignore",
-            env: { ...env, ...(CLAUDE_PID !== undefined && { CLAUDE_PID }), ...extra },
+            env: { ...env, ...host, ...(CLAUDE_PID !== undefined && { CLAUDE_PID }), ...extra },
           });
           expect(await run.exited).toBe(0);
-          expect(Date.now() - started).toBeLessThan(2000);
+          // Reading the host's command line on Windows takes PowerShell about half a second.
+          expect(Date.now() - started).toBeLessThan(3000);
         }
         // Control: the same shape under a registered, interactive Claude waits for mail.
-        const waits = Bun.spawn(underClaude("--resume", "s-1"), { env, stderr: "pipe" });
-        await Bun.sleep(300);
+        const control = underClaude("--resume", "s-1");
+        const waits = Bun.spawn(control.cmd, { env: { ...env, ...control.host }, stderr: "pipe" });
+        expect(await waiting()).toBeGreaterThan(0);
         await send("GreenCastle");
         expect(await waits.exited).toBe(2);
       } finally {
@@ -289,19 +351,17 @@ for (const [name, hook] of Object.entries(HOOKS)) {
     test("the hook stops waiting when its host exits", async () => {
       // Cursor runs the hook under a shell of its own and, on quit, leaves it running.
       const out = join(dir, "orphan.out");
-      const input = JSON.stringify({ conversation_id: "c-1" }).replaceAll('"', '\\"');
-      const host = Bun.spawn(
-        [
-          "sh",
-          "-c",
-          `sh -c 'echo "${input}" | ${shell} cursor 60 > "$1"' "$0" "$1" & wait`,
-          script,
-          out,
-        ],
-        {
-          env: { ...process.env, SWARMAIL_WAKE_URL: base, SWARMAIL_WAKE_CHUNK: "1" },
+      const host = Bun.spawn([process.execPath, HOST], {
+        env: {
+          ...process.env,
+          SWARMAIL_WAKE_URL: base,
+          SWARMAIL_WAKE_CHUNK: "1", // checks the host every second
+          HOST_HOOK: JSON.stringify([...hook, "cursor", "60"]),
+          HOST_INPUT: JSON.stringify({ conversation_id: "c-1" }),
+          HOST_OUT: out,
+          HOST_NEST: "1",
         },
-      ); // checks the host every second
+      });
       await Bun.sleep(500);
       host.kill("SIGKILL");
       for (let i = 0; i < 100 && !(existsSync(out) && readFileSync(out, "utf8")); i++) {
@@ -359,7 +419,7 @@ for (const [name, hook] of Object.entries(HOOKS)) {
         });
       const pidFile = join(dir, "state/swarmail-wake/s-1");
       const older = start();
-      await Bun.sleep(300);
+      expect(await waiting(older.pid)).toBe(older.pid);
       const newer = start();
       try {
         expect(await older.exited).toBe(0);
