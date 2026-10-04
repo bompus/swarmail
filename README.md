@@ -42,7 +42,8 @@ use, their MCP and hook settings, and my OS. Tell me:
 1. Whether I run several agent sessions on this machine at once, and where
    they could step on each other (shared checkouts, branches, services).
 2. Whether my hosts support MCP and hooks, and whether this is Linux with
-   systemd or something that needs the manual `swarmail serve` route.
+   systemd, Windows, or something that needs the manual `swarmail serve`
+   route.
 3. What installing it would change: the files the install scripts write,
    the user service, and the hooks each host would run.
 4. Whether to install it, or only borrow ideas such as wake-on-mail or
@@ -60,11 +61,12 @@ needs the MIT notice kept (see `LICENSE`).
 
 ## Install
 
-Requires Linux with systemd and [Bun](https://bun.sh) 1.4.2 or newer. WSL 2
-with systemd enabled counts, and step 3 can register Windows-side hosts
-against the server running in WSL. The setup scripts and the register hook
-read session details from `/proc`, so macOS and native Windows are not
-supported yet.
+Requires [Bun](https://bun.sh) 1.4.2 or newer on Linux with systemd or on
+Windows 10 or 11. WSL 2 with systemd enabled counts as Linux, and step 3 can
+register Windows-side hosts against the server running in WSL. Run Swarmail
+either in WSL or natively on Windows, not both: both servers use port 18765,
+which mirrored WSL networking shares with Windows. macOS is not supported
+yet.
 
 1. Clone and install the dev tools:
 
@@ -79,6 +81,17 @@ supported yet.
    ```bash
    scripts/enable.sh
    ```
+
+   On Windows, build `~\.local\bin\swarmail.exe` and start the server in a
+   scheduled task named `Swarmail`, which runs it hidden at each logon and
+   needs no administrator:
+
+   ```powershell
+   bun scripts/enable-windows.ts
+   ```
+
+   Rerun either script after pulling; it stops the running server and starts
+   the new build.
 
    The database is `~/.local/share/swarmail/mail.sqlite3`. The server has no
    authentication. It accepts only local connections and rejects non-local
@@ -108,6 +121,14 @@ supported yet.
 
    Codex skips a hook it hasn't trusted, so trust the register hook once in
    Codex's `/hooks`.
+
+   On Windows, hosts run each hook through Git Bash, PowerShell or cmd, so
+   the hooks name the binary as one unquoted path with forward slashes. If
+   your profile path has a space, the hooks use its 8.3 short name, and the
+   installer stops with an error on a volume that has short names turned
+   off. Cursor passes hook input through Windows PowerShell 5.1, which turns
+   non-ASCII characters into `?`, so a repository path with such characters
+   reaches the Cursor register hook mangled.
 
 5. Optional: `bun scripts/install-guard.ts [repo...]` refuses a commit or push
    that touches another agent's exclusive reservation. It installs into
@@ -143,6 +164,7 @@ keeps one name across repositories.
 | `swarmail ping <agent>` | Exit 0 if that agent's wake hook is waiting |
 | `swarmail register` | The register hook; `--tag` prints the tag for a manual registration |
 | `swarmail hook wake <host>` | The Claude Code and Cursor wake hook |
+| `swarmail hook rearm` | The Claude Code re-arm on Windows, which has no POSIX shell to run the Linux one |
 | `swarmail guard` | The git guard |
 | `swarmail version` | The source hash the binary was built from |
 
@@ -163,9 +185,15 @@ anywhere prints usage and runs nothing.
 | `SWARMAIL_AGENT` | from hook state | Name used by `inbox`, `send`, `ping`, `guard` and `who` |
 | `SWARMAIL_LIVE_ROOM` | unset | A JSON heartbeat file (`heartbeatAt`, plus `agentName`, `hostSessionId` or `t3Thread`); while its heartbeat is under 5 minutes old, `who` flags the session it names |
 
-`scripts/enable.sh`, the service unit and `configure-mcp.ts` use port 18765.
-Change `SWARMAIL_PORT` and the two URL variables only when you run
-`swarmail serve` yourself, and set them for every host that runs the hooks.
+`scripts/enable.sh`, `scripts/enable-windows.ts`, the service unit and
+`configure-mcp.ts` use port 18765. Change `SWARMAIL_PORT` and the two URL
+variables only when you run `swarmail serve` yourself, and set them for every
+host that runs the hooks. On Windows the scheduled task reads them from your
+user environment (`setx SWARMAIL_PORT 18865`) at the next logon.
+
+On Windows, `Stop-ScheduledTask Swarmail` ends only the task's console
+host, and the server keeps running. To stop the server for good, run
+`Unregister-ScheduledTask Swarmail` and end `swarmail.exe` in Task Manager.
 
 With `normal`, a power loss can lose the most recent writes. Retired agents
 come back on their next tool call.
@@ -176,7 +204,7 @@ On a session's first edit in a repository, `swarmail register` registers it
 under the repository's primary checkout. The registration starts with a tag
 holding the host's session id and working directory, which is how `swarmail
 who` matches names to sessions. A failure is retried on the next edit. State
-lives in `~/.local/state/swarmail-register/`.
+lives in `~/.local/state/swarmail-register/`, under your profile on Windows.
 
 | Host | Session id in the shell |
 | --- | --- |
