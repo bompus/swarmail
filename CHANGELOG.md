@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.2.2 - 2026-10-04
 
 - Every tool now declares MCP annotations (`readOnlyHint`, `destructiveHint`,
   `idempotentHint`, `openWorldHint: false`), and every parameter has a
