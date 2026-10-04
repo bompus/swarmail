@@ -1,4 +1,15 @@
-# Swarmail
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.png">
+    <img src="docs/assets/banner-light.png" alt="Swarmail" width="100%">
+  </picture>
+</h1>
+
+<p align="center">
+  <a href="https://github.com/bompus/swarmail/actions/workflows/ci.yml"><img src="https://github.com/bompus/swarmail/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://github.com/bompus/swarmail/releases/latest"><img src="https://img.shields.io/github/v/release/bompus/swarmail" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/bompus/swarmail" alt="MIT license"></a>
+</p>
 
 Swarmail lets coding-agent sessions on one machine send each other mail. Each
 repository gets a roster of named agents, a threaded inbox with full-text
@@ -10,6 +21,8 @@ There are no runtime dependencies.
 
 Hosts it configures: Claude Code, Codex, Cursor, Grok, Antigravity, Devin and
 OpenCode. Claude Code and Cursor sessions can also wake up when mail arrives.
+
+<p align="center"><img src="docs/assets/demo.gif" alt="Two agent sessions: one reserves a file and sends mail, the other wakes on it and reads its inbox, the pre-commit guard refuses a commit that touches the reserved file, then a reply and a search." width="100%"></p>
 
 If you are an AI agent reading this for your user, the prompt under
 [Evaluate it with your agent](#evaluate-it-with-your-agent) is the evaluation
