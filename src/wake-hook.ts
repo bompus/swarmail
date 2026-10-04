@@ -2,8 +2,8 @@
 // registered under this session (wake.ts), then wakes the session with a one-line hint naming recipients and senders.
 //   claude: Stop hook with "asyncRewake": true; exit 2 with the hint on stderr starts a turn. The same hook on
 //     PostToolUse re-arms the wait mid-turn after a hint used it up; exit 2 there queues the hint into the running turn.
-//     While it waits, $XDG_STATE_HOME/swarmail-wake/<session> holds its PID, so the PostToolUse command can skip
-//     starting a second waiter from the shell.
+//     While it waits, $XDG_STATE_HOME/swarmail-wake/<session> holds its PID and, on the next line, its start time,
+//     so the PostToolUse command can skip starting a second waiter.
 //     A session that runs the Swarmail mod (claude-wake-mod.js) has SWARMAIL_WAKE_MOD=1, and the hook exits at once.
 //   cursor: stop hook in hooks.json; a {"followup_message": ...} reply starts a turn, {} otherwise.
 // `swarmail hook rearm` is the PostToolUse re-arm for hosts with no POSIX shell (Windows): the checks the Linux
@@ -140,11 +140,13 @@ function claudeAgent(
   return claude;
 }
 
-function readPid(path: string): number {
+/** The waiter a PID file names: its PID, and its start time when recorded. */
+function readWaiter(path: string): { pid: number; start: string | undefined } {
   try {
-    return Number(readFileSync(path, "utf8"));
+    const [pid, start] = readFileSync(path, "utf8").split("\n");
+    return { pid: Number(pid) || 0, start: start || undefined };
   } catch {
-    return 0;
+    return { pid: 0, start: undefined };
   }
 }
 
@@ -191,7 +193,7 @@ export async function wakeHook(
     agent = claude;
     pidFile = join(stateDir(env), "swarmail-wake", sid);
     mkdirSync(join(stateDir(env), "swarmail-wake"), { recursive: true });
-    writeFileSync(pidFile, `${process.pid}\n`);
+    writeFileSync(pidFile, `${process.pid}\n${processIdentity(process.pid)?.start ?? ""}\n`);
   } else {
     if (!sid) {
       return quiet();
@@ -250,7 +252,7 @@ export async function wakeHook(
   } finally {
     clearInterval(watch);
     // A newer waiter that replaced this one owns the file now.
-    if (pidFile && readPid(pidFile) === process.pid) {
+    if (pidFile && readWaiter(pidFile).pid === process.pid) {
       rmSync(pidFile, { force: true });
     }
   }
@@ -265,10 +267,19 @@ export async function wakeHook(
   return 0;
 }
 
-/** Whether `pid` still runs a waiter. Windows soon gives a PID to another process, so there the name must match. */
-function waiterAlive(pid: number): boolean {
+/**
+ * Whether the recorded waiter still runs: the same process by start time. A file with no start time counts by its
+ * PID alone, except on Windows, which soon gives a PID to another process.
+ */
+function waiterAlive({ pid, start }: { pid: number; start: string | undefined }): boolean {
+  if (!pid) {
+    return false;
+  }
+  if (start !== undefined) {
+    return hostAlive({ name: "", pid, start });
+  }
   if (process.platform === "win32") {
-    return /^(swarmail|bun)$/i.test(processIdentity(pid)?.name ?? "");
+    return false;
   }
   try {
     process.kill(pid, 0);
@@ -292,8 +303,7 @@ export async function rearmHook(input = "", env = process.env): Promise<number> 
   ) {
     return 0;
   }
-  const waiter = readPid(join(state, "swarmail-wake", sid));
-  if (waiter && waiterAlive(waiter)) {
+  if (waiterAlive(readWaiter(join(state, "swarmail-wake", sid)))) {
     return 0;
   }
   return wakeHook("claude", undefined, input, env);

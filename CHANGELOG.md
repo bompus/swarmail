@@ -49,8 +49,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
     $LASTEXITCODE`, since PowerShell reports a native exit code 2 as 1.
     Under cmd the CLI ignores that suffix, which arrives as arguments.
     The re-arm runs `swarmail hook rearm`, which makes the checks the Linux
-    hook writes as shell and counts a recorded waiter as live only while
-    its PID still runs `swarmail` or `bun`.
+    hook writes as shell. The wait records its start time beside its PID,
+    and the re-arm counts a waiter as live only while that same process
+    runs.
   - The Swarmail mod lists its directory in `CLAUDE_CODE_PLUGIN_DIRS` with
     `;`, the separator Claude Code splits on in Windows.
   - The wake hook reads its host's parent from kernel32 and its command

@@ -178,7 +178,8 @@ test.skipIf(windows)(
     expect(readFileSync(join(dir, "ran"), "utf8").trim()).toBe("hook wake claude");
     expect(run("s-1", { SWARMAIL_WAKE_MOD: "1" })).toBe(false); // the Swarmail mod waits instead
     mkdirSync(join(state, "swarmail-wake"));
-    writeFileSync(join(state, "swarmail-wake/s-1"), `${process.pid}\n`);
+    // The shell reads the PID line and leaves the start time on the next one.
+    writeFileSync(join(state, "swarmail-wake/s-1"), `${process.pid}\n12345\n`);
     expect(run("s-1")).toBe(false); // a live waiter
     const gone = Bun.spawnSync(["sh", "-c", "echo $$"]).stdout.toString().trim();
     writeFileSync(join(state, "swarmail-wake/s-1"), `${gone}\n`);

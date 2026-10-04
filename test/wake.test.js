@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { processIdentity } from "../src/proc.ts";
 import { createServer } from "../src/server.ts";
 import { hintFor } from "../src/wake.ts";
 
@@ -77,7 +78,7 @@ const send = (to) =>
  */
 async function waiting(pid) {
   for (let i = 0; i < 50; i++) {
-    const found = Number(
+    const found = parseInt(
       existsSync(join(dir, "state/swarmail-wake/s-1")) &&
         readFileSync(join(dir, "state/swarmail-wake/s-1"), "utf8"),
     );
@@ -244,18 +245,17 @@ test("the shell-free re-arm starts a wait only for a registered session with no 
   await skips({ CLAUDE_CODE_SESSION_ID: "" });
   await skips({ SWARMAIL_WAKE_MOD: "1" }); // the Swarmail mod waits instead
   mkdirSync(join(state, "swarmail-wake"));
-  writeFileSync(pidFile, `${process.pid}\n`);
+  writeFileSync(pidFile, `${process.pid}\n${processIdentity(process.pid).start}\n`);
   await skips(); // a live waiter
-  const gone = Bun.spawn([process.execPath, "-e", ""]);
-  await gone.exited;
-  writeFileSync(pidFile, `${gone.pid}\n`); // its waiter exited without cleaning up
   expect(await rearm({}, ["wake", "claude", "soon"]).exited).toBe(64);
+  // The waiter exited without cleaning up, and a live process now holds its PID: the start time differs.
+  writeFileSync(pidFile, `${process.pid}\n1\n`);
   // The arguments cmd passes for the Windows command, which has no `;` separator there.
   const waits = rearm({}, ["rearm;", "exit", "$LASTEXITCODE"]);
-  for (let i = 0; i < 50 && readFileSync(pidFile, "utf8").trim() !== String(waits.pid); i++) {
+  for (let i = 0; i < 50 && parseInt(readFileSync(pidFile, "utf8")) !== waits.pid; i++) {
     await Bun.sleep(100);
   }
-  expect(Number(readFileSync(pidFile, "utf8"))).toBe(waits.pid);
+  expect(parseInt(readFileSync(pidFile, "utf8"))).toBe(waits.pid);
   await send("GreenCastle");
   expect(await waits.exited).toBe(2);
   expect(await new Response(waits.stderr).text()).toContain("for GreenCastle");
@@ -434,7 +434,7 @@ for (const [name, hook] of Object.entries(HOOKS)) {
       const newer = start();
       try {
         expect(await older.exited).toBe(0);
-        expect(Number(readFileSync(pidFile, "utf8"))).toBe(newer.pid);
+        expect(parseInt(readFileSync(pidFile, "utf8"))).toBe(newer.pid);
         await send("GreenCastle");
         expect(await newer.exited).toBe(2);
         expect(existsSync(pidFile)).toBe(false);
