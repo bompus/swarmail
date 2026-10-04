@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import { spawn } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { hostAlive, hostProcess, processIdentity } from "../src/proc.ts";
+import { shortPath } from "../src/proc-win32.ts";
 
 const windows = process.platform === "win32";
 
@@ -29,6 +33,20 @@ test.if(windows)("a gone process is not alive", async () => {
   );
   await new Promise((resolve) => child.on("exit", resolve));
   expect(hostAlive(id)).toBe(false);
+});
+
+test.if(windows)("shortens a path with a space to a name a hook shell takes as one word", () => {
+  const dir = mkdtempSync(join(tmpdir(), "swarmail-short-"));
+  try {
+    const spaced = join(dir, "Jane Doe");
+    mkdirSync(spaced);
+    const short = shortPath(spaced);
+    expect(short).not.toContain(" ");
+    expect(existsSync(short)).toBe(true);
+    expect(shortPath(join(dir, "missing"))).toBe(join(dir, "missing"));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("a host recorded without a start time never reads as alive", () => {

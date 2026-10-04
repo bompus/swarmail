@@ -82,8 +82,14 @@ export function processReader(platform = process.platform): (pid: number) => Pro
   };
 }
 
-/** Whether the host is still running: the same process by start time where it can be read, else its PID. */
+/**
+ * Whether the host is still running: the same process by start time where it can be read, else its PID. PID 1 or
+ * below means the hook was orphaned (reparented to init), so the host has gone.
+ */
 function liveCheck(pid: number): () => boolean {
+  if (pid <= 1) {
+    return () => false;
+  }
   const host: HostProcess | null = processIdentity(pid);
   if (host?.start !== undefined) {
     return () => hostAlive(host);
@@ -259,6 +265,19 @@ export async function wakeHook(
   return 0;
 }
 
+/** Whether `pid` still runs a waiter. Windows soon gives a PID to another process, so there the name must match. */
+function waiterAlive(pid: number): boolean {
+  if (process.platform === "win32") {
+    return /^(swarmail|bun)$/i.test(processIdentity(pid)?.name ?? "");
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * The PostToolUse re-arm without a shell: waits only in a registered Claude session with no Swarmail mod and no
  * live waiter, the same checks the Linux installer writes as shell around `hook wake claude`.
@@ -274,13 +293,8 @@ export async function rearmHook(input = "", env = process.env): Promise<number> 
     return 0;
   }
   const waiter = readPid(join(state, "swarmail-wake", sid));
-  if (waiter) {
-    try {
-      process.kill(waiter, 0);
-      return 0;
-    } catch {
-      // No live waiter: start one.
-    }
+  if (waiter && waiterAlive(waiter)) {
+    return 0;
   }
   return wakeHook("claude", undefined, input, env);
 }

@@ -194,7 +194,9 @@ test("the CLI prints usage for --help and refuses unknown arguments before writi
   mkdirSync(join(home, ".claude"));
   const script = Bun.fileURLToPath(new URL("../scripts/configure-mcp.ts", import.meta.url));
   const run = (args) =>
-    Bun.spawnSync([process.execPath, script, ...args], { env: { ...process.env, HOME: home } });
+    Bun.spawnSync([process.execPath, script, ...args], {
+      env: { ...process.env, HOME: home, USERPROFILE: home },
+    });
   const help = run(["--help"]);
   expect(help.exitCode).toBe(0);
   expect(help.stdout.toString()).toContain("Usage:");

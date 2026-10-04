@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { register } from "../src/claude-wake-mod.js";
 
 /** Loads the mod against a fake `$`. `tick` runs the next timer and returns the delay of the one it schedules. */
-function session({ registered = true, entrypoint = "cli" } = {}) {
+function session({ registered = true, entrypoint = "cli", home = { HOME: "/h" } } = {}) {
   const on = {};
   register((event, hook) => (on[event] = hook));
   const timers = [];
@@ -18,7 +18,7 @@ function session({ registered = true, entrypoint = "cli" } = {}) {
   const $ = {
     clock: { after: (ms, fn) => timers.push({ ms, fn }) },
     env: {
-      get: async (name) => ({ HOME: "/h", CLAUDE_CODE_ENTRYPOINT: entrypoint })[name],
+      get: async (name) => ({ ...home, CLAUDE_CODE_ENTRYPOINT: entrypoint })[name],
       set: async (name, value) => (state.env[name] = value),
     },
     fs: {
@@ -87,6 +87,14 @@ test("waits once the session is registered, and starts a turn with the hint when
   s.state.sid = "s-2";
   await s.tick();
   expect(s.state.fetched[2]).toContain("session=s-2&timeout=25&after=0");
+});
+
+test("finds the registration under the user profile when HOME is unset, as on Windows", async () => {
+  const s = session({ home: { USERPROFILE: "/h" } });
+  await s.start();
+  s.state.responses.push(hint(7));
+  expect(await s.tick()).toBe(0);
+  expect(s.state.fetched[0]).toContain("/wait?session=s-1");
 });
 
 test("a hint that arrives mid-turn goes with the next main-loop tool result, not a new turn", async () => {

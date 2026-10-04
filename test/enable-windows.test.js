@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { stopServer } from "../scripts/enable-windows.ts";
+import { savedEnv, stopServer } from "../scripts/enable-windows.ts";
 import { processIdentity } from "../src/proc.ts";
 
 const dirs = [];
@@ -35,3 +35,12 @@ test("stops the server its record names, and nothing once that process is gone",
     server.kill();
   }
 });
+
+test.if(process.platform === "win32")(
+  "reads a variable from the saved environment the task gets",
+  () => {
+    expect(savedEnv("SWARMAIL_TEST_NEVER_SET")).toBe("");
+    // Windows keeps TEMP among the user's saved variables.
+    expect(savedEnv("TEMP")).not.toBe("");
+  },
+);

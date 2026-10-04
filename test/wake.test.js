@@ -225,8 +225,9 @@ test("the shell-free re-arm starts a wait only for a registered session with no 
     session_id: "s-1",
     transcript_path: "/h/.claude/projects/w/s-1.jsonl",
   });
-  const rearm = (extra = {}) =>
-    Bun.spawn([process.execPath, join(import.meta.dir, "../src/cli.ts"), "hook", "rearm"], {
+  const cli = join(import.meta.dir, "../src/cli.ts");
+  const rearm = (extra = {}, args = ["rearm"]) =>
+    Bun.spawn([process.execPath, cli, "hook", ...args], {
       stdin: new Blob([input]),
       env: { ...env, ...extra },
       stderr: "pipe",
@@ -248,7 +249,9 @@ test("the shell-free re-arm starts a wait only for a registered session with no 
   const gone = Bun.spawn([process.execPath, "-e", ""]);
   await gone.exited;
   writeFileSync(pidFile, `${gone.pid}\n`); // its waiter exited without cleaning up
-  const waits = rearm();
+  expect(await rearm({}, ["wake", "claude", "soon"]).exited).toBe(64);
+  // The arguments cmd passes for the Windows command, which has no `;` separator there.
+  const waits = rearm({}, ["rearm;", "exit", "$LASTEXITCODE"]);
   for (let i = 0; i < 50 && readFileSync(pidFile, "utf8").trim() !== String(waits.pid); i++) {
     await Bun.sleep(100);
   }

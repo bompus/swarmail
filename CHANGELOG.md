@@ -35,16 +35,22 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   administrator; a rerun stops the running server by the PID and start time
   it records in `~/.local/state/swarmail-server.json`. The hook and MCP
   installers write the Windows host configs, with Devin's under
-  `AppData\Roaming\devin`.
+  `AppData\Roaming\devin`. `enable-windows.ts` reads `SWARMAIL_PORT` from
+  the saved user environment the task gets, and warns when the terminal's
+  value differs.
   - Hook commands name the binary as one unquoted path with forward
     slashes, which Git Bash, PowerShell and cmd all run, through the
-    profile's 8.3 short name when the path has a space. The installer
-    replaces the Swarmail hooks an earlier install wrote, whatever the path
-    form.
+    profile's 8.3 short name when the path has a space or a non-ASCII
+    letter. The installer replaces the Swarmail hooks an earlier install
+    wrote, whatever the path form. The hooks and the Swarmail mod use the
+    binary under `HOME` when it is set, where the build puts it, while the
+    host configs stay under the profile the hosts read.
   - The Claude Code wake and re-arm commands end in `; exit
     $LASTEXITCODE`, since PowerShell reports a native exit code 2 as 1.
+    Under cmd the CLI ignores that suffix, which arrives as arguments.
     The re-arm runs `swarmail hook rearm`, which makes the checks the Linux
-    hook writes as shell.
+    hook writes as shell and counts a recorded waiter as live only while
+    its PID still runs `swarmail` or `bun`.
   - The Swarmail mod lists its directory in `CLAUDE_CODE_PLUGIN_DIRS` with
     `;`, the separator Claude Code splits on in Windows.
   - The wake hook reads its host's parent from kernel32 and its command

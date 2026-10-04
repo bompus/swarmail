@@ -42,8 +42,13 @@ const COMMANDS: Record<string, Command> = {
       "swarmail hook wake <claude|cursor> [seconds]     the wake hook (wake-hook.ts)",
       "swarmail hook rearm                              the Claude PostToolUse re-arm where there is no shell",
     ],
-    run: async ([kind, host, seconds]) => {
-      if (kind !== "wake" && kind !== "rearm") {
+    run: async (args) => {
+      // The Windows Claude hooks end in `; exit $LASTEXITCODE` (configure-hooks.ts). cmd has no `;` separator and
+      // passes that through as arguments, so the command ends at the first word ending in `;`.
+      const end = args.findIndex((arg) => arg.endsWith(";"));
+      const [kind, host, seconds] =
+        end === -1 ? args : [...args.slice(0, end), args[end]!.slice(0, -1)];
+      if ((kind !== "wake" && kind !== "rearm") || (seconds && !(Number(seconds) > 0))) {
         usage(64);
       }
       const { rearmHook, wakeHook } = await import("./wake-hook.ts");

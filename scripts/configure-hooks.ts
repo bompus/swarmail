@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join, resolve, win32 } from "node:path";
-import { binaryPath } from "../src/paths.ts";
+import { binaryPath, homeDir } from "../src/paths.ts";
 import { shortPath } from "../src/proc-win32.ts";
 import {
   object,
@@ -29,7 +29,7 @@ const SHELL_WORD = /^[\w.:/~-]+$/;
 /**
  * The binary as it appears in a hook command. Windows hosts run the command through Git Bash, PowerShell or cmd,
  * and a quoted path is a parse error in PowerShell and cmd, so the path goes unquoted with forward slashes. A
- * profile path with a space or other shell character is replaced by its 8.3 short name.
+ * profile path with a space, another shell character or a non-ASCII letter is replaced by its 8.3 short name.
  */
 export function hookBinary(
   home: string,
@@ -47,7 +47,7 @@ export function hookBinary(
   }
   if (!SHELL_WORD.test(bin)) {
     throw new Error(
-      `${bin}: hooks can't run a path with spaces or shell characters, and this volume has no short name for it`,
+      `${bin}: hooks can't run a path with spaces, shell characters or non-ASCII letters, and this volume has no short name for it`,
     );
   }
   return bin;
@@ -58,7 +58,8 @@ export function swarmailHookPaths(home: string, platform: NodeJS.Platform = proc
   const bin = binaryPath(home, platform);
   const run = hookBinary(home, platform);
   // Claude runs a Windows hook through Git Bash or PowerShell, and PowerShell reports any exit code but 0 as 1, which
-  // would lose the wake's exit 2. Git Bash reads the unset variable as a bare `exit`, which keeps the status.
+  // would lose the wake's exit 2. Git Bash reads the unset variable as a bare `exit`, which keeps the status. cmd
+  // passes the suffix to the binary as arguments, and the CLI ignores everything from `claude;` or `rearm;` on.
   const keepExit = platform === "win32" ? "; exit $LASTEXITCODE" : "";
   return {
     bin,
@@ -213,14 +214,19 @@ export default {
 `;
 }
 
+/**
+ * Writes the hooks into the host configs under `home`. `swarmailHome` is where scripts/build.ts put the binary and
+ * where the mod goes: HOME first, which on Windows can differ from the profile the hosts read their configs from.
+ */
 export function configureSwarmailHooks(
   home: string = homedir(),
-  { dryRun = false, claudeMod = true } = {},
+  { dryRun = false, claudeMod = true, swarmailHome = home } = {},
 ) {
   home = resolve(home);
-  const { bin, command, wake, rearm } = swarmailHookPaths(home);
+  swarmailHome = resolve(swarmailHome);
+  const { bin, command, wake, rearm } = swarmailHookPaths(swarmailHome);
   const windows = process.platform === "win32";
-  const mod = claudeModPlugin(home);
+  const mod = claudeModPlugin(swarmailHome);
   // Only Claude Code loads the mod; Cursor, Devin and Grok keep the wake hooks.
   const withMod = claudeMod && !!present(join(home, ".claude"));
   const hookEntry = { type: "command", command, timeout: 15 };
@@ -235,7 +241,7 @@ export function configureSwarmailHooks(
     },
     ...(withMod ? Object.entries(mod.files) : []).map(([path, next]) => ({
       path,
-      original: readConfig(path, home),
+      original: readConfig(path, swarmailHome),
       next,
       hosts: [".claude"],
     })),
@@ -316,6 +322,7 @@ if (import.meta.main) {
   console.log(
     JSON.stringify(
       configureSwarmailHooks(homedir(), {
+        swarmailHome: homeDir(),
         dryRun: args.includes("--dry-run"),
         claudeMod: !args.includes("--no-claude-mod"),
       }),

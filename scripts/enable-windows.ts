@@ -43,15 +43,29 @@ async function healthy(port: number): Promise<boolean> {
   }
 }
 
-function powershell(script: string, env: Record<string, string>): void {
+function powershell(script: string, env: Record<string, string>): string {
   const run = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
     env: { ...process.env, ...env },
-    stdio: ["ignore", "ignore", "inherit"],
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "inherit"],
     windowsHide: true,
   });
   if (run.status !== 0) {
     throw new Error(`PowerShell failed (exit ${run.status}): ${script.split("\n")[0]}`);
   }
+  return run.stdout.trim();
+}
+
+/**
+ * A variable as the task's server sees it: the user's registry value, else the machine's. A `setx` in this terminal
+ * changes the registry but not this process's environment.
+ */
+export function savedEnv(name: string): string {
+  return powershell(
+    "$v = [Environment]::GetEnvironmentVariable($env:SWARMAIL_VAR, 'User'); " +
+      "if (!$v) { $v = [Environment]::GetEnvironmentVariable($env:SWARMAIL_VAR, 'Machine') }; $v",
+    { SWARMAIL_VAR: name },
+  );
 }
 
 // The binary path and task name travel as environment variables, so no path needs quoting inside the script.
@@ -71,7 +85,14 @@ if (import.meta.main) {
   if (process.platform !== "win32") {
     throw new Error("Windows only; on Linux run scripts/enable.sh.");
   }
-  const port = Number(process.env.SWARMAIL_PORT || DEFAULT_PORT);
+  const saved = savedEnv("SWARMAIL_PORT");
+  if ((process.env.SWARMAIL_PORT ?? "") !== saved) {
+    console.warn(
+      `SWARMAIL_PORT is "${process.env.SWARMAIL_PORT ?? ""}" here but "${saved}" in your saved ` +
+        "environment; the task uses the saved one.",
+    );
+  }
+  const port = Number(saved || DEFAULT_PORT);
   const bin = binaryPath();
   buildSwarmail(undefined, bin);
   if (await stopServer()) {
@@ -81,7 +102,7 @@ if (import.meta.main) {
   if (await healthy(port)) {
     console.error(
       `Another server already answers on 127.0.0.1:${port} (one in WSL, or one started by hand). ` +
-        "Stop it, or set SWARMAIL_PORT and rerun.",
+        "Stop it, or `setx SWARMAIL_PORT <port>` and rerun.",
     );
     process.exit(1);
   }

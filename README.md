@@ -124,11 +124,11 @@ yet.
 
    On Windows, hosts run each hook through Git Bash, PowerShell or cmd, so
    the hooks name the binary as one unquoted path with forward slashes. If
-   your profile path has a space, the hooks use its 8.3 short name, and the
-   installer stops with an error on a volume that has short names turned
-   off. Cursor passes hook input through Windows PowerShell 5.1, which turns
-   non-ASCII characters into `?`, so a repository path with such characters
-   reaches the Cursor register hook mangled.
+   your profile path has a space or a non-ASCII letter, the hooks use its 8.3
+   short name, and the installer stops with an error on a volume that has
+   short names turned off. Cursor passes hook input through Windows
+   PowerShell 5.1, which turns non-ASCII characters into `?`, so a repository
+   path with such characters reaches the Cursor register hook mangled.
 
 5. Optional: `bun scripts/install-guard.ts [repo...]` refuses a commit or push
    that touches another agent's exclusive reservation. It installs into

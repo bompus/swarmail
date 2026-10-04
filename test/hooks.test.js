@@ -81,7 +81,9 @@ test("the CLI prints usage for --help and refuses unknown flags before writing",
   mkdirSync(join(dir, ".claude"));
   const script = Bun.fileURLToPath(new URL("../scripts/configure-hooks.ts", import.meta.url));
   const run = (args) =>
-    Bun.spawnSync([process.execPath, script, ...args], { env: { ...process.env, HOME: dir } });
+    Bun.spawnSync([process.execPath, script, ...args], {
+      env: { ...process.env, HOME: dir, USERPROFILE: dir },
+    });
   const help = run(["--help"]);
   expect(help.exitCode).toBe(0);
   expect(help.stdout.toString()).toContain("Usage:");
@@ -184,6 +186,22 @@ test.skipIf(windows)(
   },
 );
 
+test("hooks run the binary and mod from the Swarmail home when it differs from the profile the hosts read", () => {
+  const profile = home();
+  const swarmailHome = home();
+  mkdirSync(join(profile, ".claude"));
+  configureSwarmailHooks(profile, { swarmailHome });
+  const settings = JSON.parse(readFileSync(join(profile, ".claude", "settings.json"), "utf8"));
+  const { command } = swarmailHookPaths(swarmailHome);
+  expect(settings.hooks.PreToolUse[0].hooks[0].command).toBe(command);
+  const { dir: plugin, files } = claudeModPlugin(swarmailHome);
+  expect(settings.env.CLAUDE_CODE_PLUGIN_DIRS).toBe(plugin);
+  for (const file of Object.keys(files)) {
+    expect(existsSync(file)).toBe(true);
+  }
+  expect(existsSync(join(profile, ".local"))).toBe(false);
+});
+
 test("installs the Swarmail mod for Claude Code beside the user's plugin directories, and --no-claude-mod removes it", () => {
   const dir = home();
   const path = join(dir, ".claude", "settings.json");
@@ -232,10 +250,18 @@ test("withPluginDir adds and removes only its own directory", () => {
 
 test("hook commands name the binary as one shell word on Windows, through the 8.3 name when the profile path needs it", () => {
   expect(hookBinary("/home/me", "linux")).toBe(`"${join("/home/me", ".local/bin/swarmail")}"`);
-  const short = (path) => (path === "C:\\Users\\Jane Doe" ? "C:\\Users\\JANEDO~1" : path);
+  const names = {
+    "C:\\Users\\Jane Doe": "C:\\Users\\JANEDO~1",
+    "C:\\Users\\José": "C:\\Users\\JOS~1",
+  };
+  const short = (path) => names[path] ?? path;
   expect(hookBinary("C:\\Users\\me", "win32", short)).toBe("C:/Users/me/.local/bin/swarmail.exe");
   expect(hookBinary("C:\\Users\\Jane Doe", "win32", short)).toBe(
     "C:/Users/JANEDO~1/.local/bin/swarmail.exe",
+  );
+  // The plain shell word is ASCII only.
+  expect(hookBinary("C:\\Users\\José", "win32", short)).toBe(
+    "C:/Users/JOS~1/.local/bin/swarmail.exe",
   );
   // A volume with 8.3 names turned off has none to give.
   expect(() => hookBinary("C:\\Users\\Jane Doe", "win32", (path) => path)).toThrow("no short name");
