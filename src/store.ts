@@ -485,15 +485,13 @@ export class MailStore {
     let worktree = existing?.worktree ?? null;
     if (a.worktree !== undefined) {
       const supplied = str(a.worktree, "worktree");
-      if (
-        !isAbsolute(supplied) ||
-        primaryCheckout(supplied) !== (primaryCheckout(p.human_key) ?? p.human_key)
-      ) {
+      const root = isAbsolute(supplied) ? worktreeRoot(supplied) : null;
+      if (!root || primaryCheckout(supplied) !== (primaryCheckout(p.human_key) ?? p.human_key)) {
         throw new ToolError("INVALID_ARGUMENT", "worktree must belong to this project", {
           field: "worktree",
         });
       }
-      worktree = realpathSync(worktreeRoot(supplied)!);
+      worktree = realpathSync(root);
     }
     if (existing) {
       // Re-registering replaces the task description. A leading `[host:session ...]` tag routes

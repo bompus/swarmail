@@ -1263,6 +1263,9 @@ test("locations follow the edited checkout while messages keep their sender snap
     await expect(
       call("register_agent", { ...registration, worktree: unrelated }),
     ).rejects.toMatchObject({ type: "INVALID_ARGUMENT" });
+    await expect(
+      call("register_agent", { ...registration, worktree: join(repo, ".git") }),
+    ).rejects.toMatchObject({ type: "INVALID_ARGUMENT", data: { field: "worktree" } });
     git(other, "switch", "-q", "--detach");
     expect(
       (await call("list_agents", { project_key: repo })).find((a) => a.name === "BlueBranch")
