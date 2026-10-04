@@ -120,6 +120,11 @@ please open an issue.
    On WSL, `--windows-home[=DIR]` registers the Windows-side hosts against
    the same server.
 
+   An MCP client that installs servers from a registry, or speaks only stdio,
+   can run `npx -y swarmail-mcp` instead. That
+   [relay](packages/mcp-relay/README.md) forwards each request to the server
+   from step 2 and installs nothing itself.
+
 4. Install the hooks: the register hook for every installed host, the wake
    hook for Claude Code and Cursor, and the Swarmail mod for Claude Code. A
    host counts as installed when its config directory exists. Add `--dry-run`
@@ -188,7 +193,7 @@ anywhere prints usage and runs nothing.
 | --- | --- | --- |
 | `SWARMAIL_DB` | `~/.local/share/swarmail/mail.sqlite3` | Database path |
 | `SWARMAIL_PORT` | `18765` | Server port |
-| `SWARMAIL_URL` | `http://127.0.0.1:18765/mcp/` | MCP endpoint for the command and the register hook |
+| `SWARMAIL_URL` | `http://127.0.0.1:18765/mcp/` | MCP endpoint for the command, the register hook and the `swarmail-mcp` relay |
 | `SWARMAIL_WAKE_URL` | `http://127.0.0.1:18765` | Server base URL for the wake hook |
 | `SWARMAIL_SYNCHRONOUS` | `normal` | `full` syncs every commit, at about 3 ms per send instead of 0.5 ms |
 | `SWARMAIL_RETIRE_DAYS` | `7` | Retire idle agents and drop projects whose checkout is gone; `0` keeps both |

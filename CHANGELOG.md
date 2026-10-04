@@ -2,6 +2,15 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- `swarmail-mcp` (`packages/mcp-relay/`), a stdio relay for MCP clients that
+  install servers from a registry or speak only stdio. It forwards each
+  JSON-RPC message to the running server at `SWARMAIL_URL` and answers every
+  request with an error naming the install steps while the server is down.
+  Node 18 or newer, no dependencies. `server.json` describes it for the
+  official MCP registry as `io.github.bompus/swarmail`.
+
 ## 0.2.1 - 2026-10-04
 
 - Claude Code and Cursor sessions register when they start, and the agent is
