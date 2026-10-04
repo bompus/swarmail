@@ -252,10 +252,10 @@ with latency from Tinybench and requests per second from oha. The multipliers
 are computed from those values. [docs/benchmarks.md](docs/benchmarks.md) has
 the method, a fourth server and each tool's raw output.
 
-<picture>
+<a href="docs/assets/benchmark-light.png"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-dark.png">
   <img src="docs/assets/benchmark-light.png" alt="Bar charts comparing Swarmail with mcp_agent_mail_rust and mcp_agent_mail. Send p50: 0.47 ms, 36 ms and 71 ms. Search p50: 0.68 ms, 54 ms and 11 ms. Startup: 44 ms, 1.6 s and 0.87 s. Idle memory: 39 MiB, 193 MiB and 154 MiB." width="100%">
-</picture>
+</picture></a>
 
 | | Swarmail | mcp_agent_mail_rust | mcp_agent_mail |
 | --- | --- | --- | --- |
