@@ -41,8 +41,11 @@ The maintainer cuts each release from `main`:
    version in its `package.json` and in both places in `server.json`. Then run
    `npm publish` in `packages/mcp-relay/` and `mcp-publisher publish` in the
    repository root.
-4. On Glama's [admin page](https://glama.ai/mcp/servers/bompus/swarmail/admin/dockerfile),
-   click Sync Server, then Deploy. When the build test passes, click Make
-   Release and enter `X.Y.Z`. The saved build spec (build steps
+4. Check that Glama's admin Releases page lists `X.Y.Z`. With Auto-Release
+   enabled, Glama builds and publishes it after the GitHub release. Its public
+   listing and scores can update later. If Auto-Release is off, use the
+   [admin page](https://glama.ai/mcp/servers/bompus/swarmail/admin/dockerfile)
+   to Sync Server, then Deploy. When the build test passes, click Make Release
+   and enter `X.Y.Z`. The saved build spec (build steps
    `["npm install -g bun@1.4.2"]`, CMD `["bun", "scripts/glama.ts"]`) needs a
    change only when the Bun version CI uses or `scripts/glama.ts` changes.

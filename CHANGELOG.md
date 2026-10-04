@@ -2,6 +2,11 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- The release guide covers Glama Auto-Release and the delay before its public
+  listing and scores update.
+
 ## 0.2.2 - 2026-10-04
 
 - Every tool now declares MCP annotations (`readOnlyHint`, `destructiveHint`,
