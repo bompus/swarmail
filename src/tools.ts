@@ -465,7 +465,8 @@ export const TOOLS: Tool[] = [
   {
     name: "acknowledge_message",
     description:
-      "Acknowledge one message, which also marks it read; a repeat keeps the first times. " +
+      "Acknowledge one message and mark it read. Repeated calls preserve its first read " +
+      "and acknowledgement timestamps but refresh your agent's activity time. " +
       "Use it for messages with ack_required: the sender sees it in " +
       "get_message_delivery_receipt, and fetch_inbox stops listing it under " +
       "ack_overdue_only. Fails with NOT_FOUND unless you are a recipient.",
@@ -638,8 +639,12 @@ export const TOOLS: Tool[] = [
   {
     name: "release_file_reservations",
     description:
-      "Release your active reservations, all or those matching paths or ids, so other " +
-      "agents can reserve those paths. Returns how many were released; zero is not an error.",
+      "Release your active reservations when you finish work so other agents can reserve " +
+      "those paths. While work continues, use renew_file_reservations instead. Omit both " +
+      "filters to release all; supply paths or file_reservation_ids for a subset. Empty " +
+      "filters impose no restriction; two nonempty filters must both match. " +
+      "Returns how many were released; " +
+      "zero is not an error.",
     properties: {
       project_key: PROJECT,
       agent_name: AGENT,
