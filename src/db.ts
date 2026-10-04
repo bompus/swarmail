@@ -151,8 +151,10 @@ export function openDatabase(
     throw new Error(`SWARMAIL_SYNCHRONOUS must be normal or full, not ${synchronous}`);
   }
   const db = new Database(path, { create: true, strict: true });
-  db.run("PRAGMA journal_mode = WAL");
+  // First, so the journal_mode read waits out a hook or `swarmail who` that holds the file or is recovering its WAL
+  // (SQLITE_BUSY_RECOVERY), instead of failing the start.
   db.run("PRAGMA busy_timeout = 5000");
+  db.run("PRAGMA journal_mode = WAL");
   db.run(`PRAGMA synchronous = ${synchronous.toUpperCase()}`);
   db.run("PRAGMA foreign_keys = ON");
   db.exec(schema);
