@@ -295,7 +295,8 @@ export const TOOLS: Tool[] = [
     description:
       "Retire an agent whose session has ended, so it no longer appears in list_agents and " +
       "new messages to it fail. Its messages stay. unretire_agent reverses it, and so does " +
-      "any tool call the agent makes as itself.",
+      "the agent registering again or sending, reading mail or reserving files as itself. " +
+      "Lookups such as whois and list_agents do not.",
     properties: { project_key: PROJECT, agent_name: prop("string", "The agent to retire.") },
     required: ["project_key", "agent_name"],
     run: (s, a) => {
@@ -311,8 +312,9 @@ export const TOOLS: Tool[] = [
     name: "unretire_agent",
     description:
       "Bring a retired agent back into list_agents so it can receive messages again; its " +
-      "earlier messages are unchanged. An agent that calls a tool as itself or registers " +
-      "again comes back on its own, so use this to revive another agent.",
+      "earlier messages are unchanged. An agent comes back on its own when it registers " +
+      "again or sends, reads mail or reserves files as itself, so use this to revive " +
+      "another agent.",
     properties: {
       project_key: PROJECT,
       agent_name: prop("string", "The retired agent to bring back."),
@@ -439,7 +441,6 @@ export const TOOLS: Tool[] = [
       "a recipient.",
     properties: { project_key: PROJECT, agent_name: AGENT, message_id: MESSAGE },
     required: ["project_key", "agent_name", "message_id"],
-    idempotent: true,
     run: (s, a) => {
       const p = s.project(a.project_key),
         who = s.acting(p, a.agent_name);
@@ -460,7 +461,6 @@ export const TOOLS: Tool[] = [
       "ack_overdue_only. Fails with NOT_FOUND unless you are a recipient.",
     properties: { project_key: PROJECT, agent_name: AGENT, message_id: MESSAGE },
     required: ["project_key", "agent_name", "message_id"],
-    idempotent: true,
     run: (s, a) => {
       const p = s.project(a.project_key),
         who = s.acting(p, a.agent_name);
@@ -637,7 +637,6 @@ export const TOOLS: Tool[] = [
       file_reservation_ids: RESERVATION_IDS,
     },
     required: ["project_key", "agent_name"],
-    idempotent: true,
     destructive: true,
     run: (s, a) => {
       const p = s.project(a.project_key),
