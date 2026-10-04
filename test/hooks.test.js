@@ -129,6 +129,8 @@ test("adds the Claude register and wake hooks once, keeping other hooks", () => 
   expect(ours("UserPromptSubmit")).toHaveLength(1);
   expect(ours("UserPromptSubmit")[0].matcher).toBeUndefined();
   expect(ours("SessionEnd")).toHaveLength(1);
+  expect(ours("SessionStart")).toHaveLength(1);
+  expect(ours("SessionStart")[0].matcher).toBeUndefined();
   expect(ours("PreToolUse")[0].matcher).toBe(
     "Edit|Write|MultiEdit|NotebookEdit|edit|write|apply_patch|notebook_edit",
   );
@@ -287,7 +289,7 @@ test("a Windows install replaces the hook a Linux-style or long-path install wro
   }
 });
 
-test("adds the Cursor wake hook beside existing stop hooks", () => {
+test("adds the Cursor session-start and wake hooks beside existing hooks", () => {
   const dir = home();
   const path = join(dir, ".cursor", "hooks.json");
   mkdirSync(join(dir, ".cursor"));
@@ -305,6 +307,9 @@ test("adds the Cursor wake hook beside existing stop hooks", () => {
   expect(config.hooks.stop).toEqual([
     { command: "./audit.sh" },
     { command: `${hookBinary(dir)} hook wake cursor`, timeout: 28900 },
+  ]);
+  expect(config.hooks.sessionStart).toEqual([
+    { command: `${hookBinary(dir)} register`, timeout: 15 },
   ]);
   const fresh = home();
   mkdirSync(join(fresh, ".cursor"));

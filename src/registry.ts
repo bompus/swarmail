@@ -153,9 +153,9 @@ export function rowForSession(rows: RosterRow[], tag: Tag | null): RosterRow | n
  */
 export function keptTask(description: unknown): string {
   const text = withoutTag(description)
-    .replace(/^(?:.* session [\w-]+ \()?registered on first edit\)?$/, "")
+    .replace(/^(?:.* session [\w-]+ \()?registered (?:by hook|on first edit)\)?$/, "")
     .trim();
-  return text || "registered on first edit";
+  return text || "registered by hook";
 }
 
 /** Registers `session` with the server, keeping the name its roster row or state already has. */

@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // Installs the Swarmail hooks (`swarmail register`, `swarmail hook wake`) for every host: Claude settings, which Cursor, Devin and Grok also load; Cursor's own hooks.json for its
-// wake hook; Codex (~/.codex/hooks.json), OpenCode (a plugin) and Antigravity
+// session-start registration and wake hook; Codex (~/.codex/hooks.json), OpenCode (a plugin) and Antigravity
 // (~/.gemini/config/hooks.json). Claude Code also gets the Swarmail mod, its wake without a waiting hook process,
 // unless --no-claude-mod. On Windows every hook command is one unquoted path, which Git Bash, PowerShell and cmd
 // all run alike. A host whose directory doesn't exist is skipped, so a host that isn't installed gets no config
@@ -140,8 +140,9 @@ export const withHook = (config: Record<string, unknown>, event: string, entry: 
 
 /**
  * Claude settings: the register hook on file-edit tools (the lowercase names are Devin's, which loads
- * this file too), on UserPromptSubmit, which retries a registration that failed, and on SessionEnd,
- * which records the end and releases the session's reservations; and the wake hook
+ * this file too), on SessionStart, which registers the session and tells it its name, on
+ * UserPromptSubmit, which retries a registration that failed, and on SessionEnd, which records the end
+ * and releases the session's reservations; and the wake hook
  * as an async Stop hook that waits for mail after each turn, whose exit 2 starts a new turn. The same
  * wait on PostToolUse (`rearmCommand`) covers mail that arrives mid-turn after the previous wait has
  * delivered, or before the session's first Stop; its hint joins the running turn.
@@ -161,6 +162,7 @@ export function withClaudeHooks(
     "PreToolUse",
     entry("Edit|Write|MultiEdit|NotebookEdit|edit|write|apply_patch|notebook_edit"),
   );
+  next = withHook(next, "SessionStart", entry());
   next = withHook(next, "UserPromptSubmit", entry());
   next = withHook(next, "SessionEnd", entry());
   // Claude cancels an asyncRewake hook at this timeout, so it only has to outlast the script's own wait.
@@ -248,13 +250,15 @@ export function configureSwarmailHooks(
     // Cursor runs the Claude Stop hook too, where the script exits at once (no CLAUDE_PID ancestor).
     // Its own stop hook holds the idle turn open, and a followup_message starts the next one. Cursor
     // stops auto-continuing after 5 follow-ups with no user prompt (loop_limit), which also ends a
-    // loop of agents waking each other.
+    // loop of agents waking each other. The Cursor CLI ran no Claude SessionStart hook in testing, so
+    // registration at session start has its own entry here.
     {
       ...planJson(join(home, ".cursor", "hooks.json"), home, (config) =>
-        withHook({ version: 1, ...config }, "stop", {
-          command: wake("cursor"),
-          timeout: WAKE_SECONDS.cursor + 100,
-        }),
+        withHook(
+          withHook({ version: 1, ...config }, "sessionStart", { command, timeout: 15 }),
+          "stop",
+          { command: wake("cursor"), timeout: WAKE_SECONDS.cursor + 100 },
+        ),
       ),
       hosts: [".cursor"],
     },
