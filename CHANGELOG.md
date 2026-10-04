@@ -4,6 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- The README compares roster scope, search, threads, receipts, file reservations
+  and idle wakes across the six benchmarked servers, with pinned source links.
+
 - The release guide covers Glama Auto-Release and the delay before its public
   listing and scores update.
 - Roster entries include an edit location with the repository, worktree, current

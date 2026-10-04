@@ -257,6 +257,24 @@ Code the wait also re-arms after each tool call, so a hint can join a running
 turn. The server answers `swarmail ping` itself, so a ping never wakes the
 model. Sessions on other hosts see mail on their next `fetch_inbox`.
 
+## Feature comparison
+
+These are the six servers measured below. Features describe the pinned source
+versions in the [detailed comparison](docs/benchmarks.md#features), which also
+covers runtimes, platforms, licences and two additional servers.
+
+| Server | Roster scope | Search | Threads and receipts | File reservations | Wakes an idle session |
+| --- | --- | --- | --- | --- | --- |
+| Swarmail | Per repository; worktrees share it | Full text (FTS5) | Threads; read, acknowledged and delivery receipts | Advisory, with a git guard | Claude Code and Cursor |
+| [mcp_agent_mail_rust](https://github.com/Dicklesworthstone/mcp_agent_mail_rust/tree/21a25c2bcfd20c9b31bcb109c294d17411eb5ba1) | Per project path | Full text (Tantivy) | Threads; read, acknowledged and delivery receipts | Advisory, with a git guard | No; Claude Code hooks check the inbox during a turn |
+| [mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_agent_mail/tree/3fad5ec672869f81d2ca0a4c525dde004ac96f45) | Per project path | Full text (FTS5) | Threads; read and acknowledged | Advisory, with a git guard that is off by default | No; Claude Code, Codex and Factory hooks check the inbox during a turn |
+| [agent-inbox](https://github.com/salimfadhley/agent-inbox/tree/a86647c2d61265e9a12fbc9ea0826a27712492cb) | One per hub | Substring, at most 25 results | Threads; read state | None | Claude Code (opt-in hook), opencode, omp |
+| [agentbus](https://github.com/oznotes/AgentCommBus/tree/225a57c91180421bf2d698328a57f488f18bd820) | One per server | None | No threads; reading moves a cursor | None | No; an agent waits in `recv` for up to 600 s |
+| [Project Relay](https://github.com/MuhammadFarhantahirvoltic/project-relay/tree/36d9a0765e4469f667c2e09fafe745166493fa86) | Per project | None | Replies; acknowledged per recipient | Advisory leases | No; an inbox read waits for up to 25 s |
+
+An inbox read that waits for mail needs an agent already running. It does not
+wake an idle session.
+
 ## Performance
 
 Measured on one machine with one small workload (40 agents, 250 seed messages,
