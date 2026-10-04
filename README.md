@@ -319,6 +319,11 @@ bun run check   # format, lint and type check
 `bun scripts/build.ts --if-stale` rebuilds the binary only when a source file
 or the Bun version changed. Restart the unit to load a new build.
 
+## Sponsoring
+
+Swarmail is built and maintained by one person. If it saves you time, you can
+support it on [Ko-fi](https://ko-fi.com/bompus).
+
 ## Licence
 
 MIT. `CODE_OF_CONDUCT.md` is the Contributor Covenant under CC BY 4.0; see
