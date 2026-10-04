@@ -32,7 +32,14 @@ checkout, unless a project already exists under that exact path.
   already has one keeps that name. Two tags name one session when they share
   a T3 thread, or, when either has none, the same `<host>:<session id>`.
   `list_agents` also returns the tag's parts as `host`, `session_id`,
-  `t3_thread` and `cwd`.
+  `t3_thread` and `cwd`. The separate `location` contains the edit checkout's
+  repository, worktree, current branch and available T3 title. The hook refreshes
+  it when an edit moves to another checkout. Manual registrations can pass
+  `worktree`, an absolute checkout path in the same project; omitting it keeps
+  the recorded location. Names and launch `cwd` stay unchanged.
+- New messages include `sender_location`, saved when sent. A sender moving
+  later does not change old inbox entries. Messages predating this field have
+  a null location.
 
 ## When to send mail
 

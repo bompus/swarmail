@@ -19,3 +19,12 @@ function git(args: string[]): string {
     stdio: ["ignore", "pipe", "ignore"],
   }).trim();
 }
+
+/** The actual worktree root, keeping linked worktrees separate from their primary checkout. */
+export function worktreeRoot(dir: string): string | null {
+  try {
+    return resolve(git(["-C", dir, "rev-parse", "--show-toplevel"]));
+  } catch {
+    return null;
+  }
+}

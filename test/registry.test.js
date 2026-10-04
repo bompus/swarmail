@@ -90,3 +90,99 @@ test("readers skip unreadable or foreign state and leftover temporary files", ()
     );
   });
 });
+
+test("a changed edit checkout refreshes registration and survives a failed retry", () => {
+  withRegistry((registry) => {
+    let up = true;
+    const calls = [];
+    const register = (project, name) => {
+      calls.push([project, name]);
+      return up ? (name ?? "BlueLake") : null;
+    };
+    const settle = (worktree) =>
+      registry.settle("edit", {
+        since: 0,
+        project: "/r",
+        tag: "[claude:edit cwd:/launch]",
+        worktree,
+        register,
+      });
+    settle("/w/a");
+    settle("/w/a");
+    expect(calls).toHaveLength(1);
+    up = false;
+    expect(settle("/w/b").after.worktrees["/r"]).toBe("/w/a");
+    expect(registry.resume("edit", 0)).toEqual({
+      project: "/r",
+      tag: "[claude:edit cwd:/launch]",
+      worktree: "/w/b",
+    });
+    expect(settle(undefined).after.pending).toEqual({
+      project: "/r",
+      tag: "[claude:edit cwd:/launch]",
+      worktree: "/w/b",
+    });
+    up = true;
+    const pending = registry.resume("edit", 0);
+    expect(settle(pending.worktree).after.worktrees["/r"]).toBe("/w/b");
+    expect(registry.read("edit").pending).toBeUndefined();
+    expect(calls).toEqual([
+      ["/r", null],
+      ["/r", "BlueLake"],
+      ["/r", "BlueLake"],
+    ]);
+  });
+});
+
+test("registration orderings preserve pending edit locations across supervisor calls", () => {
+  withRegistry((registry, dir) => {
+    const events = [
+      { name: "edit A", worktree: "/w/a", up: true },
+      { name: "edit B", worktree: "/w/b", up: true },
+      { name: "supervisor", worktree: undefined, up: true },
+      { name: "failed A", worktree: "/w/a", up: false },
+      { name: "failed B", worktree: "/w/b", up: false },
+      { name: "prompt retry", retry: true, up: true },
+    ];
+    const violations = [];
+    const visit = (state, sequence) => {
+      if (sequence.length === 3) {
+        return;
+      }
+      for (const event of events) {
+        writeFileSync(join(dir, "orders.json"), JSON.stringify(state));
+        const worktree = event.retry ? state.pending?.worktree : event.worktree;
+        const next =
+          event.retry && !state.pending
+            ? state
+            : registry.settle("orders", {
+                since: 0,
+                project: "/r",
+                tag: "[claude:s]",
+                worktree,
+                register: () => (event.up ? "BlueLake" : null),
+              }).after;
+        const nextSequence = [...sequence, event.name];
+        const settled = event.up || worktree === state.worktrees?.["/r"];
+        const expectedLocation =
+          settled && worktree !== undefined ? worktree : state.worktrees?.["/r"];
+        const expectedPending =
+          worktree === undefined
+            ? state.pending
+            : settled
+              ? undefined
+              : { project: "/r", tag: "[claude:s]", worktree };
+        if (
+          next.worktrees?.["/r"] !== expectedLocation ||
+          JSON.stringify(next.pending) !== JSON.stringify(expectedPending) ||
+          (state.name && next.name !== state.name)
+        ) {
+          violations.push(nextSequence.join(" -> "));
+        }
+        visit(next, nextSequence);
+      }
+    };
+    visit({ name: null, projects: [] }, []);
+    expect(violations).toEqual([]);
+  });
+});

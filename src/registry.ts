@@ -23,7 +23,8 @@ export interface RegisterState {
   name: string | null;
   projects: string[];
   tags?: Record<string, string>;
-  pending?: { project: string; tag: string };
+  worktrees?: Record<string, string>;
+  pending?: { project: string; tag: string; worktree?: string };
   host?: HostProcess | null;
   /** When the host reported the session ended (SessionEnd); its next prompt or edit clears it. */
   ended?: string;
@@ -95,8 +96,8 @@ export function withLock(
 
 /**
  * Registers `session` under `project` unless its state already lists it with this `tag`. A changed
- * tag, or state from before tags were recorded, registers again under the same name so the roster
- * row carries the current tag. Returns the new state, or the old one when nothing changed or the
+ * tag or edit checkout, or state from before they were recorded, registers again under the same
+ * name so the roster row carries the current location and tag. Returns the new state, or the old one when nothing changed or the
  * server failed.
  */
 export function ensureRegistered<S extends RegisterState>(
@@ -104,8 +105,13 @@ export function ensureRegistered<S extends RegisterState>(
   project: string,
   tag: string,
   register: Register,
+  worktree?: string,
 ): S {
-  if (state.projects.includes(project) && state.tags?.[project] === tag) {
+  if (
+    state.projects.includes(project) &&
+    state.tags?.[project] === tag &&
+    (worktree === undefined || state.worktrees?.[project] === worktree)
+  ) {
     return state;
   }
   const name = register(project, state.name);
@@ -113,7 +119,13 @@ export function ensureRegistered<S extends RegisterState>(
     return state;
   }
   const projects = state.projects.includes(project) ? state.projects : [...state.projects, project];
-  return { ...state, name, projects, tags: { ...state.tags, [project]: tag } };
+  return {
+    ...state,
+    name,
+    projects,
+    tags: { ...state.tags, [project]: tag },
+    ...(worktree !== undefined && { worktrees: { ...state.worktrees, [project]: worktree } }),
+  };
 }
 
 /**
@@ -126,13 +138,26 @@ function settleRegistration<S extends RegisterState>(
   project: string,
   tag: string,
   register: Register,
+  worktree?: string,
 ): S {
-  const next = ensureRegistered(state, project, tag, register);
-  if (next.projects.includes(project) && next.tags?.[project] === tag) {
+  // A supervisor without an edit checkout cannot complete a pending location update.
+  if (
+    worktree === undefined &&
+    state.pending?.project === project &&
+    state.pending.worktree !== undefined
+  ) {
+    return state;
+  }
+  const next = ensureRegistered(state, project, tag, register, worktree);
+  if (
+    next.projects.includes(project) &&
+    next.tags?.[project] === tag &&
+    (worktree === undefined || next.worktrees?.[project] === worktree)
+  ) {
     const { pending, ...rest } = next;
     return pending?.project === project ? (rest as S) : next;
   }
-  return { ...next, pending: { project, tag } };
+  return { ...next, pending: { project, tag, ...(worktree !== undefined && { worktree }) } };
 }
 
 /**
@@ -159,7 +184,12 @@ export function keptTask(description: unknown): string {
 }
 
 /** Registers `session` with the server, keeping the name its roster row or state already has. */
-export function serverRegister(session: Session, tag: string, url = swarmailUrl()): Register {
+export function serverRegister(
+  session: Session,
+  tag: string,
+  url = swarmailUrl(),
+  worktree?: string,
+): Register {
   return (project, name) => {
     try {
       let rows: RosterRow[] = [];
@@ -183,6 +213,7 @@ export function serverRegister(session: Session, tag: string, url = swarmailUrl(
               model: session.model || session.host,
               task_description: `${tag} ${keptTask(row?.task_description)}`,
               ...(reuse && { name: reuse }),
+              ...(worktree !== undefined && { worktree }),
             },
             url,
           ) as { name?: string }
@@ -207,7 +238,14 @@ export interface Registry<S extends RegisterState = RegisterState> {
    */
   settle(
     sessionId: string,
-    opts: { since: number; project: string; tag: string; register: Register; extra?: Partial<S> },
+    opts: {
+      since: number;
+      project: string;
+      tag: string;
+      register: Register;
+      extra?: Partial<S>;
+      worktree?: string;
+    },
   ): { before: S; after: S } | null;
   /**
    * A new prompt: clears `ended` after a resume and returns the pending registration to retry.
@@ -307,14 +345,14 @@ export function openRegistry<S extends RegisterState = RegisterState>(
         return state ? [{ ...state, sessionId: file.slice(0, -".json".length) }] : [];
       }),
 
-    settle(sessionId, { since, project, tag, register, extra }) {
+    settle(sessionId, { since, project, tag, register, extra, worktree }) {
       let result: { before: S; after: S } | null = null;
       locked(sessionId, (file) => {
         const before = current(file);
         if (endedSince(before, since)) {
           return;
         }
-        const { ended, ...settled } = settleRegistration(before, project, tag, register);
+        const { ended, ...settled } = settleRegistration(before, project, tag, register, worktree);
         const after = { ...settled, ...extra } as S;
         if (JSON.stringify(after) !== JSON.stringify(before)) {
           writeState(file, after);

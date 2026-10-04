@@ -2,6 +2,7 @@
 // store.ts.
 import type { Database } from "bun:sqlite";
 import { iso, nowUs } from "./db.ts";
+import { locations } from "./location.ts";
 import {
   type Args,
   agentOut,
@@ -33,6 +34,10 @@ const AGENT = prop("string", "Your registered agent name.");
 const MESSAGE = prop("integer", "Message id.");
 const PROGRAM = prop("string", "Agent host, such as claude-code, codex or cursor.");
 const MODEL = prop("string", "Model id the session runs.");
+const WORKTREE = prop(
+  "string",
+  "Absolute path of the checkout being edited, in this project. Omit to keep its recorded location.",
+);
 const TASK = prop(
   "string",
   "What you are working on. Keep the leading [host:session ...] tag the register hook gave you.",
@@ -185,6 +190,7 @@ export const TOOLS: Tool[] = [
       program: PROGRAM,
       model: MODEL,
       name: prop("string", "Adjective+noun such as GreenLake. Omit to get one generated."),
+      worktree: WORKTREE,
       task_description: TASK,
     },
     required: ["project_key", "program", "model"],
@@ -205,6 +211,7 @@ export const TOOLS: Tool[] = [
       program: PROGRAM,
       model: MODEL,
       agent_name: prop("string", "Your existing name. Omit to get one generated."),
+      worktree: WORKTREE,
       task_description: TASK,
       file_reservation_paths: strings("Repository-relative paths or globs to reserve."),
       file_reservation_reason: prop("string", "Shown to agents whose reservation conflicts."),
@@ -276,7 +283,9 @@ export const TOOLS: Tool[] = [
         a.active_within_days === undefined
           ? 0
           : nowUs() - num(a.active_within_days, "active_within_days", 0) * 86_400_000_000;
-      return s.liveAgents(p, since, pageLimit(a.limit, "limit", 250)).map((r) => ({
+      const agents = s.liveAgents(p, since, pageLimit(a.limit, "limit", 250));
+      const labels = locations(p.human_key, agents);
+      return agents.map((r, i) => ({
         name: r.name,
         program: r.program,
         model: r.model,
@@ -285,6 +294,7 @@ export const TOOLS: Tool[] = [
         session_id: r.session_id,
         t3_thread: r.t3_thread,
         cwd: r.cwd,
+        location: labels[i],
         inception_ts: iso(r.inception_ts),
         last_active_ts: iso(r.last_active_ts),
       }));

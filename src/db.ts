@@ -96,6 +96,10 @@ const MIGRATIONS: ((db: Database) => void)[] = [
     db.run("CREATE INDEX idx_agents_session ON agents(session_id) WHERE session_id IS NOT NULL");
     db.run("CREATE INDEX idx_agents_t3_thread ON agents(t3_thread) WHERE t3_thread IS NOT NULL");
   },
+  (db) => {
+    db.run("ALTER TABLE agents ADD COLUMN worktree TEXT");
+    db.run("ALTER TABLE messages ADD COLUMN sender_location TEXT");
+  },
 ];
 
 const IDENTITY = ["host", "session_id", "t3_thread", "build", "cwd"] as const;

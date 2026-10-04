@@ -9,7 +9,7 @@
 
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { primaryCheckout } from "./checkout.ts";
+import { primaryCheckout, worktreeRoot } from "./checkout.ts";
 import { hostProcess, sameHost } from "./proc.ts";
 import { openRegistry, serverRegister, type Session } from "./registry.ts";
 import { sessionTag } from "./tag.ts";
@@ -177,12 +177,13 @@ function main(input: HookInput): string {
     return "";
   }
   const registry = openRegistry();
-  const settle = (project: string, tag: string): string => {
+  const settle = (project: string, tag: string, worktree?: string): string => {
     const settled = registry.settle(sessionId, {
       since: started,
       project,
       tag,
-      register: serverRegister(session, tag),
+      worktree,
+      register: serverRegister(session, tag, undefined, worktree),
       extra: { host: hostProcess() },
     });
     if (settled?.after.pending?.project === project) {
@@ -201,7 +202,7 @@ function main(input: HookInput): string {
   // A prompt retries a failed registration and clears `ended` after a resume.
   if (event === "UserPromptSubmit") {
     const pending = registry.resume(sessionId, started);
-    return pending ? settle(pending.project, pending.tag) : "";
+    return pending ? settle(pending.project, pending.tag, pending.worktree) : "";
   }
   const dir = targetDir({ ...input, cwd: session.cwd });
   const project = dir && primaryCheckout(dir);
@@ -213,10 +214,21 @@ function main(input: HookInput): string {
   }
   // Most edits after the first find the project registered under this tag and skip the lock.
   const known = registry.read(sessionId);
+  // A compaction or resume announces the session again without moving its last edit checkout.
+  const recorded = starting
+    ? ((known?.pending?.project === project ? known.pending.worktree : undefined) ??
+      known?.worktrees?.[project])
+    : undefined;
+  const worktree = recorded ?? (dir ? (worktreeRoot(dir) ?? undefined) : undefined);
   const text =
-    known && !known.ended && known.tags?.[project] === tag && sameHost(known.host, hostProcess())
+    known &&
+    !known.ended &&
+    !known.pending &&
+    known.tags?.[project] === tag &&
+    known.worktrees?.[project] === worktree &&
+    sameHost(known.host, hostProcess())
       ? ""
-      : settle(project, tag);
+      : settle(project, tag, worktree);
   // Every start names the session, registered just now or before: a compacted or resumed session has lost its name.
   const state = starting ? registry.read(sessionId) : null;
   if (!state?.name || state.pending?.project === project) {

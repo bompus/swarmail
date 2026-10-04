@@ -627,6 +627,55 @@ test("a session registers at start, keeps that one name through edits, restarts 
     expect(hand.agent.name).toBe(name);
     expect(roster()).toHaveLength(1);
 
+    // The edit location follows another worktree of the same project, while the launch tag and name stay.
+    const git = (...args) => {
+      const result = Bun.spawnSync(["git", "-C", repo, ...args]);
+      expect(result.exitCode).toBe(0);
+    };
+    git(
+      "-c",
+      "user.name=Tester",
+      "-c",
+      "user.email=test@example.invalid",
+      "commit",
+      "--allow-empty",
+      "-qm",
+      "init",
+    );
+    const edited = join(dir, "edited checkout");
+    git("worktree", "add", "-qb", "edit-branch", edited);
+    expect(await run({ ...edit, tool_input: { file_path: join(edited, "new", "a.txt") } })).toBe(
+      "",
+    );
+    const row = server.db.query("SELECT name, cwd, worktree FROM agents WHERE name = ?").get(name);
+    expect(row).toEqual({ name, cwd: join("~", "repo"), worktree: edited });
+    await run({ ...start, source: "compact" });
+    expect(server.db.query("SELECT worktree FROM agents WHERE name = ?").get(name).worktree).toBe(
+      edited,
+    );
+
+    expect(await run(edit)).toBe("");
+    expect(server.db.query("SELECT worktree FROM agents WHERE name = ?").get(name).worktree).toBe(
+      repo,
+    );
+
+    // A failed edit in B must be superseded by a newer successful edit in A before the prompt retries it.
+    const online = env.SWARMAIL_URL;
+    env.SWARMAIL_URL = "http://127.0.0.1:1/mcp/";
+    try {
+      await run({ ...edit, tool_input: { file_path: join(edited, "a.txt") } });
+    } finally {
+      env.SWARMAIL_URL = online;
+    }
+    const stateFile = join(env.XDG_STATE_HOME, "swarmail-register", "start-1.json");
+    expect(JSON.parse(readFileSync(stateFile, "utf8")).pending.worktree).toBe(edited);
+    await run(edit);
+    expect(JSON.parse(readFileSync(stateFile, "utf8")).pending).toBeUndefined();
+    await run({ ...claude, hook_event_name: "UserPromptSubmit" });
+    expect(server.db.query("SELECT worktree FROM agents WHERE name = ?").get(name).worktree).toBe(
+      repo,
+    );
+
     // Cursor's own sessionStart payload (captured from the Cursor CLI) gets Cursor's flat output.
     const cursor = await run({
       conversation_id: "13ff971f-ae2c-474b-b587-12f163fba67e",

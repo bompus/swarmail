@@ -55,7 +55,7 @@ test("identity columns are backfilled from each tag, and every open repairs rows
     old.close();
 
     let db = openDatabase(path);
-    expect(db.query("PRAGMA user_version").get().user_version).toBe(1);
+    expect(db.query("PRAGMA user_version").get().user_version).toBe(2);
     expect(
       db.query("SELECT host, session_id, t3_thread, build, cwd FROM agents ORDER BY id").all(),
     ).toEqual([
@@ -63,6 +63,8 @@ test("identity columns are backfilled from each tag, and every open repairs rows
       { host: null, session_id: null, t3_thread: null, build: null, cwd: null },
       { host: null, session_id: null, t3_thread: null, build: null, cwd: null },
     ]);
+    expect(db.query("SELECT worktree FROM agents WHERE id = 1").get().worktree).toBeNull();
+    expect(db.query("SELECT sender_location FROM messages").all()).toEqual([]);
     // The wake lookup reads the indexes instead of scanning every description.
     const plan = db
       .query(
@@ -78,13 +80,14 @@ test("identity columns are backfilled from each tag, and every open repairs rows
     // A build from before the columns, run after a rollback, writes descriptions and leaves the columns as they were.
     db = new Database(path);
     db.exec(`
-      UPDATE agents SET task_description = '[claude:s-2 cwd:~/w] moved' WHERE id = 1;
+      UPDATE agents SET worktree = '/w/edit', task_description = '[claude:s-2 cwd:~/w] moved' WHERE id = 1;
       INSERT INTO agents (id, project_id, name, program, model, task_description, inception_ts, last_active_ts)
         VALUES (4, 1, 'JadeOwl', 'cursor', 'm', '[t3:th-4 cursor:c-4] new', 1, 1);
     `);
     db.close();
     db = openDatabase(path);
-    expect(db.query("PRAGMA user_version").get().user_version).toBe(1);
+    expect(db.query("PRAGMA user_version").get().user_version).toBe(2);
+    expect(db.query("SELECT worktree FROM agents WHERE id = 1").get().worktree).toBe("/w/edit");
     expect(
       db
         .query("SELECT id, host, session_id, t3_thread FROM agents WHERE id IN (1, 4) ORDER BY id")
@@ -94,6 +97,31 @@ test("identity columns are backfilled from each tag, and every open repairs rows
       { id: 4, host: "cursor", session_id: "c-4", t3_thread: "th-4" },
     ]);
     db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("migrating a released database preserves messages without inventing sender history", () => {
+  const dir = mkdtempSync(join(tmpdir(), "db-location-"));
+  const path = join(dir, "mail.sqlite3");
+  try {
+    let db = openDatabase(path);
+    db.exec(`ALTER TABLE agents DROP COLUMN worktree;
+      ALTER TABLE messages DROP COLUMN sender_location;
+      PRAGMA user_version = 1;
+      INSERT INTO projects VALUES (1,'repo','/r',1);
+      INSERT INTO agents (id,project_id,name,program,model,inception_ts,last_active_ts) VALUES(1,1,'BlueLake','claude','m',1,1);
+      INSERT INTO messages (id,project_id,sender_id,subject,body_md,created_ts) VALUES(1,1,1,'old','hello',1);`);
+    db.close();
+    for (let round = 0; round < 2; round++) {
+      db = openDatabase(path);
+      expect(db.query("SELECT id,subject,body_md,sender_location FROM messages").all()).toEqual([
+        { id: 1, subject: "old", body_md: "hello", sender_location: null },
+      ]);
+      expect(db.query("SELECT worktree FROM agents").get().worktree).toBeNull();
+      db.close();
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
