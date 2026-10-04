@@ -213,11 +213,17 @@ function main(input: HookInput): string {
     return starting ? startNotice(tag) : "";
   }
   // Most edits after the first find the project registered under this tag and skip the lock.
-  const worktree = dir ? (worktreeRoot(dir) ?? undefined) : undefined;
   const known = registry.read(sessionId);
+  // A compaction or resume announces the session again without moving its last edit checkout.
+  const recorded = starting
+    ? ((known?.pending?.project === project ? known.pending.worktree : undefined) ??
+      known?.worktrees?.[project])
+    : undefined;
+  const worktree = recorded ?? (dir ? (worktreeRoot(dir) ?? undefined) : undefined);
   const text =
     known &&
     !known.ended &&
+    !known.pending &&
     known.tags?.[project] === tag &&
     known.worktrees?.[project] === worktree &&
     sameHost(known.host, hostProcess())

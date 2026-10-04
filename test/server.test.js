@@ -1037,6 +1037,18 @@ test("a worktree or subdirectory path names its repository's primary checkout", 
     );
   }
   expect((await call("ensure_project", { human_key: island })).human_key).toBe(island);
+  const legacy = await call("register_agent", {
+    project_key: island,
+    worktree: island,
+    name: "BlueIsland",
+    program: "claude",
+    model: "m",
+  });
+  expect(legacy.name).toBe("BlueIsland");
+  expect(
+    (await call("list_agents", { project_key: island })).find((a) => a.name === "BlueIsland")
+      .location.worktree,
+  ).toBe(realpathSync(island));
   // Keys that are not existing paths stay as given.
   expect((await call("ensure_project", { human_key: "canary-project" })).human_key).toBe(
     "canary-project",

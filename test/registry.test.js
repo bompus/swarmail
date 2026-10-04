@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openRegistry, ensureRegistered } from "../src/registry.ts";
+import { openRegistry } from "../src/registry.ts";
 
 const withRegistry = (fn) => {
   const dir = mkdtempSync(join(tmpdir(), "registry-"));
@@ -117,6 +117,11 @@ test("a changed edit checkout refreshes registration and survives a failed retry
       tag: "[claude:edit cwd:/launch]",
       worktree: "/w/b",
     });
+    expect(settle(undefined).after.pending).toEqual({
+      project: "/r",
+      tag: "[claude:edit cwd:/launch]",
+      worktree: "/w/b",
+    });
     up = true;
     const pending = registry.resume("edit", 0);
     expect(settle(pending.worktree).after.worktrees["/r"]).toBe("/w/b");
@@ -129,36 +134,55 @@ test("a changed edit checkout refreshes registration and survives a failed retry
   });
 });
 
-test("registration orderings preserve location across supervisor calls and failed edits", () => {
-  const events = [
-    { name: "edit A", worktree: "/w/a", up: true },
-    { name: "edit B", worktree: "/w/b", up: true },
-    { name: "supervisor", worktree: undefined, up: true },
-    { name: "failed A", worktree: "/w/a", up: false },
-    { name: "failed B", worktree: "/w/b", up: false },
-  ];
-  const violations = [];
-  const visit = (state, sequence) => {
-    if (sequence.length === 3) {
-      return;
-    }
-    for (const event of events) {
-      const nextSequence = [...sequence, event.name];
-      const next = ensureRegistered(
-        state,
-        "/r",
-        "[claude:s]",
-        () => (event.up ? "BlueLake" : null),
-        event.worktree,
-      );
-      const before = state.worktrees?.["/r"];
-      const expected = event.up && event.worktree !== undefined ? event.worktree : before;
-      if (next.worktrees?.["/r"] !== expected || (state.name && next.name !== state.name)) {
-        violations.push(nextSequence.join(" -> "));
+test("registration orderings preserve pending edit locations across supervisor calls", () => {
+  withRegistry((registry, dir) => {
+    const events = [
+      { name: "edit A", worktree: "/w/a", up: true },
+      { name: "edit B", worktree: "/w/b", up: true },
+      { name: "supervisor", worktree: undefined, up: true },
+      { name: "failed A", worktree: "/w/a", up: false },
+      { name: "failed B", worktree: "/w/b", up: false },
+      { name: "prompt retry", retry: true, up: true },
+    ];
+    const violations = [];
+    const visit = (state, sequence) => {
+      if (sequence.length === 3) {
+        return;
       }
-      visit(next, nextSequence);
-    }
-  };
-  visit({ name: null, projects: [] }, []);
-  expect(violations).toEqual([]);
+      for (const event of events) {
+        writeFileSync(join(dir, "orders.json"), JSON.stringify(state));
+        const worktree = event.retry ? state.pending?.worktree : event.worktree;
+        const next =
+          event.retry && !state.pending
+            ? state
+            : registry.settle("orders", {
+                since: 0,
+                project: "/r",
+                tag: "[claude:s]",
+                worktree,
+                register: () => (event.up ? "BlueLake" : null),
+              }).after;
+        const nextSequence = [...sequence, event.name];
+        const settled = event.up || worktree === state.worktrees?.["/r"];
+        const expectedLocation =
+          settled && worktree !== undefined ? worktree : state.worktrees?.["/r"];
+        const expectedPending =
+          worktree === undefined
+            ? state.pending
+            : settled
+              ? undefined
+              : { project: "/r", tag: "[claude:s]", worktree };
+        if (
+          next.worktrees?.["/r"] !== expectedLocation ||
+          JSON.stringify(next.pending) !== JSON.stringify(expectedPending) ||
+          (state.name && next.name !== state.name)
+        ) {
+          violations.push(nextSequence.join(" -> "));
+        }
+        visit(next, nextSequence);
+      }
+    };
+    visit({ name: null, projects: [] }, []);
+    expect(violations).toEqual([]);
+  });
 });

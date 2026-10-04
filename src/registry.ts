@@ -140,6 +140,14 @@ function settleRegistration<S extends RegisterState>(
   register: Register,
   worktree?: string,
 ): S {
+  // A supervisor without an edit checkout cannot complete a pending location update.
+  if (
+    worktree === undefined &&
+    state.pending?.project === project &&
+    state.pending.worktree !== undefined
+  ) {
+    return state;
+  }
   const next = ensureRegistered(state, project, tag, register, worktree);
   if (
     next.projects.includes(project) &&

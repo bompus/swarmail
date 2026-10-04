@@ -485,7 +485,10 @@ export class MailStore {
     let worktree = existing?.worktree ?? null;
     if (a.worktree !== undefined) {
       const supplied = str(a.worktree, "worktree");
-      if (!isAbsolute(supplied) || primaryCheckout(supplied) !== p.human_key) {
+      if (
+        !isAbsolute(supplied) ||
+        primaryCheckout(supplied) !== (primaryCheckout(p.human_key) ?? p.human_key)
+      ) {
         throw new ToolError("INVALID_ARGUMENT", "worktree must belong to this project", {
           field: "worktree",
         });

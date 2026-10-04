@@ -649,7 +649,29 @@ test("a session registers at start, keeps that one name through edits, restarts 
     );
     const row = server.db.query("SELECT name, cwd, worktree FROM agents WHERE name = ?").get(name);
     expect(row).toEqual({ name, cwd: join("~", "repo"), worktree: edited });
+    await run({ ...start, source: "compact" });
+    expect(server.db.query("SELECT worktree FROM agents WHERE name = ?").get(name).worktree).toBe(
+      edited,
+    );
+
     expect(await run(edit)).toBe("");
+    expect(server.db.query("SELECT worktree FROM agents WHERE name = ?").get(name).worktree).toBe(
+      repo,
+    );
+
+    // A failed edit in B must be superseded by a newer successful edit in A before the prompt retries it.
+    const online = env.SWARMAIL_URL;
+    env.SWARMAIL_URL = "http://127.0.0.1:1/mcp/";
+    try {
+      await run({ ...edit, tool_input: { file_path: join(edited, "a.txt") } });
+    } finally {
+      env.SWARMAIL_URL = online;
+    }
+    const stateFile = join(env.XDG_STATE_HOME, "swarmail-register", "start-1.json");
+    expect(JSON.parse(readFileSync(stateFile, "utf8")).pending.worktree).toBe(edited);
+    await run(edit);
+    expect(JSON.parse(readFileSync(stateFile, "utf8")).pending).toBeUndefined();
+    await run({ ...claude, hook_event_name: "UserPromptSubmit" });
     expect(server.db.query("SELECT worktree FROM agents WHERE name = ?").get(name).worktree).toBe(
       repo,
     );
