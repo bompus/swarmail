@@ -293,8 +293,8 @@ in seconds):
 }
 ```
 
-The slowest of that run's eight processes took 0.1828 s, so the run counts as
-1,000 / 0.1828 = 5,469 requests per second. Its three rounds gave 5,469, 5,890
+The slowest of that run's eight processes took 0.18284 s, so the run counts as
+1,000 / 0.18284 = 5,469 requests per second. Its three rounds gave 5,469, 5,890
 and 4,305, so the summary shows 5,469.
 
 Reads are loaded before sends, so every server's fetch, list and search see the
