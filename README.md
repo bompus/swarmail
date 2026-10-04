@@ -22,7 +22,7 @@ There are no runtime dependencies.
 Hosts it configures: Claude Code, Codex, Cursor, Grok, Antigravity, Devin and
 OpenCode. Claude Code and Cursor sessions can also wake up when mail arrives.
 
-<p align="center"><img src="docs/assets/demo.gif" alt="Two agent sessions: one reserves a file and sends mail, the other wakes on it and reads its inbox, the pre-commit guard refuses a commit that touches the reserved file, then a reply and a search." width="100%"></p>
+<p align="center"><img src="docs/assets/demo.gif" alt="Claude Code and Cursor sessions on one repository. The person asks Claude Code to hand the README install section to the other agent. Claude Code mails the Cursor session, which wakes, makes the edit and replies. Claude Code wakes on the reply and checks the change." width="100%"></p>
 
 If you are an AI agent reading this for your user, the prompt under
 [Evaluate it with your agent](#evaluate-it-with-your-agent) is the evaluation
