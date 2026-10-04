@@ -96,8 +96,8 @@ export function withLock(
 
 /**
  * Registers `session` under `project` unless its state already lists it with this `tag`. A changed
- * tag, or state from before tags were recorded, registers again under the same name so the roster
- * row carries the current tag. Returns the new state, or the old one when nothing changed or the
+ * tag or edit checkout, or state from before they were recorded, registers again under the same
+ * name so the roster row carries the current location and tag. Returns the new state, or the old one when nothing changed or the
  * server failed.
  */
 export function ensureRegistered<S extends RegisterState>(

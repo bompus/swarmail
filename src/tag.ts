@@ -14,9 +14,9 @@ export interface Tag {
 /**
  * The roster tag naming the session and where it runs, e.g.
  * `[t3:<thread id> claude:<session id> build:<hash> cwd:~/src/repo-task]`. The project key is
- * always the primary checkout, so this is the only place a peer can see which session and worktree an
- * agent is. `build` is the source hash of the swarmail binary that registered it, so `who` can name a
- * session whose binary is stale; cwd stays last because a path may hold spaces.
+ * always the primary checkout; cwd names the launch directory, while the edit checkout is recorded
+ * separately. `build` is the source hash of the swarmail binary that registered it, so `who` can name
+ * a session whose binary is stale; cwd stays last because a path may hold spaces.
  */
 export function sessionTag(
   {
