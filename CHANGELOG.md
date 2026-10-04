@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- On native Windows, `swarmail who` can tell whether a Cursor CLI session is
+  still running. The Cursor CLI runs there as a `node.exe` under its
+  `cursor-agent` directory, which the register hook did not recognize as the
+  session's host, so it showed "liveness unknown" (#27).
 - The README's performance numbers come from a new run timed with standard
   tools: hyperfine for startup, Tinybench for latency and oha for requests per
   second. [docs/benchmarks.md](docs/benchmarks.md) has the method and each
