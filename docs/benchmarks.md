@@ -12,8 +12,8 @@ a crash, large archives or production load.
 ## Summary
 
 Each cell is the median of three rounds; startup is hyperfine's mean of 20
-runs. The multiplier, computed from the medians, shows how much worse than
-Swarmail each server did.
+runs. The multiplier shows how much worse than Swarmail each server did. It
+is computed from those medians, and from the hyperfine means for startup.
 
 | | Swarmail | mcp_agent_mail_rust | mcp_agent_mail | agent-inbox* |
 | --- | --- | --- | --- | --- |
@@ -202,8 +202,8 @@ in seconds):
 }
 ```
 
-The slowest of that run's eight processes took 0.183 s, so the run counts as
-1,000 / 0.183 = 5,470 requests per second. Its three rounds gave 5,046, 5,336
+The slowest of that run's eight processes took 0.1828 s, so the run counts as
+1,000 / 0.1828 = 5,470 requests per second. Its three rounds gave 5,046, 5,336
 and 5,470, so the summary shows 5,336.
 
 Reads are loaded before sends, so every server's fetch, list and search see the

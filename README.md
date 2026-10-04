@@ -247,7 +247,7 @@ Measured on one machine with one small workload (40 agents, 250 seed messages,
 1,560 messages by the end), each server started on empty storage. Startup is
 hyperfine's mean of 20 runs; every other number is the median of three rounds,
 with latency from Tinybench and requests per second from oha. The multipliers
-are computed from those medians. [docs/benchmarks.md](docs/benchmarks.md) has
+are computed from those values. [docs/benchmarks.md](docs/benchmarks.md) has
 the method, a fourth server and each tool's raw output.
 
 | | Swarmail | mcp_agent_mail_rust | mcp_agent_mail |
