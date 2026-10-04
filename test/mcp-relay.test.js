@@ -54,6 +54,38 @@ test("relays requests in order and drops notifications", async () => {
   expect(out[2].result.isError).toBeUndefined();
 });
 
+test("keeps relaying after an answer breaks off mid-body", async () => {
+  let calls = 0;
+  const flaky = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch() {
+      if (++calls === 1) {
+        const body = new ReadableStream({
+          // The headers and first chunk go out before the stream fails.
+          start(c) {
+            c.enqueue(new TextEncoder().encode('{"jsonrpc":"2.0",'));
+            setTimeout(() => c.error(new Error("dropped")), 50);
+          },
+        });
+        return new Response(body, { headers: { "content-type": "application/json" } });
+      }
+      return Response.json({ jsonrpc: "2.0", id: 2, result: {} });
+    },
+  });
+  try {
+    const out = await relay(`http://127.0.0.1:${flaky.port}/mcp/`, [
+      { jsonrpc: "2.0", id: 1, method: "tools/list" },
+      { jsonrpc: "2.0", id: 2, method: "ping" },
+    ]);
+    expect(out.map((m) => m.id)).toEqual([1, 2]);
+    expect(out[0].error.message).toContain("did not finish");
+    expect(out[1].result).toEqual({});
+  } finally {
+    flaky.stop(true);
+  }
+});
+
 test("answers each request with an error when the server is down", async () => {
   const down = createServer(join(dir, "down.sqlite3"), 0);
   const url = `http://127.0.0.1:${down.server.port}/mcp/`;

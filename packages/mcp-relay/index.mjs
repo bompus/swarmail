@@ -7,6 +7,8 @@ import { createInterface } from "node:readline";
 
 const url = process.env.SWARMAIL_URL || "http://127.0.0.1:18765/mcp/";
 const install = "https://github.com/bompus/swarmail#install";
+// Tool calls answer in milliseconds; nothing on /mcp/ long-polls.
+const TIMEOUT_MS = 30_000;
 
 const write = (message) => process.stdout.write(JSON.stringify(message) + "\n");
 const fail = (id, message) => write({ jsonrpc: "2.0", id, error: { code: -32000, message } });
@@ -19,25 +21,34 @@ async function relay(line) {
     // The server answers malformed input with its own parse error.
   }
   const id = msg && typeof msg === "object" && !Array.isArray(msg) ? msg.id : null;
-  let res;
+  let res, text;
   try {
+    // One deadline covers the headers and the body, so a stalled server cannot hold the queue.
     res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: line,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+    text = await res.text();
   } catch (e) {
-    const reason = e instanceof Error ? (e.cause?.code ?? e.message) : String(e);
+    const timedOut = e instanceof Error && e.name === "TimeoutError";
+    const reason = timedOut
+      ? `no answer within ${TIMEOUT_MS / 1000} s`
+      : e instanceof Error
+        ? (e.cause?.code ?? e.message)
+        : String(e);
     process.stderr.write(`swarmail-mcp: ${url}: ${reason}\n`);
     if (id !== undefined) {
       fail(
         id,
-        `The Swarmail server is not reachable at ${url} (${reason}). Start it first: ${install}`,
+        res || timedOut
+          ? `The Swarmail server at ${url} did not finish its answer (${reason}).`
+          : `The Swarmail server is not reachable at ${url} (${reason}). Start it first: ${install}`,
       );
     }
     return;
   }
-  const text = await res.text();
   if (res.status === 202 || id === undefined) {
     return;
   }
