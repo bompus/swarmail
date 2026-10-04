@@ -212,8 +212,9 @@ On Windows, `Stop-ScheduledTask Swarmail` ends only the task's console
 host, and the server keeps running. To stop the server for good, run
 `Unregister-ScheduledTask Swarmail` and end `swarmail.exe` in Task Manager.
 
-With `normal`, a power loss can lose the most recent writes. Retired agents
-come back on their next tool call.
+With `normal`, a power loss can lose the most recent writes. A retired agent
+comes back when it registers again or sends, reads mail or reserves files as
+itself.
 
 ## Register hook
 
