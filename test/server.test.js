@@ -108,6 +108,22 @@ test("tools annotated read-only write nothing", async () => {
   expect(changes()).toBe(before);
 });
 
+// Glama's TDQS score and agents both read these: a missing hint or parameter description costs a tool its grade.
+test("every tool declares its hints and describes every parameter", async () => {
+  for (const t of (await rpc("tools/list", {})).tools) {
+    expect([t.name, t.annotations?.openWorldHint]).toEqual([t.name, false]);
+    expect([t.name, typeof t.annotations.readOnlyHint]).toEqual([t.name, "boolean"]);
+    if (!t.annotations.readOnlyHint) {
+      expect([t.name, typeof t.annotations.destructiveHint]).toEqual([t.name, "boolean"]);
+      expect([t.name, typeof t.annotations.idempotentHint]).toEqual([t.name, "boolean"]);
+    }
+    const undescribed = Object.entries(t.inputSchema.properties)
+      .filter(([, p]) => !p.description)
+      .map(([k]) => k);
+    expect([t.name, undescribed]).toEqual([t.name, []]);
+  }
+});
+
 test("health_check fails when the database does not answer", async () => {
   const own = createServer(join(dir, "closed.sqlite3"), 0, { retireIdleDays: 0 });
   try {
