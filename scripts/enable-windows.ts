@@ -5,7 +5,7 @@
 // the running server first. Settings are user environment variables (`setx SWARMAIL_PORT ...`), read at logon.
 import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { DEFAULT_PORT, serverRecordPath } from "../src/paths.ts";
+import { binaryPath, DEFAULT_PORT, serverRecordPath } from "../src/paths.ts";
 import { hostAlive, type HostProcess } from "../src/proc.ts";
 import { buildSwarmail } from "./build.ts";
 
@@ -67,7 +67,8 @@ if (import.meta.main) {
     throw new Error("Windows only; on Linux run scripts/enable.sh.");
   }
   const port = Number(process.env.SWARMAIL_PORT || DEFAULT_PORT);
-  const bin = buildSwarmail();
+  const bin = binaryPath();
+  buildSwarmail(undefined, bin);
   if (await stopServer()) {
     console.log("Stopped the running server.");
   }

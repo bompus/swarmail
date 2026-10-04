@@ -11,8 +11,8 @@ export interface Command {
 }
 
 /**
- * Standard input as text. Bun.stdin.text() does not hold the event loop open on Windows (Bun 1.4.2) outside a
- * top-level await, so the process exits before reading; reading the stream does.
+ * Standard input as text. On Windows (Bun 1.4.2), Bun.stdin.text() outside a top-level await lets the process exit
+ * before reading, and readFileSync(0) reads nothing from a PowerShell pipeline; reading the stream does neither.
  */
 const stdin = () => new Response(Bun.stdin.stream()).text();
 
@@ -61,7 +61,7 @@ const COMMANDS: Record<string, Command> = {
     ],
     run: async (args) => {
       const { registerHook } = await import("./register-hook.ts");
-      registerHook(args);
+      await registerHook(args, stdin);
     },
   },
   guard: {

@@ -32,8 +32,11 @@ interface Unread {
   thread_id: string | null;
 }
 
-/** One line naming each recipient's unread count and senders, safe to embed in a JSON string. */
-function hintFor(rows: Unread[]): string {
+/**
+ * One line naming each recipient's unread count and senders, safe to embed in a JSON string. A Windows project path
+ * keeps its separators as forward slashes.
+ */
+export function hintFor(rows: Unread[]): string {
   const groups = new Map<
     string,
     { recipient: string; project: string; count: number; urgent: number; senders: Set<string> }
@@ -64,7 +67,9 @@ function hintFor(rows: Unread[]): string {
   // Hook scripts wrap the hint in JSON without an encoder.
   // oxlint-disable-next-line no-control-regex -- strips control characters on purpose
   const unsafe = /["\\\x00-\x1f\x7f]/g;
-  return `Swarmail: ${parts.join("; ")}. Call fetch_inbox to read them.`.replace(unsafe, "");
+  return `Swarmail: ${parts.join("; ")}. Call fetch_inbox to read them.`
+    .replaceAll("\\", "/")
+    .replace(unsafe, "");
 }
 
 /**

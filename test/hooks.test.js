@@ -135,7 +135,7 @@ test("adds the Claude register and wake hooks once, keeping other hooks", () => 
   // Claude cancels an asyncRewake hook at its timeout; this one is about 23 days, under the 2^31 ms timer limit.
   expect(wake[0].hooks[0]).toMatchObject({
     asyncRewake: true,
-    command: `${hookBinary(dir)} hook wake claude`,
+    command: `${hookBinary(dir)} hook wake claude${windows ? "; exit $LASTEXITCODE" : ""}`,
     timeout: 2_000_000,
   });
   const rearm = ours("PostToolUse");
@@ -239,9 +239,13 @@ test("hook commands name the binary as one shell word on Windows, through the 8.
   );
   // A volume with 8.3 names turned off has none to give.
   expect(() => hookBinary("C:\\Users\\Jane Doe", "win32", (path) => path)).toThrow("no short name");
-  expect(swarmailHookPaths("C:\\Users\\me", "win32").rearm).toBe(
-    "C:/Users/me/.local/bin/swarmail.exe hook rearm",
+  // PowerShell would report the wake's exit 2 as 1 without the explicit exit.
+  const paths = swarmailHookPaths("C:\\Users\\me", "win32");
+  expect(paths.rearm).toBe("C:/Users/me/.local/bin/swarmail.exe hook rearm; exit $LASTEXITCODE");
+  expect(paths.wake("claude")).toBe(
+    "C:/Users/me/.local/bin/swarmail.exe hook wake claude; exit $LASTEXITCODE",
   );
+  expect(paths.wake("cursor")).toBe("C:/Users/me/.local/bin/swarmail.exe hook wake cursor");
 });
 
 test("a Windows install replaces the hook a Linux-style or long-path install wrote", () => {

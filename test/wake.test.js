@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../src/server.ts";
+import { hintFor } from "../src/wake.ts";
 
 // Run from a session that has the Claude Code mod, the hooks spawned here would inherit this and stand down.
 delete process.env.SWARMAIL_WAKE_MOD;
@@ -88,6 +89,13 @@ async function waiting(pid) {
   return 0;
 }
 const wait = (session, timeout = 5) => fetch(`${base}/wait?session=${session}&timeout=${timeout}`);
+
+test("the hint keeps a Windows path readable and stays safe to embed in JSON", () => {
+  const row = { sender: 'Blue"Lake', recipient: "PinkFox", project: "C:\\w\\pro\u0007ject" };
+  expect(hintFor([row])).toBe(
+    "Swarmail: 1 new message for PinkFox in C:/w/project from BlueLake. Call fetch_inbox to read them.",
+  );
+});
 
 test("wakes a session for unread mail to its tagged agent only, naming recipient and sender but not the subject", async () => {
   await send("GreenCastle"); // unread before the session's first wait: announced at once

@@ -57,19 +57,22 @@ export function hookBinary(
 export function swarmailHookPaths(home: string, platform: NodeJS.Platform = process.platform) {
   const bin = binaryPath(home, platform);
   const run = hookBinary(home, platform);
+  // Claude runs a Windows hook through Git Bash or PowerShell, and PowerShell reports any exit code but 0 as 1, which
+  // would lose the wake's exit 2. Git Bash reads the unset variable as a bare `exit`, which keeps the status.
+  const keepExit = platform === "win32" ? "; exit $LASTEXITCODE" : "";
   return {
     bin,
     command: `${run} register`,
     // The compiled binary rather than a shell script: about 9.4 MB per waiting session against 3.2 MB
     // (measured 2026-09-28), for one code path on every host.
-    wake: (host: string) => `${run} hook wake ${host}`,
+    wake: (host: string) => `${run} hook wake ${host}${host === "claude" ? keepExit : ""}`,
     // PostToolUse runs after every tool call, so the shell skips the binary unless this is a registered session
     // with no live waiter (one that already delivered its hint this turn, or a first turn before any Stop) and no
     // Swarmail mod doing the waiting.
     // Windows has no shell to count on, so the binary makes the same checks itself.
     rearm:
       platform === "win32"
-        ? `${run} hook rearm`
+        ? `${run} hook rearm${keepExit}`
         : '[ "$SWARMAIL_WAKE_MOD" = 1 ] && exit 0; ' +
           's="${XDG_STATE_HOME:-$HOME/.local/state}"; i="$CLAUDE_CODE_SESSION_ID"; ' +
           '[ -n "$i" ] && [ -f "$s/swarmail-register/$i.json" ] || exit 0; ' +
