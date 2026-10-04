@@ -263,31 +263,34 @@ Measured on one machine with one small workload (40 agents, 250 seed messages,
 hyperfine's mean of 20 runs; every other number is the median of three rounds,
 with latency from Tinybench and requests per second from oha. The multipliers
 are computed from those values. [docs/benchmarks.md](docs/benchmarks.md) has
-the method, a fourth server, each tool's raw output and a feature comparison
+the method, a sixth server, each tool's raw output and a feature comparison
 with seven other local agent-mail servers.
 
 <a href="docs/assets/benchmark-light.png"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-dark.png">
-  <img src="docs/assets/benchmark-light.png" alt="Bar charts comparing Swarmail with mcp_agent_mail_rust and mcp_agent_mail. Send p50: 0.47 ms, 36 ms and 71 ms. Search p50: 0.68 ms, 54 ms and 11 ms. Startup: 44 ms, 1.6 s and 0.87 s. Idle memory: 39 MiB, 193 MiB and 154 MiB." width="100%">
+  <img src="docs/assets/benchmark-light.png" alt="Bar charts comparing Swarmail with mcp_agent_mail_rust, mcp_agent_mail, agentbus and Project Relay. Send p50: 0.46 ms, 39 ms, 70 ms, 2.3 ms and 2.5 ms. Search p50: 0.65 ms, 56 ms and 12 ms; agentbus and Project Relay have no search tool. Startup: 38 ms, 1.5 s, 0.86 s, 408 ms and 123 ms. Idle memory: 32 MiB, 190 MiB, 154 MiB, 81 MiB and 121 MiB." width="100%">
 </picture></a>
 
-| | Swarmail | mcp_agent_mail_rust | mcp_agent_mail |
-| --- | --- | --- | --- |
-| **Latency, p50** | | | |
-| Send | 0.47 ms | 36 ms (76×) | 71 ms (151×) |
-| Fetch inbox | 0.53 ms | 13 ms (24×) | 21 ms (39×) |
-| Search | 0.68 ms | 54 ms (80×) | 11 ms (17×) |
-| **Throughput, 8 clients** | | | |
-| Send | 5,300 req/s | 50 req/s (106×) | 9.8 req/s (547×) |
-| Fetch inbox | 6,700 req/s | 401 req/s (17×) | 27 req/s (248×) |
-| Search | 4,800 req/s | 92 req/s (52×) | 46 req/s (106×) |
-| **Footprint** | | | |
-| Startup | 44 ms | 1.6 s (36×) | 0.87 s (20×) |
-| Memory, idle | 39 MiB | 193 MiB (5.0×) | 154 MiB (4.0×) |
-| Memory, peak under load | 72 MiB | 674 MiB (9.4×) | 256 MiB (3.6×) |
-| CPU, idle | 0.03% of a core | 0.15% of a core | 0.13% of a core |
-| CPU time, 5,240 timed calls | 0.96 s | 181 s (189×) | 262 s (273×) |
-| Load 250 messages | 191 ms | 9.0 s (47×) | 18.2 s (95×) |
+| | Swarmail | mcp_agent_mail_rust | mcp_agent_mail | agentbus | Project Relay |
+| --- | --- | --- | --- | --- | --- |
+| **Latency, p50** | | | | | |
+| Send | 0.46 ms | 39 ms (84×) | 70 ms (154×) | 2.3 ms (5.1×) | 2.5 ms (5.5×) |
+| Fetch inbox | 0.50 ms | 12 ms (25×) | 23 ms (45×) | 1.1 ms (2.2×) | 1.4 ms (2.9×) |
+| Search | 0.65 ms | 56 ms (87×) | 12 ms (18×) | no search tool | no search tool |
+| **Throughput, 8 clients** | | | | | |
+| Send | 5,500 req/s | 50 req/s (109×) | 9.7 req/s (563×) | 876 req/s (6.2×) | 482 req/s (11×) |
+| Fetch inbox | 6,300 req/s | 416 req/s (15×) | 27 req/s (235×) | 1,600 req/s (4.0×) | 1,100 req/s (5.9×) |
+| Search | 4,300 req/s | 90 req/s (48×) | 44 req/s (97×) | no search tool | no search tool |
+| **Footprint** | | | | | |
+| Startup | 38 ms | 1.5 s (41×) | 0.86 s (23×) | 408 ms (11×) | 123 ms (3.3×) |
+| Memory, idle | 32 MiB | 190 MiB (5.9×) | 154 MiB (4.8×) | 81 MiB (2.5×) | 121 MiB (3.8×) |
+| Memory, peak under load | 67 MiB | 688 MiB (10×) | 258 MiB (3.9×) | 96 MiB (1.4×) | 296 MiB (4.5×) |
+| CPU, idle | 0.07% of a core | 0.15% of a core | 0.13% of a core | 0.13% of a core | under 0.02% of a core |
+| CPU time, timed calls* | 1.0 s | 183 s (183×) | 263 s (263×) | 2.6 s (2.6×) | 4.6 s (4.6×) |
+| Load 250 messages | 168 ms | 9.5 s (57×) | 17.7 s (106×) | 618 ms (3.7×) | 797 ms (4.8×) |
+
+\* 5,240 calls on the servers with search and 3,930 on agentbus and Project
+Relay, so their CPU multipliers compare fewer calls with Swarmail's 5,240.
 
 Startup as hyperfine reports it. Each run starts the server, waits for its
 health check, then kills it; `wrapper only` is the harness without a server,
@@ -295,20 +298,22 @@ and hyperfine's `Relative` column compares against that row:
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `wrapper only` | 8.5 ± 0.6 | 7.8 | 10.4 | 1.00 |
-| `Swarmail` | 43.5 ± 3.1 | 38.1 | 48.5 | 5.14 ± 0.52 |
-| `mcp_agent_mail_rust` | 1553.4 ± 26.0 | 1519.6 | 1611.5 | 183.53 ± 13.42 |
-| `mcp_agent_mail` | 872.6 ± 46.8 | 814.3 | 981.1 | 103.10 ± 9.19 |
-| `agent-inbox` | 276.7 ± 12.1 | 255.7 | 300.6 | 32.69 ± 2.73 |
+| `wrapper only` | 7.2 ± 0.6 | 6.6 | 8.5 | 1.00 |
+| `Swarmail` | 37.7 ± 0.7 | 37.1 | 39.3 | 5.27 ± 0.43 |
+| `mcp_agent_mail_rust` | 1530.3 ± 14.9 | 1509.6 | 1562.8 | 213.82 ± 17.27 |
+| `mcp_agent_mail` | 857.7 ± 38.7 | 803.5 | 925.7 | 119.84 ± 11.03 |
+| `agent-inbox` | 263.0 ± 11.4 | 252.0 | 297.9 | 36.75 ± 3.35 |
+| `agentbus` | 408.2 ± 15.6 | 385.1 | 443.3 | 57.03 ± 5.06 |
+| `Project Relay` | 122.9 ± 5.3 | 113.8 | 132.7 | 17.17 ± 1.56 |
 
-hyperfine timed all four servers, so agent-inbox appears here but not in the
+hyperfine timed all six servers, so agent-inbox appears here but not in the
 table above. Its inbox pages hold 50 messages instead of 20, its roster is
 global and its search matches substrings, so its fetch, list and search do
 different work. [docs/benchmarks.md](docs/benchmarks.md) has its full column.
 
 mcp_agent_mail commits each send to a Git archive before it returns, so these
-numbers don't compare durability. Requests per second varied by up to a
-quarter between rounds of the same server.
+numbers don't compare durability. Requests per second varied by up to 29%
+between rounds of the same server.
 
 ## Development
 
