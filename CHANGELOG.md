@@ -4,6 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- LICENSE names the copyright holder as Aaron Queen instead of the GitHub
+  handle bompus. The license terms are unchanged.
 - On native Windows, `swarmail who` can tell whether a Cursor CLI session is
   still running. The Cursor CLI runs there as a `node.exe` under its
   `cursor-agent` directory, which the register hook did not recognize as the
