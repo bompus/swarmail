@@ -265,6 +265,9 @@ const queries = (db: Database) => ({
   liveAgentsInSession: db.query<Agent, [number, string | null, string | null]>(
     "SELECT * FROM agents WHERE project_id = ?1 AND retired_at IS NULL AND (t3_thread = ?2 OR session_id = ?3) ORDER BY last_active_ts DESC, id DESC",
   ),
+  agentProjects: db.query<{ human_key: string }, [string, number]>(
+    "SELECT p.human_key FROM agents a JOIN projects p ON p.id = a.project_id WHERE a.name = ? COLLATE NOCASE AND a.project_id != ? ORDER BY a.last_active_ts DESC",
+  ),
   agentNames: db.query<{ name: string }, [number]>(
     "SELECT name FROM agents WHERE project_id = ? AND retired_at IS NULL ORDER BY last_active_ts DESC, id DESC",
   ),
@@ -367,8 +370,13 @@ export class MailStore {
       const recent = active.slice(0, 10);
       const more =
         active.length > recent.length ? ` and ${active.length - recent.length} more` : "";
-      const advice =
-        field === "to"
+      // A name registered under another project_key is the usual cause, not a misspelling.
+      const elsewhere = this.q.agentProjects.all(n, p.id).map((r) => r.human_key);
+      const advice = elsewhere.length
+        ? `'${n}' is registered in project ${elsewhere.map((k) => `'${k}'`).join(", ")}; pass that project_key${
+            field === "to" ? ", registering there first if you are not" : ""
+          }.`
+        : field === "to"
           ? "Check the recipient's spelling; list_agents shows every agent."
           : "Find your name with `swarmail who`, or call register_agent without a name to get one.";
       throw new ToolError(
@@ -376,7 +384,12 @@ export class MailStore {
         `Agent '${n}' not found in project '${p.human_key}'. Recently active: ${
           recent.map((x) => `'${x}'`).join(", ") || "none"
         }${more}. ${advice}`,
-        { agent_name: n, available_agents: recent, active_agents: active.length },
+        {
+          agent_name: n,
+          available_agents: recent,
+          active_agents: active.length,
+          registered_in: elsewhere,
+        },
       );
     }
     return a;

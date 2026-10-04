@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- When a tool names an agent that is not in the project but is registered
+  under another `project_key`, the NOT_FOUND error names that project and
+  says to pass its key, instead of telling the caller to check the spelling.
+  The error data lists those projects as `registered_in`.
 - `swarmail-mcp` (`packages/mcp-relay/`), a stdio relay for MCP clients that
   install servers from a registry or speak only stdio. It forwards each
   JSON-RPC message to the running server at `SWARMAIL_URL` and answers every
