@@ -1063,6 +1063,16 @@ test("an unknown agent error names the project where that name is registered", a
   expect(recipient.message).toContain("'awayagent' is registered in project '/w/other'");
   expect(recipient.message).not.toContain("spelling");
   expect(recipient.data.registered_in).toEqual(["/w/other"]);
+  db.query("UPDATE agents SET retired_at = 1 WHERE name = 'AwayAgent'").run();
+  const retired = await call("send_message", {
+    project_key: P,
+    sender_name: "HomeSender",
+    to: ["AwayAgent"],
+    subject: "x",
+    body_md: "y",
+  }).catch((e) => e);
+  expect(retired.message).toContain("'AwayAgent' is retired in project '/w/other'");
+  expect(retired.data.registered_in).toEqual(["/w/other"]);
   const self = await call("fetch_inbox", { project_key: P, agent_name: "AwayAgent" }).catch(
     (e) => e,
   );
