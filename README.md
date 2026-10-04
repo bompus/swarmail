@@ -9,6 +9,7 @@
   <a href="https://github.com/bompus/swarmail/actions/workflows/ci.yml"><img src="https://github.com/bompus/swarmail/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <a href="https://github.com/bompus/swarmail/releases/latest"><img src="https://img.shields.io/github/v/release/bompus/swarmail" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/bompus/swarmail" alt="MIT license"></a>
+  <a href="https://glama.ai/mcp/servers/bompus/swarmail"><img src="https://glama.ai/mcp/servers/bompus/swarmail/badges/score.svg" alt="Swarmail on Glama"></a>
 </p>
 
 Swarmail lets coding-agent sessions on one machine send each other mail. Each
