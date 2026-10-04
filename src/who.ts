@@ -18,6 +18,7 @@ import { basename } from "node:path";
 import { buildSource } from "./build.ts";
 import { iso } from "./db.ts";
 import { primaryCheckout } from "./checkout.ts";
+import { location, locationLabel, type Location } from "./location.ts";
 import { callTool } from "./client.ts";
 import { hostAlive } from "./proc.ts";
 import { openRegistry, registryDir, selfNames } from "./registry.ts";
@@ -28,6 +29,7 @@ import { parseTag, withoutTag } from "./tag.ts";
 export interface RosterAgent {
   name: string;
   task_description?: string;
+  location?: Location | null;
   last_active_ts?: string;
 }
 
@@ -44,6 +46,7 @@ interface Queue {
 }
 
 export interface WhoRow {
+  location: Location | null;
   name: string | null;
   sessionId: string | null;
   t3: string | null;
@@ -193,6 +196,8 @@ export function whoRows(
       );
     return {
       name: agent.name,
+      location:
+        agent.location ?? location(project, state?.worktrees?.[project], thread?.title ?? null),
       sessionId,
       t3,
       title: thread?.title ?? null,
@@ -226,6 +231,7 @@ export function whoRows(
     }
     rows.push({
       name: null,
+      location: null,
       sessionId: null,
       t3: thread.thread_id,
       title: thread.title,
@@ -306,7 +312,7 @@ export function main(args: string[]): void {
       .filter(Boolean)
       .join("; ");
     console.log(
-      `- ${who}: ${row.title ? `"${row.title}"` : "untitled"} (${live}) · last active ${ago(row.lastActive, now)}${queue}` +
+      `- ${who}${row.location ? ` [${locationLabel(row.location)}]` : ""}: ${row.title ? `"${row.title}"` : "untitled"} (${live}) · last active ${ago(row.lastActive, now)}${queue}` +
         ` · ${row.cwd ? tildePath(home, row.cwd) : "cwd unknown"}${flags ? ` · ${flags}` : ""}\n    ${row.task}`,
     );
   }

@@ -6,6 +6,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 - The release guide covers Glama Auto-Release and the delay before its public
   listing and scores update.
+- Roster entries include an edit location with the repository, worktree, current
+  branch and available T3 title. Agent names and launch directories stay stable.
+  New messages retain their sender location at send time; older messages keep
+  an unknown location.
 
 ## 0.2.2 - 2026-10-04
 

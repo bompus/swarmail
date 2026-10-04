@@ -627,6 +627,33 @@ test("a session registers at start, keeps that one name through edits, restarts 
     expect(hand.agent.name).toBe(name);
     expect(roster()).toHaveLength(1);
 
+    // The edit location follows another worktree of the same project, while the launch tag and name stay.
+    const git = (...args) => {
+      const result = Bun.spawnSync(["git", "-C", repo, ...args]);
+      expect(result.exitCode).toBe(0);
+    };
+    git(
+      "-c",
+      "user.name=Tester",
+      "-c",
+      "user.email=test@example.invalid",
+      "commit",
+      "--allow-empty",
+      "-qm",
+      "init",
+    );
+    const edited = join(dir, "edited checkout");
+    git("worktree", "add", "-qb", "edit-branch", edited);
+    expect(await run({ ...edit, tool_input: { file_path: join(edited, "new", "a.txt") } })).toBe(
+      "",
+    );
+    const row = server.db.query("SELECT name, cwd, worktree FROM agents WHERE name = ?").get(name);
+    expect(row).toEqual({ name, cwd: join("~", "repo"), worktree: edited });
+    expect(await run(edit)).toBe("");
+    expect(server.db.query("SELECT worktree FROM agents WHERE name = ?").get(name).worktree).toBe(
+      repo,
+    );
+
     // Cursor's own sessionStart payload (captured from the Cursor CLI) gets Cursor's flat output.
     const cursor = await run({
       conversation_id: "13ff971f-ae2c-474b-b587-12f163fba67e",

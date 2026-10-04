@@ -2,8 +2,9 @@
 import type { Database } from "bun:sqlite";
 import { existsSync, realpathSync } from "node:fs";
 import { isAbsolute } from "node:path";
-import { primaryCheckout } from "./checkout.ts";
+import { primaryCheckout, worktreeRoot } from "./checkout.ts";
 import { overlaps } from "./glob.ts";
+import { locations } from "./location.ts";
 import { identity, leadingTag, parseTag, sameSessionRow, tagOf, type Identity } from "./tag.ts";
 import { InvalidTimestamp, iso, nowUs, parseIso } from "./db.ts";
 
@@ -58,6 +59,7 @@ export interface Project {
   created_at: number;
 }
 export interface Agent extends Identity {
+  worktree: string | null;
   id: number;
   project_id: number;
   name: string;
@@ -227,6 +229,7 @@ const payload = (m: Row, sender: string) => ({
   ack_required: !!m.ack_required,
   created_ts: iso(m.created_ts),
   from: sender,
+  sender_location: m.sender_location ? JSON.parse(m.sender_location) : null,
   to: [],
   cc: [],
   bcc: [],
@@ -243,6 +246,7 @@ const inboxOut = (m: Row, includeBody: boolean) => ({
   importance: m.importance,
   ack_required: !!m.ack_required,
   from: m.from,
+  sender_location: m.sender_location ? JSON.parse(m.sender_location) : null,
   created_ts: iso(m.created_ts),
   // Omit unset read_ts and ack_ts.
   ...(m.read_ts != null && { read_ts: iso(m.read_ts) }),
@@ -478,6 +482,16 @@ export class MailStore {
       name == null
         ? this.agentForTag(p.id, a.task_description)
         : this.q.agentByName.get(p.id, name);
+    let worktree = existing?.worktree ?? null;
+    if (a.worktree !== undefined) {
+      const supplied = str(a.worktree, "worktree");
+      if (!isAbsolute(supplied) || primaryCheckout(supplied) !== p.human_key) {
+        throw new ToolError("INVALID_ARGUMENT", "worktree must belong to this project", {
+          field: "worktree",
+        });
+      }
+      worktree = realpathSync(worktreeRoot(supplied)!);
+    }
     if (existing) {
       // Re-registering replaces the task description. A leading `[host:session ...]` tag routes
       // wake-ups (wake.ts), so a new description without one keeps the old tag.
@@ -487,7 +501,7 @@ export class MailStore {
       const id = identity(description);
       this.db.run(
         `UPDATE agents SET program = ?, model = ?, task_description = ?, last_active_ts = ?, retired_at = NULL,
-        host = ?, session_id = ?, t3_thread = ?, build = ?, cwd = ? WHERE id = ?`,
+        host = ?, session_id = ?, t3_thread = ?, build = ?, cwd = ?, worktree = ? WHERE id = ?`,
         [
           str(a.program, "program"),
           str(a.model, "model"),
@@ -498,6 +512,7 @@ export class MailStore {
           id.t3_thread,
           id.build,
           id.cwd,
+          worktree,
           existing.id,
         ],
       );
@@ -508,8 +523,8 @@ export class MailStore {
     return this.db
       .query<Agent, (string | number | null)[]>(
         `INSERT INTO agents (project_id, name, program, model, task_description, inception_ts, last_active_ts,
-         host, session_id, t3_thread, build, cwd)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+         host, session_id, t3_thread, build, cwd, worktree)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       )
       .get(
         p.id,
@@ -524,6 +539,7 @@ export class MailStore {
         id.t3_thread,
         id.build,
         id.cwd,
+        worktree,
       )!;
   }
 
@@ -605,8 +621,8 @@ export class MailStore {
     const m = this.db
       .query<Row, any[]>(
         `INSERT INTO messages (project_id, sender_id, thread_id, topic, subject, body_md, importance, ack_required,
-         created_ts, recipients_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+         created_ts, recipients_json, sender_location)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       )
       .get(
         p.id,
@@ -619,6 +635,7 @@ export class MailStore {
         (a.ack_required ?? defaults.ack_required) ? 1 : 0,
         nowUs(),
         JSON.stringify({ to: names("to"), cc: names("cc"), bcc: names("bcc") }),
+        JSON.stringify(locations(p.human_key, [sender])[0]),
       )!;
     const add = this.db.query(
       "INSERT OR IGNORE INTO message_recipients (message_id, agent_id, kind, created_ts) VALUES (?, ?, ?, ?)",
@@ -634,7 +651,7 @@ export class MailStore {
     const rows = this.db
       .query<Row, any[]>(
         `SELECT m.id, m.project_id, m.sender_id, m.thread_id, m.topic, m.subject, m.importance, m.ack_required,
-              s.name AS "from", m.created_ts, r.read_ts, r.ack_ts, r.kind, m.body_md
+              s.name AS "from", m.sender_location, m.created_ts, r.read_ts, r.ack_ts, r.kind, m.body_md
        FROM message_recipients r JOIN messages m ON m.id = r.message_id JOIN agents s ON s.id = m.sender_id
        WHERE r.agent_id = ?1 AND (?2 = 0 OR r.read_ts IS NULL) AND (?3 = 0 OR m.importance IN ('high', 'urgent'))
          AND r.created_ts > ?4 AND (?5 IS NULL OR m.topic = ?5)

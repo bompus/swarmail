@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openRegistry } from "../src/registry.ts";
+import { openRegistry, ensureRegistered } from "../src/registry.ts";
 
 const withRegistry = (fn) => {
   const dir = mkdtempSync(join(tmpdir(), "registry-"));
@@ -89,4 +89,76 @@ test("readers skip unreadable or foreign state and leftover temporary files", ()
       new Date(0).toISOString(),
     );
   });
+});
+
+test("a changed edit checkout refreshes registration and survives a failed retry", () => {
+  withRegistry((registry) => {
+    let up = true;
+    const calls = [];
+    const register = (project, name) => {
+      calls.push([project, name]);
+      return up ? (name ?? "BlueLake") : null;
+    };
+    const settle = (worktree) =>
+      registry.settle("edit", {
+        since: 0,
+        project: "/r",
+        tag: "[claude:edit cwd:/launch]",
+        worktree,
+        register,
+      });
+    settle("/w/a");
+    settle("/w/a");
+    expect(calls).toHaveLength(1);
+    up = false;
+    expect(settle("/w/b").after.worktrees["/r"]).toBe("/w/a");
+    expect(registry.resume("edit", 0)).toEqual({
+      project: "/r",
+      tag: "[claude:edit cwd:/launch]",
+      worktree: "/w/b",
+    });
+    up = true;
+    const pending = registry.resume("edit", 0);
+    expect(settle(pending.worktree).after.worktrees["/r"]).toBe("/w/b");
+    expect(registry.read("edit").pending).toBeUndefined();
+    expect(calls).toEqual([
+      ["/r", null],
+      ["/r", "BlueLake"],
+      ["/r", "BlueLake"],
+    ]);
+  });
+});
+
+test("registration orderings preserve location across supervisor calls and failed edits", () => {
+  const events = [
+    { name: "edit A", worktree: "/w/a", up: true },
+    { name: "edit B", worktree: "/w/b", up: true },
+    { name: "supervisor", worktree: undefined, up: true },
+    { name: "failed A", worktree: "/w/a", up: false },
+    { name: "failed B", worktree: "/w/b", up: false },
+  ];
+  const violations = [];
+  const visit = (state, sequence) => {
+    if (sequence.length === 3) {
+      return;
+    }
+    for (const event of events) {
+      const nextSequence = [...sequence, event.name];
+      const next = ensureRegistered(
+        state,
+        "/r",
+        "[claude:s]",
+        () => (event.up ? "BlueLake" : null),
+        event.worktree,
+      );
+      const before = state.worktrees?.["/r"];
+      const expected = event.up && event.worktree !== undefined ? event.worktree : before;
+      if (next.worktrees?.["/r"] !== expected || (state.name && next.name !== state.name)) {
+        violations.push(nextSequence.join(" -> "));
+      }
+      visit(next, nextSequence);
+    }
+  };
+  visit({ name: null, projects: [] }, []);
+  expect(violations).toEqual([]);
 });

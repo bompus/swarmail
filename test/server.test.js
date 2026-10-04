@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import { Database } from "bun:sqlite";
+import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.js";
 import {
   mkdirSync,
   mkdtempSync,
@@ -1149,4 +1151,106 @@ test("the hourly sweep forgets old idempotency keys and long-ended registrations
   write("touched.json", { name: "TouchOwl", projects: [], ended: ended(15) }, 1);
   expect(openRegistry(registry).prune(14, now)).toBe(1);
   expect(readdirSync(registry).sort()).toEqual(["live.json", "recent.json", "touched.json"]);
+});
+
+test("locations follow the edited checkout while messages keep their sender snapshot", async () => {
+  const previousHome = process.env.HOME;
+  process.env.HOME = join(dir, "location-home");
+  try {
+    const t3dir = join(process.env.HOME, ".t3", "userdata");
+    mkdirSync(t3dir, { recursive: true });
+    const t3db = new Database(join(t3dir, "statev2.sqlite"), { create: true });
+    createT3V2Tables(t3db);
+    addT3V2Thread(t3db, {
+      threadId: "location-thread",
+      title: "Edit task",
+      nativeId: "edit-session",
+    });
+    t3db.close();
+    const repo = join(dir, "location-repo");
+    const other = join(dir, "location-worktree");
+    const unrelated = join(dir, "unrelated-repo");
+    const git = (cwd, ...args) => {
+      const out = Bun.spawnSync(["git", "-C", cwd, ...args]);
+      expect(out.exitCode).toBe(0);
+    };
+    mkdirSync(repo);
+    git(repo, "init", "-q", "-b", "initial");
+    git(
+      repo,
+      "-c",
+      "user.name=Tester",
+      "-c",
+      "user.email=test@example.invalid",
+      "commit",
+      "--allow-empty",
+      "-qm",
+      "init",
+    );
+    git(repo, "worktree", "add", "-qb", "edit", "../location-worktree");
+    mkdirSync(unrelated);
+    git(unrelated, "init", "-q");
+    const registration = {
+      project_key: repo,
+      name: "BlueBranch",
+      program: "claude",
+      model: "m",
+      task_description: "[t3:location-thread claude:edit-session cwd:/launch] task",
+    };
+    await call("register_agent", { ...registration, worktree: repo });
+    await call("register_agent", {
+      project_key: repo,
+      name: "GreenBranch",
+      program: "codex",
+      model: "m",
+    });
+    const message = {
+      project_key: repo,
+      sender_name: "BlueBranch",
+      to: ["GreenBranch"],
+      subject: "location",
+      body_md: "hello",
+      idempotency_key: "location-first",
+    };
+    const first = await call("send_message", message);
+    expect(first.sender_location).toMatchObject({
+      repo: "location-repo",
+      worktree: repo,
+      branch: "initial",
+      title: "Edit task",
+    });
+    await call("register_agent", { ...registration, worktree: other });
+    // Omitting the optional field in a manual task update preserves the hook's recorded location.
+    await call("register_agent", { ...registration, task_description: "new task" });
+    git(other, "switch", "-qc", "renamed");
+    const roster = await call("list_agents", { project_key: repo });
+    expect(roster.find((a) => a.name === "BlueBranch")).toMatchObject({
+      name: "BlueBranch",
+      cwd: "/launch",
+      location: { worktree: other, branch: "renamed" },
+    });
+    expect(roster.find((a) => a.name === "GreenBranch").location).toBeNull();
+    const replay = await call("send_message", message);
+    expect(replay.id).toBe(first.id);
+    expect(replay.sender_location).toEqual(first.sender_location);
+    const second = await call("send_message", { ...message, idempotency_key: "location-second" });
+    expect(second.sender_location.branch).toBe("renamed");
+    const inbox = await call("fetch_inbox", { project_key: repo, agent_name: "GreenBranch" });
+    expect(inbox.find((m) => m.id === first.id).sender_location).toEqual(first.sender_location);
+    expect(inbox.find((m) => m.id === second.id).sender_location.worktree).toBe(other);
+    await expect(
+      call("register_agent", { ...registration, worktree: unrelated }),
+    ).rejects.toMatchObject({ type: "INVALID_ARGUMENT" });
+    git(other, "switch", "-q", "--detach");
+    expect(
+      (await call("list_agents", { project_key: repo })).find((a) => a.name === "BlueBranch")
+        .location.branch,
+    ).toBeNull();
+  } finally {
+    if (previousHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = previousHome;
+    }
+  }
 });
