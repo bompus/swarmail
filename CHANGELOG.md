@@ -4,6 +4,12 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Every tool now declares MCP annotations (`readOnlyHint`, `destructiveHint`,
+  `idempotentHint`, `openWorldHint: false`), and every parameter has a
+  description. Tool descriptions name the tool to use instead where two are
+  close, such as `whois` and `list_agents`, or `mark_message_read` and
+  `acknowledge_message`. The tools/list answer grows from 10,980 to 17,991
+  bytes.
 - The server sets SQLite's 5-second busy timeout before its first statement,
   so a start that finds another process holding the database, or recovering
   its write-ahead log (`SQLITE_BUSY_RECOVERY`), waits instead of exiting with
