@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.2.0 - 2026-10-03
 
 - On native Windows, `swarmail who` can tell whether a Cursor CLI session is
   still running. The Cursor CLI runs there as a `node.exe` under its
