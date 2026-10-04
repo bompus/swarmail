@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../src/server.ts";
@@ -56,25 +57,20 @@ test("relays requests in order and drops notifications", async () => {
 
 test("keeps relaying after an answer breaks off mid-body", async () => {
   let calls = 0;
-  const flaky = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch() {
-      if (++calls === 1) {
-        const body = new ReadableStream({
-          // The headers and first chunk go out before the stream fails.
-          start(c) {
-            c.enqueue(new TextEncoder().encode('{"jsonrpc":"2.0",'));
-            setTimeout(() => c.error(new Error("dropped")), 50);
-          },
-        });
-        return new Response(body, { headers: { "content-type": "application/json" } });
-      }
-      return Response.json({ jsonrpc: "2.0", id: 2, result: {} });
-    },
+  // A raw socket, so the first answer's headers promise more body than it sends before closing.
+  const flaky = createNetServer((socket) => {
+    socket.once("data", () => {
+      const body = ++calls === 1 ? "" : JSON.stringify({ jsonrpc: "2.0", id: 2, result: {} });
+      const length = body ? Buffer.byteLength(body) : 100;
+      socket.end(
+        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\nconnection: close\r\n" +
+          `content-length: ${length}\r\n\r\n${body || '{"jsonrpc":"2.0",'}`,
+      );
+    });
   });
+  await new Promise((resolve) => flaky.listen(0, "127.0.0.1", resolve));
   try {
-    const out = await relay(`http://127.0.0.1:${flaky.port}/mcp/`, [
+    const out = await relay(`http://127.0.0.1:${flaky.address().port}/mcp/`, [
       { jsonrpc: "2.0", id: 1, method: "tools/list" },
       { jsonrpc: "2.0", id: 2, method: "ping" },
     ]);
@@ -82,7 +78,7 @@ test("keeps relaying after an answer breaks off mid-body", async () => {
     expect(out[0].error.message).toContain("did not finish");
     expect(out[1].result).toEqual({});
   } finally {
-    flaky.stop(true);
+    flaky.close();
   }
 });
 
