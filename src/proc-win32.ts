@@ -24,6 +24,10 @@ const symbols = {
   },
   CloseHandle: { args: [FFIType.u64], returns: FFIType.i32 },
   GetShortPathNameW: { args: [FFIType.ptr, FFIType.ptr, FFIType.u32], returns: FFIType.u32 },
+  QueryFullProcessImageNameW: {
+    args: [FFIType.u64, FFIType.u32, FFIType.ptr, FFIType.ptr],
+    returns: FFIType.i32,
+  },
 } as const;
 
 let kernel32: ReturnType<typeof dlopen<typeof symbols>>["symbols"] | null = null;
@@ -88,6 +92,34 @@ function startTime(pid: number): string | undefined {
   }
 }
 
+/** A process's executable path, or undefined when it is gone or not readable. */
+function imagePath(pid: number): string | undefined {
+  const k = lib();
+  const handle = k.OpenProcess(QUERY_LIMITED_INFORMATION, 0, pid);
+  if (!handle) {
+    return undefined;
+  }
+  const out = new Uint8Array(2 * 32_768);
+  const size = new Uint32Array([out.length / 2]);
+  try {
+    return k.QueryFullProcessImageNameW(handle, 0, out, size)
+      ? Buffer.from(out.subarray(0, size[0]! * 2)).toString("utf16le")
+      : undefined;
+  } finally {
+    k.CloseHandle(handle);
+  }
+}
+
+/**
+ * The name a process goes by: its executable's, except that the Cursor CLI on Windows is the `node.exe` its
+ * installer puts under a `cursor-agent` directory, which reads as `cursor-agent` as it does on Linux.
+ */
+export function windowsComm(name: string, image: () => string | undefined): string {
+  return name.toLowerCase() === "node" && /[\\/]cursor-agent[\\/]/i.test(image() ?? "")
+    ? "cursor-agent"
+    : name;
+}
+
 /**
  * One process's name, parent and start, in the shape proc.ts reads from /proc. Windows does not reparent orphans,
  * so a parent PID can name a newer process that reused it; a parent that started after its child reads as none.
@@ -103,7 +135,11 @@ export function readWindowsProcess(
   const parentStart = entry.ppid ? startTime(entry.ppid) : undefined;
   const reused =
     start !== undefined && parentStart !== undefined && BigInt(parentStart) > BigInt(start);
-  return { comm: entry.name, ppid: reused ? 0 : entry.ppid, start };
+  return {
+    comm: windowsComm(entry.name, () => imagePath(pid)),
+    ppid: reused ? 0 : entry.ppid,
+    start,
+  };
 }
 
 /**

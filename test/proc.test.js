@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hostAlive, hostProcess, processIdentity } from "../src/proc.ts";
-import { shortPath } from "../src/proc-win32.ts";
+import { shortPath, windowsComm } from "../src/proc-win32.ts";
 
 const windows = process.platform === "win32";
 
@@ -54,4 +54,12 @@ test("a host recorded without a start time never reads as alive", () => {
   expect(hostAlive({ name: "claude", pid: 4242, start: undefined }, gone)).toBe(false);
   expect(hostAlive({ name: "claude", pid: 4242, start: "7" }, gone)).toBe(false);
   expect(hostAlive({ name: "claude", pid: 4242, start: "7" }, () => ({ start: "7" }))).toBe(true);
+});
+
+test("the Cursor CLI's node.exe on Windows reads as cursor-agent, and other Node programs keep their name", () => {
+  const cursor = String.raw`C:\Users\Jo\AppData\Local\cursor-agent\versions\2026.10.01-e373342\node.exe`;
+  expect(windowsComm("node", () => cursor)).toBe("cursor-agent");
+  expect(windowsComm("node", () => String.raw`C:\Program Files\nodejs\node.exe`)).toBe("node");
+  expect(windowsComm("node", () => undefined)).toBe("node");
+  expect(windowsComm("claude", () => cursor)).toBe("claude");
 });
