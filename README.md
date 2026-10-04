@@ -329,7 +329,9 @@ or the Bun version changed. Restart the unit to load a new build.
 ## Sponsoring
 
 Swarmail is built and maintained by one person. If it saves you time, you can
-support it on [Ko-fi](https://ko-fi.com/bompus).
+sponsor it monthly or once through
+[GitHub Sponsors](https://github.com/sponsors/bompus), or leave a tip on
+[Ko-fi](https://ko-fi.com/bompus).
 
 ## Licence
 
