@@ -2,6 +2,11 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- The README compares roster scope, search, threads, receipts, file reservations
+  and idle wakes across the six benchmarked servers, with pinned source links.
+
 ## 0.2.3 - 2026-10-04
 
 - Tool descriptions distinguish preserved message timestamps from refreshed agent
