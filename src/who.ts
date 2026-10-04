@@ -11,11 +11,10 @@
 // Without --all, rows with no live host process or running T3 Code thread and no activity in the last day are left out.
 // Names this session registered under (selfNames in registry.ts) are marked "(you)", and `self` in --json.
 
-import { databasePath } from "./paths.ts";
+import { databasePath, homeDir, t3Home, tildePath } from "./paths.ts";
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, join } from "node:path";
+import { basename } from "node:path";
 import { buildSource } from "./build.ts";
 import { iso } from "./db.ts";
 import { primaryCheckout } from "./checkout.ts";
@@ -111,7 +110,7 @@ export function resolveProject(target: string, keys: string[], checkout = primar
   if (project) {
     return project;
   }
-  if (target.includes("/")) {
+  if (/[\\/]/.test(target)) {
     throw new Error(`${target} is not inside a git repository`);
   }
   const matches = keys.filter((key) => basename(key).toLowerCase() === target.toLowerCase());
@@ -259,13 +258,13 @@ export function main(args: string[]): void {
   const dbPath = databasePath();
   const project = resolveProject(target, projectKeys(dbPath));
   const roster = callTool("list_agents", { project_key: project, limit: 1000 }) as RosterAgent[];
-  const home = homedir();
+  const home = homeDir();
   const now = Date.now();
   const rows = whoRows({
     project,
     roster,
     stateDir: registryDir(),
-    threads: t3Threads(t3StatePath(join(home, ".t3"))),
+    threads: t3Threads(t3StatePath(t3Home())),
     room: liveRoom(process.env.SWARMAIL_LIVE_ROOM || null),
     queues: unreadQueues(dbPath, project),
   }).filter(
@@ -308,7 +307,7 @@ export function main(args: string[]): void {
       .join("; ");
     console.log(
       `- ${who}: ${row.title ? `"${row.title}"` : "untitled"} (${live}) · last active ${ago(row.lastActive, now)}${queue}` +
-        ` · ${row.cwd?.replace(home, "~") ?? "cwd unknown"}${flags ? ` · ${flags}` : ""}\n    ${row.task}`,
+        ` · ${row.cwd ? tildePath(home, row.cwd) : "cwd unknown"}${flags ? ` · ${flags}` : ""}\n    ${row.task}`,
     );
   }
 }

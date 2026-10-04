@@ -1,5 +1,7 @@
-// Process identity from /proc: a PID plus its start time, so a reused PID never matches an old process.
+// Process identity from /proc, or kernel32 on Windows (proc-win32.ts): a PID plus its start time, so a reused PID
+// never matches an old process.
 import { readFileSync } from "node:fs";
+import { readWindowsProcess } from "./proc-win32.ts";
 
 /** The agent host process: its command name, PID and start time. */
 export interface HostProcess {
@@ -14,10 +16,13 @@ interface ProcStat {
   start: string | undefined;
 }
 
-const HOST_COMM = /^(claude|codex|opencode|devin|cursor-agent|grok|agy|antigravity)/;
+const HOST_COMM = /^(claude|codex|opencode|devin|cursor-agent|grok|agy|antigravity)/i;
 
 /** `/proc/<pid>/stat`: the command name, parent and start time (clock ticks since boot). */
 function readProcStat(pid: number): ProcStat | null {
+  if (process.platform === "win32") {
+    return readWindowsProcess(pid);
+  }
   try {
     const raw = readFileSync(`/proc/${pid}/stat`, "utf8");
     const close = raw.lastIndexOf(")");
@@ -60,7 +65,8 @@ export function processIdentity(pid: number): HostProcess | null {
 
 /** Whether a recorded host process is still the same running process. */
 export function hostAlive(host: HostProcess | null | undefined, read = readProcStat): boolean {
-  if (!host?.pid) {
+  // A start time that could not be read cannot tell this process from a later one with its PID.
+  if (!host?.pid || host.start === undefined) {
     return false;
   }
   return read(host.pid)?.start === host.start;

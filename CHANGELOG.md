@@ -29,6 +29,16 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   session's tag, and `sessionMarker` is gone from `src/tag.ts`.
 - `src/paths.ts` holds the default database path, state directory, port and
   URLs.
+- Groundwork for native Windows, which is not supported yet. The server,
+  the register hook, `swarmail who` and the build now run on Windows:
+  they read `HOME` when it is set and the user profile otherwise, keep the
+  Linux layout under it (`~/.local/bin/swarmail.exe`), compare paths
+  without regard to case or slash direction, and read process identity
+  from kernel32 instead of `/proc`. A rebuild while the server runs moves
+  the old `swarmail.exe` aside, since Windows refuses to replace a running
+  program. CI runs the checks and every test except the hook installer, MCP
+  registration and wake hook tests on `windows-latest`. The hook and MCP
+  installers, wake and a background service do not work on Windows yet.
 
 ## 0.1.4 - 2026-10-03
 

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
+  realpathSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -48,31 +49,36 @@ function fakeMail(handler) {
 }
 
 test("resolves a worktree to its primary checkout and skips bare or missing repositories", () => {
-  const run = (common) => () => common;
-  expect(primaryCheckout("/w/repo-task", run("/home/u/repo/.git"))).toBe("/home/u/repo");
-  expect(primaryCheckout("/home/u/repo", run("/home/u/repo/.git"))).toBe("/home/u/repo");
-  expect(primaryCheckout("/srv/bare", run("/srv/bare.git"))).toBeNull();
+  const root = tmpdir();
+  // Git prints forward slashes on every platform; the checkout comes back in the native form.
+  const run = (common) => () => common.replaceAll("\\", "/");
+  const repo = join(root, "repo");
+  expect(primaryCheckout(join(root, "w", "repo-task"), run(join(repo, ".git")))).toBe(repo);
+  expect(primaryCheckout(repo, run(join(repo, ".git")))).toBe(repo);
+  expect(primaryCheckout(join(root, "bare"), run(join(root, "bare.git")))).toBeNull();
   expect(
-    primaryCheckout("/tmp", () => {
+    primaryCheckout(root, () => {
       throw new Error("not a repo");
     }),
   ).toBeNull();
 });
 
 test("resolves the edited file's folder, falling back to the session cwd", () => {
-  expect(targetDir({ cwd: "/home/u", tool_input: { file_path: "/tmp/new-dir/x.ts" } })).toBe(
-    "/tmp",
+  const root = tmpdir();
+  const home = join(root, "no-such-home");
+  expect(targetDir({ cwd: home, tool_input: { file_path: join(root, "new-dir", "x.ts") } })).toBe(
+    root,
   );
-  expect(targetDir({ cwd: "/home/u", tool_input: {} })).toBe("/home/u");
+  expect(targetDir({ cwd: home, tool_input: {} })).toBe(home);
   expect(targetDir({ tool_input: { file_path: "relative.ts" } })).toBeNull();
   const patch = "*** Begin Patch\n*** Update File: sub/x.ts\n@@\n*** End Patch";
-  expect(targetDir({ cwd: "/tmp", tool_input: { command: patch } })).toBe("/tmp");
-  expect(targetDir({ cwd: "/home/u", tool_input: { command: "*** Add File: /tmp/a/b.ts" } })).toBe(
-    "/tmp",
-  );
-  expect(targetDir({ cwd: "/home/u", toolCall: { args: { TargetFile: "/tmp/new/c.ts" } } })).toBe(
-    "/tmp",
-  );
+  expect(targetDir({ cwd: root, tool_input: { command: patch } })).toBe(root);
+  expect(
+    targetDir({ cwd: home, tool_input: { command: `*** Add File: ${join(root, "a", "b.ts")}` } }),
+  ).toBe(root);
+  expect(
+    targetDir({ cwd: home, toolCall: { args: { TargetFile: join(root, "new", "c.ts") } } }),
+  ).toBe(root);
 });
 
 test("registers once per repository and tag, keeping one name across repositories", () => {
@@ -215,7 +221,7 @@ test("tells Claude hook input from Cursor, Devin and Grok input", () => {
 });
 
 test("finds the T3 thread whose resume cursor holds the session id", () => {
-  const dir = mkdtempSync(join(tmpdir(), "t3-state-"));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "t3-state-")));
   const path = join(dir, "state.sqlite");
   const db = new Database(path);
   db.run(
@@ -236,7 +242,7 @@ test("finds the T3 thread whose resume cursor holds the session id", () => {
 });
 
 test("after the V2 cutover, finds the thread from V2's native thread reference", () => {
-  const dir = mkdtempSync(join(tmpdir(), "t3-state-"));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "t3-state-")));
   mkdirSync(join(dir, "userdata"));
   const v1 = join(dir, "userdata/state.sqlite");
   const db = new Database(v1);
@@ -284,7 +290,7 @@ test("prints nothing on stdout for any host, since Antigravity denies the edit o
 });
 
 test("a held lock makes a second registrar wait or give up, and a stale one is taken over", () => {
-  const dir = mkdtempSync(join(tmpdir(), "hook-lock-"));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-lock-")));
   const lock = join(dir, "s.lock");
   try {
     writeFileSync(lock, "");
@@ -317,7 +323,7 @@ test("a held lock makes a second registrar wait or give up, and a stale one is t
 });
 
 test("two concurrent first edits of one session register once", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "hook-race-"));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-race-")));
   const mail = fakeMail(async (name) => {
     if (name === "list_agents") {
       return [];
@@ -350,7 +356,7 @@ test("two concurrent first edits of one session register once", async () => {
 });
 
 test("an edit from a session registered before tags retags its row and keeps name and task", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "hook-retag-"));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-retag-")));
   const mail = fakeMail((name, args) =>
     name === "list_agents"
       ? [{ name: "TanOwl", task_description: "Claude Code session legacy-1 Room C90" }]
@@ -386,7 +392,7 @@ test("an edit from a session registered before tags retags its row and keeps nam
     const register = mail.calls.find((call) => call.name === "register_agent").arguments;
     expect(register.name).toBe("TanOwl");
     expect(register.task_description).toBe(
-      "[claude:legacy-1 cwd:~/repo] Claude Code session legacy-1 Room C90",
+      `[claude:legacy-1 cwd:${join("~", "repo")}] Claude Code session legacy-1 Room C90`,
     );
   } finally {
     mail.stop();
@@ -395,7 +401,7 @@ test("an edit from a session registered before tags retags its row and keeps nam
 });
 
 test("a new provider session in a T3 thread takes over the thread's name", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "hook-t3-thread-"));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-t3-thread-")));
   const mail = fakeMail((name, args) =>
     name === "list_agents"
       ? [
@@ -437,7 +443,7 @@ test("a new provider session in a T3 thread takes over the thread's name", async
     const register = mail.calls.find((call) => call.name === "register_agent").arguments;
     expect(register.name).toBe("BoldWillow");
     expect(register.task_description).toBe(
-      "[t3:thread-1 claude:new-sid cwd:~/repo] Swarmail release",
+      `[t3:thread-1 claude:new-sid cwd:${join("~", "repo")}] Swarmail release`,
     );
   } finally {
     mail.stop();
@@ -446,7 +452,7 @@ test("a new provider session in a T3 thread takes over the thread's name", async
 });
 
 test("register --tag takes the session id from the host's shell variable when none is given", () => {
-  const dir = mkdtempSync(join(tmpdir(), "hook-tag-"));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-tag-")));
   try {
     const tag = (args, env) =>
       Bun.spawnSync(["bun", join(import.meta.dir, "../src/cli.ts"), "register", ...args], {
@@ -481,7 +487,7 @@ test("finds the agent host above the hook and records its PID and start time", (
 });
 
 test("a failed registration tells Claude, then the next prompt retries against the server and reports the name", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "hook-retry-"));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-retry-")));
   const port = 20000 + Math.floor(Math.random() * 20000);
   let server;
   try {
@@ -526,7 +532,10 @@ test("a failed registration tells Claude, then the next prompt retries against t
     expect(registered).toBe(`Swarmail: registered as ${name} in ${repo}.`);
     const roster = server.db.query("SELECT name, task_description FROM agents").all();
     expect(roster).toEqual([
-      { name, task_description: `[claude:retry-1 cwd:~/repo] registered on first edit` },
+      {
+        name,
+        task_description: `[claude:retry-1 cwd:${join("~", "repo")}] registered on first edit`,
+      },
     ]);
     const state = JSON.parse(
       readFileSync(join(dir, "state/swarmail-register/retry-1.json"), "utf8"),
@@ -542,7 +551,7 @@ test("a failed registration tells Claude, then the next prompt retries against t
 }, 30000);
 
 test("an unrecognised host gets no output even when its registration fails", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "hook-unknown-"));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-unknown-")));
   try {
     const repo = join(dir, "repo");
     Bun.spawnSync(["git", "init", "-q", repo]);
@@ -571,7 +580,7 @@ test("an unrecognised host gets no output even when its registration fails", asy
 }, 10000);
 
 test("SessionEnd records the end and releases reservations in each project, keeping the name", () => {
-  const dir = mkdtempSync(join(tmpdir(), "end-"));
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "end-")));
   try {
     const statePath = join(dir, "s1.json");
     const registry = openRegistry(dir);

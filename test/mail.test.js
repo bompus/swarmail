@@ -1,13 +1,13 @@
 import { afterAll, expect, spyOn, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../src/server.ts";
 import { mail } from "../src/mail.ts";
 import { unreadQueues } from "../src/who.ts";
 
-const dir = mkdtempSync(join(tmpdir(), "swarmail-mail-"));
+const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "swarmail-mail-")));
 const repo = join(dir, "repo");
 mkdirSync(repo);
 spawnSync("git", ["init", "-q"], { cwd: repo });

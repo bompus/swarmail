@@ -1,6 +1,14 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nowUs, openDatabase } from "../src/db.ts";
@@ -37,7 +45,7 @@ function reserve(agent, pattern, { exclusive = 1, ttl = 3600, released = null } 
 }
 
 beforeAll(() => {
-  dir = mkdtempSync(join(tmpdir(), "swarmail-guard-"));
+  dir = realpathSync.native(mkdtempSync(join(tmpdir(), "swarmail-guard-")));
   repo = join(dir, "repo");
   mkdirSync(repo);
   git("init", "-q", "-b", "main");

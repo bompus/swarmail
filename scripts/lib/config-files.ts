@@ -6,11 +6,12 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
-  renameSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { renameOver } from "../../src/files.ts";
+import { within } from "../../src/paths.ts";
 import type { Stats } from "node:fs";
 
 export function present(path: string): Stats | null {
@@ -39,7 +40,7 @@ export function readConfig(path: string, home: string): string {
     if (stat && (!stat.isDirectory() || stat.isSymbolicLink())) {
       throw new Error("Expected a real directory: " + dir);
     }
-    if (dir === home) {
+    if (within(dir, home) === "" || dirname(dir) === dir) {
       break;
     }
   }
@@ -84,7 +85,7 @@ export function writeChanged(
   }
   const temporary = path + "." + backupTag + "-" + process.pid + ".tmp";
   writeFileSync(temporary, next, { mode: 0o600, flag: "wx" });
-  renameSync(temporary, path);
+  renameOver(temporary, path);
   return backup;
 }
 
