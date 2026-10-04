@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // The swarmail command, and the entry for its single binary: scripts/build.ts builds ~/.local/bin/swarmail.
-// It runs on Linux only, since sessions are identified through /proc. Another entry can import main() and pass it
+// It runs on Linux and Windows. Another entry can import main() and pass it
 // commands of its own.
 // Modules load on demand, so a waiting hook does not load the server's. No top-level await: `--bytecode` builds CommonJS.
 
@@ -10,13 +10,19 @@ export interface Command {
   run: (args: string[]) => Promise<void>;
 }
 
+/**
+ * Standard input as text. On Windows (Bun 1.4.2), Bun.stdin.text() outside a top-level await lets the process exit
+ * before reading, and readFileSync(0) reads nothing from a PowerShell pipeline; reading the stream does neither.
+ */
+const stdin = () => new Response(Bun.stdin.stream()).text();
+
 const mail = (name: string, usage: string): [string, Command] => [
   name,
   {
     usage: [usage],
     run: async (args) => {
       const { mail } = await import("./mail.ts");
-      process.exit(await mail([name, ...args], () => Bun.stdin.text()));
+      process.exit(await mail([name, ...args], stdin));
     },
   },
 ];
@@ -32,14 +38,25 @@ const serve: Command = {
 const COMMANDS: Record<string, Command> = {
   serve,
   hook: {
-    usage: ["swarmail hook wake <claude|cursor> [seconds]     the wake hook (wake-hook.ts)"],
-    run: async ([kind, host, seconds]) => {
-      if (kind !== "wake") {
+    usage: [
+      "swarmail hook wake <claude|cursor> [seconds]     the wake hook (wake-hook.ts)",
+      "swarmail hook rearm                              the Claude PostToolUse re-arm where there is no shell",
+    ],
+    run: async (args) => {
+      // The Windows Claude hooks end in `; exit $LASTEXITCODE` (configure-hooks.ts). cmd has no `;` separator and
+      // passes that through as arguments, so the command ends at the first word ending in `;`.
+      const end = args.findIndex((arg) => arg.endsWith(";"));
+      const [kind, host, seconds] =
+        end === -1 ? args : [...args.slice(0, end), args[end]!.slice(0, -1)];
+      if ((kind !== "wake" && kind !== "rearm") || (seconds && !(Number(seconds) > 0))) {
         usage(64);
       }
-      const { wakeHook } = await import("./wake-hook.ts");
+      const { rearmHook, wakeHook } = await import("./wake-hook.ts");
+      const input = await stdin();
       process.exit(
-        await wakeHook(host, seconds ? Number(seconds) : undefined, await Bun.stdin.text()),
+        kind === "rearm"
+          ? await rearmHook(input)
+          : await wakeHook(host, seconds ? Number(seconds) : undefined, input),
       );
     },
   },
@@ -49,7 +66,7 @@ const COMMANDS: Record<string, Command> = {
     ],
     run: async (args) => {
       const { registerHook } = await import("./register-hook.ts");
-      registerHook(args);
+      await registerHook(args, stdin);
     },
   },
   guard: {
@@ -58,7 +75,7 @@ const COMMANDS: Record<string, Command> = {
     ],
     run: async ([hook]) => {
       const { guard } = await import("./guard.ts");
-      process.exit(guard(hook, hook === "pre-push" ? await Bun.stdin.text() : ""));
+      process.exit(guard(hook, hook === "pre-push" ? await stdin() : ""));
     },
   },
   who: {

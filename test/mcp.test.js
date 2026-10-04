@@ -15,6 +15,7 @@ import { dirname, join } from "node:path";
 import { configureSwarmailMcp } from "../scripts/configure-mcp.ts";
 
 const managedUrl = "http://127.0.0.1:18765/mcp/";
+const windows = process.platform === "win32";
 const roots = [];
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "swarmail-mcp-"));
@@ -102,7 +103,10 @@ test("registers all seven clients over HTTP, preserves settings and is byte-stab
       default: // codex, grok
         expect(entry).toEqual({ url: managedUrl, enabled: true });
     }
-    expect(statSync(result.path).mode & 0o777).toBe(0o600);
+    // Windows has no Unix modes; a config under the profile is the user's alone.
+    if (!windows) {
+      expect(statSync(result.path).mode & 0o777).toBe(0o600);
+    }
     if (result.backup) {
       expect(existsSync(result.backup)).toBe(true);
     }
@@ -190,7 +194,9 @@ test("the CLI prints usage for --help and refuses unknown arguments before writi
   mkdirSync(join(home, ".claude"));
   const script = Bun.fileURLToPath(new URL("../scripts/configure-mcp.ts", import.meta.url));
   const run = (args) =>
-    Bun.spawnSync([process.execPath, script, ...args], { env: { ...process.env, HOME: home } });
+    Bun.spawnSync([process.execPath, script, ...args], {
+      env: { ...process.env, HOME: home, USERPROFILE: home },
+    });
   const help = run(["--help"]);
   expect(help.exitCode).toBe(0);
   expect(help.stdout.toString()).toContain("Usage:");
@@ -259,7 +265,8 @@ test.each([".cursor", ".config", ".gemini/config"])(
     const outside = join(dirname(home), "outside");
     mkdirSync(outside);
     mkdirSync(dirname(join(home, relative)), { recursive: true });
-    symlinkSync(outside, join(home, relative));
+    // A junction, which Windows lets any user create; elsewhere the type is ignored.
+    symlinkSync(outside, join(home, relative), "junction");
     // Behind a symlinked .config, Devin's directory makes the host count as installed.
     mkdirSync(join(home, relative === ".config" ? ".config/devin" : relative), { recursive: true });
     expect(() => configureSwarmailMcp(home)).toThrow("Expected a real directory");
@@ -271,7 +278,8 @@ test.each([".cursor", ".config", ".gemini/config"])(
   },
 );
 
-test("rejects dangling config symlinks", () => {
+// A file symlink on Windows needs Developer Mode or an administrator.
+test.skipIf(windows)("rejects dangling config symlinks", () => {
   const { home } = fixture();
   mkdirSync(join(home, ".codex"));
   symlinkSync(join(home, "missing"), join(home, ".codex/config.toml"));

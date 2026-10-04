@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
 // Swarmail server: MCP over streamable HTTP (stateless JSON responses) on 127.0.0.1.
 //   bun server.ts                      serve (SWARMAIL_DB, SWARMAIL_PORT, SWARMAIL_SYNCHRONOUS, SWARMAIL_RETIRE_DAYS: 0 keeps idle agents and gone projects); GET /wait is the wake long poll (wake.ts)
-import { databasePath, DEFAULT_PORT, homeDir, within } from "./paths.ts";
+import { databasePath, DEFAULT_PORT, homeDir, serverRecordPath, within } from "./paths.ts";
 import type { Database } from "bun:sqlite";
 import { dirname } from "node:path";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { processIdentity } from "./proc.ts";
 import { nowUs, openDatabase } from "./db.ts";
 import { buildSource } from "./build.ts";
 import { createTools, TOOL_DEFINITIONS, ToolError, WAKES } from "./tools.ts";
@@ -233,6 +234,12 @@ export function main(args: string[]): void {
     registry: registryDir(),
   });
   console.log(`swarmail listening on ${server.url} (${database})`);
+  if (process.platform === "win32") {
+    // Stopping the scheduled task leaves this process running, so scripts/enable-windows.ts stops it by this record.
+    const record = serverRecordPath();
+    mkdirSync(dirname(record), { recursive: true });
+    writeFileSync(record, JSON.stringify(processIdentity(process.pid)) + "\n");
+  }
 }
 
 if (import.meta.main) {

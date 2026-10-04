@@ -7,8 +7,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - The server no longer rewrites idempotency results stored in the
   pre-0.1.0 message format when it opens the database. Every release since
   0.1.0 stores the current format.
-- The README names WSL 2 as a supported Linux and says macOS and native
-  Windows are not supported yet.
+- The README names WSL 2 as a supported Linux and says macOS is not
+  supported yet.
 - The server stores each agent's session tag parts (`host`, `session_id`,
   `t3_thread`, `build`, `cwd`) as indexed columns of `agents`, set whenever a
   registration writes the task description. Opening an older database adds
@@ -29,16 +29,48 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   session's tag, and `sessionMarker` is gone from `src/tag.ts`.
 - `src/paths.ts` holds the default database path, state directory, port and
   URLs.
-- Groundwork for native Windows, which is not supported yet. The server,
-  the register hook, `swarmail who` and the build now run on Windows:
-  they read `HOME` when it is set and the user profile otherwise, keep the
-  Linux layout under it (`~/.local/bin/swarmail.exe`), compare paths
-  without regard to case or slash direction, and read process identity
-  from kernel32 instead of `/proc`. A rebuild while the server runs moves
-  the old `swarmail.exe` aside, since Windows refuses to replace a running
-  program. CI runs the checks and every test except the hook installer, MCP
-  registration and wake hook tests on `windows-latest`. The hook and MCP
-  installers, wake and a background service do not work on Windows yet.
+- Swarmail runs natively on Windows 10 and 11, as a preview: the hooks
+  have not yet run inside a live Claude Code or Cursor session there.
+  `scripts/enable-windows.ts` builds `~\.local\bin\swarmail.exe` and
+  starts the server in a
+  `Swarmail` scheduled task at each logon, hidden and without an
+  administrator; a rerun stops the running server by the PID and start time
+  it records in `.local\state\swarmail-server.json` under the user profile. The hook and MCP
+  installers write the Windows host configs, with Devin's under
+  `AppData\Roaming\devin`. `enable-windows.ts` reads `SWARMAIL_PORT` from
+  the saved user environment the task gets, and warns when the terminal's
+  value differs.
+  - Hook commands name the binary as one unquoted path with forward
+    slashes, which Git Bash, PowerShell and cmd all run, through the
+    profile's 8.3 short name when the path has a space or a non-ASCII
+    letter. The installer replaces the Swarmail hooks an earlier install
+    wrote, whatever the path form. The hooks and the Swarmail mod use the
+    binary under `HOME` when it is set, where the build puts it, while the
+    host configs stay under the profile the hosts read.
+  - The Claude Code wake and re-arm commands end in `; exit
+    $LASTEXITCODE`, since PowerShell reports a native exit code 2 as 1.
+    Under cmd the CLI ignores that suffix, which arrives as arguments.
+    The re-arm runs `swarmail hook rearm`, which makes the checks the Linux
+    hook writes as shell. The wait records its start time beside its PID,
+    and the re-arm counts a waiter as live only while that same process
+    runs.
+  - The Swarmail mod lists its directory in `CLAUDE_CODE_PLUGIN_DIRS` with
+    `;`, the separator Claude Code splits on in Windows.
+  - The wake hook reads its host's parent from kernel32 and its command
+    line through PowerShell, and stops waiting once the host process with
+    the recorded start time is gone.
+  - The server, the register hook, `swarmail who` and the build read `HOME`
+    when it is set and the user profile otherwise, keep the Linux layout
+    under it, compare paths without regard to case or slash direction, and
+    read process identity from kernel32 instead of `/proc`. A rebuild while
+    the server runs moves the old `swarmail.exe` aside, since Windows refuses
+    to replace a running program.
+  - CI runs the checks and the whole test suite on `windows-latest`.
+- The commands read standard input as a stream. On Windows,
+  `Bun.stdin.text()` let the process exit before reading, and
+  `readFileSync(0)` read nothing from a PowerShell pipeline.
+- A wake hint writes a backslash in a project path as `/` instead of
+  dropping it, so a Windows path stays readable.
 
 ## 0.1.4 - 2026-10-03
 

@@ -5,7 +5,7 @@
 // roster find nothing. Never blocks the edit, and
 // prints nothing: Antigravity reads any stdout, even `{}`, as a decision and denies the call.
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { primaryCheckout } from "./checkout.ts";
 import { hostProcess, sameHost } from "./proc.ts";
@@ -207,11 +207,12 @@ const SESSION_ENV: Record<string, string> = {
 };
 
 /**
- * `swarmail register`: the hook itself, reading the host's JSON on stdin and always exiting 0.
+ * `swarmail register`: the hook itself, reading the host's JSON (`read`, standard input from the CLI) and always
+ * exiting 0.
  * `swarmail register --tag <host> [session id]` prints the tag for a manual `register_agent` from the current directory,
  * taking the session id from the host's shell variable when omitted.
  */
-export function registerHook(args: string[]): void {
+export async function registerHook(args: string[], read: () => Promise<string>): Promise<void> {
   if (args[0] === "--tag") {
     const host = args[1];
     if (!host) {
@@ -224,7 +225,7 @@ export function registerHook(args: string[]): void {
     return;
   }
   try {
-    const input = JSON.parse(readFileSync(0, "utf8")) as HookInput;
+    const input = JSON.parse(await read()) as HookInput;
     const out = hookOutput(hookSession(input).host, input.hook_event_name, main(input));
     if (out) {
       process.stdout.write(out + "\n");
