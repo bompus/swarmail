@@ -4,6 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- README performance charts rank each metric, and smaller tables show latency,
+  throughput, memory and startup with explicit sort columns.
+
 - The README compares roster scope, search, threads, receipts, file reservations
   and idle wakes across the six benchmarked servers, with pinned source links.
 
