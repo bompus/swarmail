@@ -5,6 +5,36 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDatabase } from "../src/db.ts";
 
+test("opening waits for another process that holds the database instead of failing", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "swarmail-db-"));
+  const path = join(dir, "mail.sqlite3");
+  try {
+    new Database(path, { create: true }).close();
+    const holder = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `const { Database } = require("bun:sqlite");
+         const db = new Database(process.argv[1]);
+         db.run("BEGIN EXCLUSIVE");
+         console.log("locked");
+         Bun.sleepSync(300);
+         db.run("COMMIT");`,
+        path,
+      ],
+      { stdout: "pipe" },
+    );
+    const reader = holder.stdout.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).toContain("locked");
+    const db = openDatabase(path);
+    expect(db.query("PRAGMA journal_mode").get().journal_mode).toBe("wal");
+    db.close();
+    expect(await holder.exited).toBe(0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("identity columns are backfilled from each tag, and every open repairs rows an older build wrote", () => {
   const dir = mkdtempSync(join(tmpdir(), "swarmail-db-"));
   const path = join(dir, "mail.sqlite3");

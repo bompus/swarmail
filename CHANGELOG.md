@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- The server sets SQLite's 5-second busy timeout before its first statement,
+  so a start that finds another process holding the database, or recovering
+  its write-ahead log (`SQLITE_BUSY_RECOVERY`), waits instead of exiting with
+  "database is locked".
 - When a tool names an agent that is not in the project but is registered
   under another `project_key`, the NOT_FOUND error names that project and
   says to pass its key, instead of telling the caller to check the spelling.
