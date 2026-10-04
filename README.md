@@ -243,40 +243,46 @@ model. Sessions on other hosts see mail on their next `fetch_inbox`.
 
 ## Performance
 
-Measured on one machine with one small workload (40 agents, 860 messages),
-each server started on empty storage. Each number is the median of at least
-three rounds.
-
-```
-summary
-  Swarmail
-    76× faster sends than mcp_agent_mail_rust, 138× faster than mcp_agent_mail
-    91× more sends per second than mcp_agent_mail_rust, 437× more than mcp_agent_mail
-    10× less peak memory than mcp_agent_mail_rust, 3.7× less than mcp_agent_mail
-```
+Measured on one machine with one small workload (40 agents, 250 seed messages,
+1,560 messages by the end), each server started on empty storage. Startup is
+hyperfine's mean of 20 runs; every other number is the median of three rounds,
+with latency from Tinybench and requests per second from oha. The multipliers
+are computed from those values. [docs/benchmarks.md](docs/benchmarks.md) has
+the method, a fourth server and each tool's raw output.
 
 | | Swarmail | mcp_agent_mail_rust | mcp_agent_mail |
 | --- | --- | --- | --- |
 | **Latency, p50** | | | |
-| Send | 0.49 ms | 37 ms | 67 ms |
-| Fetch inbox | 0.54 ms | 16 ms | 20 ms |
-| Search | 0.65 ms | 68 ms | 11 ms |
+| Send | 0.47 ms | 36 ms (76×) | 71 ms (151×) |
+| Fetch inbox | 0.53 ms | 13 ms (24×) | 21 ms (39×) |
+| Search | 0.68 ms | 54 ms (80×) | 11 ms (17×) |
 | **Throughput, 8 clients** | | | |
-| Send | 4,900 req/s | 54 req/s | 11 req/s |
-| Fetch inbox | 6,500 req/s | 364 req/s | 28 req/s |
-| Search | 4,100 req/s | 84 req/s | 46 req/s |
+| Send | 5,300 req/s | 50 req/s (106×) | 9.8 req/s (547×) |
+| Fetch inbox | 6,700 req/s | 401 req/s (17×) | 27 req/s (248×) |
+| Search | 4,800 req/s | 92 req/s (52×) | 46 req/s (106×) |
 | **Footprint** | | | |
-| Startup | 18 ms | 1.5 s | 0.9 s |
-| Memory, idle | 33 MiB | 196 MiB | 154 MiB |
-| Memory, peak under load | 68 MiB | 706 MiB | 250 MiB |
-| CPU, idle | 0.06% of a core | 0.15% of a core | 0.13% of a core |
-| CPU time, all timed calls | 0.54 s | 85 s | 93 s |
-| Load 250 messages | 178 ms | 9.3 s | 17.7 s |
+| Startup | 44 ms | 1.6 s (36×) | 0.87 s (20×) |
+| Memory, idle | 39 MiB | 193 MiB (5.0×) | 154 MiB (4.0×) |
+| Memory, peak under load | 72 MiB | 674 MiB (9.4×) | 256 MiB (3.6×) |
+| CPU, idle | 0.03% of a core | 0.15% of a core | 0.13% of a core |
+| CPU time, 5,240 timed calls | 0.96 s | 181 s (189×) | 262 s (273×) |
+| Load 250 messages | 191 ms | 9.0 s (47×) | 18.2 s (95×) |
+
+Startup as hyperfine reports it. Each run starts the server, waits for its
+health check, then kills it; `wrapper only` is the harness without a server,
+and hyperfine's `Relative` column compares against that row:
+
+| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
+|:---|---:|---:|---:|---:|
+| `wrapper only` | 8.5 ± 0.6 | 7.8 | 10.4 | 1.00 |
+| `Swarmail` | 43.5 ± 3.1 | 38.1 | 48.5 | 5.14 ± 0.52 |
+| `mcp_agent_mail_rust` | 1553.4 ± 26.0 | 1519.6 | 1611.5 | 183.53 ± 13.42 |
+| `mcp_agent_mail` | 872.6 ± 46.8 | 814.3 | 981.1 | 103.10 ± 9.19 |
+| `agent-inbox` | 276.7 ± 12.1 | 255.7 | 300.6 | 32.69 ± 2.73 |
 
 mcp_agent_mail commits each send to a Git archive before it returns, so these
-numbers don't compare durability. Throughput varied by up to a quarter between
-rounds. Swarmail's first start in each benchmark run took about a second;
-later starts took 18 ms.
+numbers don't compare durability. Requests per second varied by up to a
+quarter between rounds of the same server.
 
 ## Development
 
