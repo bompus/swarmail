@@ -29,8 +29,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   session's tag, and `sessionMarker` is gone from `src/tag.ts`.
 - `src/paths.ts` holds the default database path, state directory, port and
   URLs.
-- Swarmail runs natively on Windows 10 and 11. `scripts/enable-windows.ts`
-  builds `~\.local\bin\swarmail.exe` and starts the server in a
+- Swarmail runs natively on Windows 10 and 11, as a preview: the hooks
+  have not yet run inside a live Claude Code or Cursor session there.
+  `scripts/enable-windows.ts` builds `~\.local\bin\swarmail.exe` and
+  starts the server in a
   `Swarmail` scheduled task at each logon, hidden and without an
   administrator; a rerun stops the running server by the PID and start time
   it records in `.local\state\swarmail-server.json` under the user profile. The hook and MCP
