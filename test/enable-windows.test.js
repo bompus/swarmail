@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { savedEnv, stopServer } from "../scripts/enable-windows.ts";
+import { portTaken, savedEnv, stopServer } from "../scripts/enable-windows.ts";
 import { processIdentity } from "../src/proc.ts";
 
 const dirs = [];
@@ -44,3 +44,12 @@ test.if(process.platform === "win32")(
     expect(savedEnv("TEMP")).not.toBe("");
   },
 );
+
+test("sees a port as taken whatever answers on it, and free once nothing listens", async () => {
+  // Not a Swarmail server: anything listening blocks the task's server from binding.
+  const other = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
+  const { port } = other;
+  expect(await portTaken(port)).toBe(true);
+  other.stop(true);
+  expect(await portTaken(port)).toBe(false);
+});

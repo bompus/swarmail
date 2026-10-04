@@ -56,9 +56,13 @@ export const databasePath = (env: NodeJS.ProcessEnv = process.env): string =>
 export const stateHome = (env: NodeJS.ProcessEnv = process.env): string =>
   env.XDG_STATE_HOME || join(homeDir(env), ".local", "state");
 
-/** The running server's PID and start time, which Windows has no service manager to keep (scripts/enable-windows.ts). */
+/**
+ * The running server's PID and start time, which Windows has no service manager to keep (scripts/enable-windows.ts).
+ * It sits under the user profile, not HOME or XDG_STATE_HOME, because the setup shell and the logon task can see
+ * different values of those but always the same profile.
+ */
 export const serverRecordPath = (env: NodeJS.ProcessEnv = process.env): string =>
-  join(stateHome(env), "swarmail-server.json");
+  join(env.USERPROFILE || homedir(), ".local", "state", "swarmail-server.json");
 
 /** Swarmail's MCP endpoint. Hooks run without the shell profile, so the default is the local server. */
 export const swarmailUrl = (env: NodeJS.ProcessEnv = process.env): string =>

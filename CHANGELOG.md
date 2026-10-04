@@ -33,7 +33,7 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   builds `~\.local\bin\swarmail.exe` and starts the server in a
   `Swarmail` scheduled task at each logon, hidden and without an
   administrator; a rerun stops the running server by the PID and start time
-  it records in `~/.local/state/swarmail-server.json`. The hook and MCP
+  it records in `.local\state\swarmail-server.json` under the user profile. The hook and MCP
   installers write the Windows host configs, with Devin's under
   `AppData\Roaming\devin`. `enable-windows.ts` reads `SWARMAIL_PORT` from
   the saved user environment the task gets, and warns when the terminal's

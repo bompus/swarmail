@@ -5,6 +5,7 @@
 // the running server first. Settings are user environment variables (`setx SWARMAIL_PORT ...`), read at logon.
 import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { connect } from "node:net";
 import { binaryPath, DEFAULT_PORT, serverRecordPath } from "../src/paths.ts";
 import { hostAlive, type HostProcess } from "../src/proc.ts";
 import { buildSwarmail } from "./build.ts";
@@ -32,6 +33,20 @@ export async function stopServer(record = serverRecordPath()): Promise<boolean> 
   return true;
 }
 
+/** Whether anything accepts a connection on the port. A closed port can hang instead of refusing (WSL's mirrored networking), so a timeout counts as free. */
+export function portTaken(port: number): Promise<boolean> {
+  return new Promise((done) => {
+    const socket = connect({ host: "127.0.0.1", port, timeout: 2000 });
+    const end = (taken: boolean) => {
+      socket.destroy();
+      done(taken);
+    };
+    socket.on("connect", () => end(true));
+    socket.on("error", () => end(false));
+    socket.on("timeout", () => end(false));
+  });
+}
+
 async function healthy(port: number): Promise<boolean> {
   try {
     const res = await fetch(`http://127.0.0.1:${port}/healthz`, {
@@ -51,7 +66,7 @@ function powershell(script: string, env: Record<string, string>): string {
     windowsHide: true,
   });
   if (run.status !== 0) {
-    throw new Error(`PowerShell failed (exit ${run.status}): ${script.split("\n")[0]}`);
+    throw new Error(`PowerShell failed (exit ${run.status}): ${script.trim().split("\n")[0]}`);
   }
   return run.stdout.trim();
 }
@@ -70,6 +85,7 @@ export function savedEnv(name: string): string {
 
 // The binary path and task name travel as environment variables, so no path needs quoting inside the script.
 const REGISTER = `
+$ErrorActionPreference = 'Stop'
 $action = New-ScheduledTaskAction -Execute "$env:windir\\System32\\conhost.exe" -Argument ('--headless "' + $env:SWARMAIL_BIN + '" serve')
 $trigger = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
@@ -98,10 +114,10 @@ if (import.meta.main) {
   if (await stopServer()) {
     console.log("Stopped the running server.");
   }
-  // On WSL with mirrored networking, a server running in WSL answers here too.
-  if (await healthy(port)) {
+  // On WSL with mirrored networking, a server running in WSL holds the port here too.
+  if (await portTaken(port)) {
     console.error(
-      `Another server already answers on 127.0.0.1:${port} (one in WSL, or one started by hand). ` +
+      `Another program already listens on 127.0.0.1:${port} (a server in WSL, or one started by hand). ` +
         "Stop it, or `setx SWARMAIL_PORT <port>` and rerun.",
     );
     process.exit(1);
