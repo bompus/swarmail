@@ -4,6 +4,13 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- The README's performance numbers come from a new run timed with standard
+  tools: hyperfine for startup, Tinybench for latency and oha for requests per
+  second. [docs/benchmarks.md](docs/benchmarks.md) has the method and each
+  tool's output, and adds agent-inbox. The load stage now sends 1,000 requests
+  per operation instead of 300. Startup reads 44 ms instead of 18 ms because
+  hyperfine's time includes its wrapper (8.5 ms) and killing the server; the
+  server's own time to healthy went from 18 ms to 25 ms.
 - The server no longer rewrites idempotency results stored in the
   pre-0.1.0 message format when it opens the database. Every release since
   0.1.0 stores the current format.
