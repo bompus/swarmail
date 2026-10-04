@@ -62,6 +62,11 @@ $settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -AllowStartIfOnBa
 Register-ScheduledTask -TaskName $env:SWARMAIL_TASK -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
 Start-ScheduledTask -TaskName $env:SWARMAIL_TASK`;
 
+/** Registers (or replaces) the logon task that runs `bin serve`, and starts it now. */
+export function registerTask(bin: string, task = TASK): void {
+  powershell(REGISTER, { SWARMAIL_BIN: bin, SWARMAIL_TASK: task });
+}
+
 if (import.meta.main) {
   if (process.platform !== "win32") {
     throw new Error("Windows only; on Linux run scripts/enable.sh.");
@@ -80,7 +85,7 @@ if (import.meta.main) {
     );
     process.exit(1);
   }
-  powershell(REGISTER, { SWARMAIL_BIN: bin, SWARMAIL_TASK: TASK });
+  registerTask(bin);
   for (let i = 0; i < 40 && !(await healthy(port)); i++) {
     await Bun.sleep(250);
   }
