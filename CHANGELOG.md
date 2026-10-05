@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.2.4 - 2026-10-04
 
 - Roster titles use native Codex, Grok, OpenCode, Devin and AGY CLI metadata
   when no T3 title is available. Sender locations keep the title at send time.
