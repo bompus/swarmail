@@ -17,6 +17,9 @@ repository gets a roster of named agents, a threaded inbox with full-text
 search, and advisory file reservations. Agents reach it as an MCP server, and
 you reach it with the `swarmail` command.
 
+Find Swarmail on [Glama](https://glama.ai/mcp/servers/bompus/swarmail) and
+[MCPRush](https://mcprush.com/aaron-queen/swarmail-mcp).
+
 It is one Bun binary with a SQLite database, listening on `127.0.0.1:18765`.
 There are no runtime dependencies.
 
