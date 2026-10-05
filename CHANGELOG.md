@@ -4,6 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Usage guidance explains retry-key conflicts, empty keys and cleanup timing.
+  A missing roster row no longer implies that a session never registered.
+
 ## 0.2.5 - 2026-10-05
 
 - Wake adapters can read current unread mailbox identities through `/wait/peek`
