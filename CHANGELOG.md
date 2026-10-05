@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.2.5 - 2026-10-04
 
 - Inbox help and usage explain how to read bodies and page through all unread
   mail, and how to preview metadata without marking it read. Unread-count
