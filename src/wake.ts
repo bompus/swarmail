@@ -138,6 +138,29 @@ function wakeCursor(db: Database) {
   };
 }
 
+function mailboxSnapshot(db: Database) {
+  const mailboxes = db.query<{ recipient: string; project: string }, [string, string]>(`
+    SELECT a.name AS recipient, p.human_key AS project
+    FROM agents a
+    JOIN projects p ON p.id = a.project_id
+    JOIN message_recipients r ON r.agent_id = a.id
+    JOIN messages m ON m.id = r.message_id
+    WHERE a.retired_at IS NULL AND (a.session_id = ?1 OR a.t3_thread = ?1)
+      AND r.read_ts IS NULL AND m.subject <> ?2
+    GROUP BY a.id
+    ORDER BY min(CASE WHEN m.importance IN ('urgent', 'high') THEN 0 ELSE 1 END), p.human_key, a.name
+    LIMIT 1001`);
+
+  /** Current unread mailbox identities, including mail already offered. No cursor, ping or receipt writes. */
+  return (session: string) => {
+    const rows = mailboxes.all(session, PING_SUBJECT);
+    if (rows.length > 1000) {
+      throw new Error("too many unread mailboxes");
+    }
+    return { mailboxes: rows };
+  };
+}
+
 // Sends and registrations call notify(), so a waiter wakes as soon as its mail commits. The poll is only a fallback
 // for writes this process does not see, such as another server on the same database.
 export function createWaiters(db: Database, pollMs = 30_000) {
@@ -229,5 +252,5 @@ export function createWaiters(db: Database, pollMs = 30_000) {
     }, 0);
   }
 
-  return { wait, notify };
+  return { wait, notify, peek: mailboxSnapshot(db) };
 }
