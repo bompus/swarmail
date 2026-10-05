@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { homeDir, tildePath, t3Home } from "./paths.ts";
 import { t3StatePath, t3Threads } from "./t3-state.ts";
+import { nativeTitles, type NativeSession } from "./native-titles.ts";
 
 export interface Location {
   repo: string;
@@ -47,15 +48,17 @@ export function location(
     : null;
 }
 
-/** Read optional T3 titles once for a roster, or for a sender snapshot. */
+/** Read display titles for a roster or sender snapshot, with T3 titles first. */
 export function locations(
   project: string,
-  agents: { worktree: string | null; t3_thread: string | null }[],
+  agents: ({ worktree: string | null; t3_thread: string | null } & NativeSession)[],
 ): (Location | null)[] {
   const threads = agents.some((a) => a.t3_thread) ? t3Threads(t3StatePath(t3Home())) : new Map();
-  return agents.map((a) =>
-    location(project, a.worktree, a.t3_thread ? (threads.get(a.t3_thread)?.title ?? null) : null),
+  const t3Titles = agents.map((a) =>
+    a.t3_thread ? (threads.get(a.t3_thread)?.title ?? null) : null,
   );
+  const native = nativeTitles(agents.map((a, i) => (a.worktree && t3Titles[i] === null ? a : {})));
+  return agents.map((a, i) => location(project, a.worktree, t3Titles[i] ?? native[i] ?? null));
 }
 
 export function locationLabel(value: Location): string {

@@ -1284,3 +1284,90 @@ test("locations follow the edited checkout while messages keep their sender snap
     }
   }
 });
+
+test("MCP roster native titles refresh while sender titles remain send-time snapshots", async () => {
+  const previousHome = process.env.HOME;
+  const previousCodex = process.env.CODEX_HOME;
+  process.env.HOME = join(dir, "native-home");
+  process.env.CODEX_HOME = join(process.env.HOME, ".codex");
+  try {
+    mkdirSync(process.env.CODEX_HOME, { recursive: true });
+    const index = join(process.env.CODEX_HOME, "session_index.jsonl");
+    writeFileSync(
+      index,
+      JSON.stringify({ id: "native-session", thread_name: "First title" }) + "\n",
+    );
+    const repo = join(dir, "native-repo");
+    mkdirSync(repo);
+    expect(Bun.spawnSync(["git", "-C", repo, "init", "-q"]).exitCode).toBe(0);
+    await call("register_agent", {
+      project_key: repo,
+      name: "NativeBranch",
+      program: "codex",
+      model: "m",
+      task_description: "[codex:native-session] task",
+      worktree: repo,
+    });
+    await call("register_agent", {
+      project_key: repo,
+      name: "NativeReader",
+      program: "codex",
+      model: "m",
+    });
+    const [agent] = (await call("list_agents", { project_key: repo })).filter(
+      (row) => row.name === "NativeBranch",
+    );
+    expect(agent.location.title).toBe("First title");
+    expect(Object.keys(agent).sort()).toEqual([
+      "cwd",
+      "host",
+      "inception_ts",
+      "last_active_ts",
+      "location",
+      "model",
+      "name",
+      "program",
+      "session_id",
+      "t3_thread",
+      "task_description",
+    ]);
+    expect(Object.keys(agent.location).sort()).toEqual(["branch", "repo", "title", "worktree"]);
+    const message = {
+      project_key: repo,
+      sender_name: "NativeBranch",
+      to: ["NativeReader"],
+      subject: "Titles",
+      body_md: "hello",
+      idempotency_key: "native-title-first",
+    };
+    const first = await call("send_message", message);
+    expect(first.sender_location.title).toBe("First title");
+    writeFileSync(
+      index,
+      JSON.stringify({ id: "native-session", thread_name: "Renamed title" }) + "\n",
+      { flag: "a" },
+    );
+    expect(
+      (await call("list_agents", { project_key: repo })).find((row) => row.name === "NativeBranch")
+        .location.title,
+    ).toBe("Renamed title");
+    expect((await call("send_message", message)).sender_location.title).toBe("First title");
+    expect(
+      (await call("send_message", { ...message, idempotency_key: "native-title-second" }))
+        .sender_location.title,
+    ).toBe("Renamed title");
+    const inbox = await call("fetch_inbox", { project_key: repo, agent_name: "NativeReader" });
+    expect(inbox.find((row) => row.id === first.id).sender_location.title).toBe("First title");
+  } finally {
+    for (const [key, value] of [
+      ["HOME", previousHome],
+      ["CODEX_HOME", previousCodex],
+    ]) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
+});

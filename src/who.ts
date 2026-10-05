@@ -21,9 +21,10 @@ import { primaryCheckout } from "./checkout.ts";
 import { location, locationLabel, type Location } from "./location.ts";
 import { callTool } from "./client.ts";
 import { hostAlive } from "./proc.ts";
-import { openRegistry, registryDir, selfNames } from "./registry.ts";
+import { openRegistry, registryDir, selfNames, type RegisterState } from "./registry.ts";
 import { t3StatePath, t3ThreadId, t3Threads, type T3Thread } from "./t3-state.ts";
-import { parseTag, withoutTag } from "./tag.ts";
+import { leadingTag, parseTag, withoutTag } from "./tag.ts";
+import { nativeTitles } from "./native-titles.ts";
 
 /** A roster row from `list_agents`. */
 export interface RosterAgent {
@@ -68,6 +69,7 @@ export interface WhoRow {
 
 const LIVE_ROOM_FRESH_MS = 5 * 60 * 1000;
 const RECENT_MS = 24 * 60 * 60 * 1000;
+const rank = (row: WhoRow) => (!row.ended && (row.status === "running" || row.hostAlive) ? 1 : 0);
 
 /** Registered project keys (primary checkout paths), read from the server's database. */
 function projectKeys(dbPath: string): string[] {
@@ -154,6 +156,34 @@ function ago(iso: string | null, now: number): string {
   return `${Math.round(minutes / 1440)}d ago`;
 }
 
+function fillNativeTitles(
+  rows: WhoRow[],
+  roster: RosterAgent[],
+  states: (RegisterState & { sessionId: string })[],
+  project: string,
+): void {
+  const sessions = rows.map((row, i) => {
+    if (row.title !== null) {
+      return {};
+    }
+    const state = states.find((st) => st.sessionId === row.sessionId);
+    return {
+      host:
+        parseTag(leadingTag(roster[i]?.task_description ?? ""))?.host ??
+        parseTag(state?.tags?.[project])?.host ??
+        state?.host?.name,
+      session_id: row.sessionId,
+    };
+  });
+  const titles = nativeTitles(sessions);
+  for (const [i, row] of rows.entries()) {
+    row.title ??= titles[i] ?? null;
+    if (roster[i]?.location === undefined && row.location) {
+      row.location.title = row.title;
+    }
+  }
+}
+
 /**
  * One row per roster agent plus one per running T3 thread in this repository with no agent,
  * running sessions first, then by last activity.
@@ -202,7 +232,7 @@ export function whoRows(
           : agent.location,
       sessionId,
       t3,
-      title: thread?.title ?? null,
+      title: thread?.title ?? agent.location?.title ?? null,
       status: thread?.status ?? null,
       seen: thread?.last_seen_at ?? null,
       cwd: thread?.cwd ?? tag?.cwd ?? null,
@@ -217,6 +247,7 @@ export function whoRows(
       oldestUnread: queues.get(agent.name)?.oldest ?? null,
     };
   });
+  fillNativeTitles(rows, roster, states, project);
   for (const row of rows) {
     const twins = rows.filter(
       (other) => other !== row && other.sessionId && other.sessionId === row.sessionId,
@@ -251,7 +282,6 @@ export function whoRows(
       oldestUnread: null,
     });
   }
-  const rank = (row: WhoRow) => (!row.ended && (row.status === "running" || row.hostAlive) ? 1 : 0);
   return rows.sort(
     (a, b) =>
       rank(b) - rank(a) ||

@@ -230,3 +230,76 @@ test("who keeps edit location separate from the launch directory and T3 title", 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("who resolves native and hook-state titles while preserving T3 precedence", () => {
+  const dir = mkdtempSync(join(tmpdir(), "who-native-"));
+  const previousHome = process.env.HOME;
+  const previousCodex = process.env.CODEX_HOME;
+  process.env.HOME = dir;
+  process.env.CODEX_HOME = join(dir, ".codex");
+  try {
+    mkdirSync(process.env.CODEX_HOME);
+    writeFileSync(
+      join(process.env.CODEX_HOME, "session_index.jsonl"),
+      [
+        { id: "native", thread_name: "Native task" },
+        { id: "hook", thread_name: "Hook task" },
+        { id: "t3-native", thread_name: "Provider name" },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join("\n"),
+    );
+    const stateDir = join(dir, "state");
+    mkdirSync(stateDir);
+    writeFileSync(
+      join(stateDir, "hook.json"),
+      JSON.stringify({
+        name: "HookFern",
+        projects: ["/r"],
+        tags: { "/r": "[codex:hook] task" },
+        worktrees: { "/r": "/edit" },
+      }),
+    );
+    const rows = whoRows(
+      {
+        project: "/r",
+        stateDir,
+        room: null,
+        roster: [
+          { name: "NativeFern", task_description: "[codex:native] task", location: null },
+          { name: "HookFern", task_description: "[WIP] Legacy registration" },
+          { name: "T3Fern", task_description: "[t3:thread codex:t3-native] task" },
+          { name: "UnknownFern", task_description: "[codex:missing] task" },
+        ],
+        threads: new Map([
+          [
+            "thread",
+            { thread_id: "thread", title: "T3 task", cwd: null, status: null, last_seen_at: null },
+          ],
+        ]),
+      },
+      () => null,
+      () => false,
+    );
+    expect(rows.map((row) => [row.name, row.title])).toEqual([
+      ["NativeFern", "Native task"],
+      ["HookFern", "Hook task"],
+      ["T3Fern", "T3 task"],
+      ["UnknownFern", null],
+    ]);
+    expect(rows[0].location).toBeNull();
+    expect(rows[1].location.title).toBe("Hook task");
+  } finally {
+    for (const [key, value] of [
+      ["HOME", previousHome],
+      ["CODEX_HOME", previousCodex],
+    ]) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
