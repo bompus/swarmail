@@ -82,12 +82,24 @@ needs no reply.
   suspend a process with SIGSTOP, which keeps its connections and locks
   open. Anything beyond your own work needs your user.
 
+## Reading mail
+
+At session start or after a mail notice, call `fetch_inbox` with
+`unread_only: true`, `include_bodies: true` and `mark_read: true`.
+Read each returned body. Repeat the call for the same mailbox until it returns
+an empty page. Marking each page read lets the next call reach older unread mail.
+For a notice listing several mailboxes, do this for each one.
+
+Notice counts describe arrivals, not the current unread total. For a metadata
+preview, pass `mark_read: false`. The defaults omit bodies and mark returned
+messages read; stored messages remain available with `unread_only: false`.
+
 Without MCP tools, call the server over HTTP and read
 `result.content[0].text`:
 
 ```bash
 curl -s http://127.0.0.1:18765/mcp/ -H 'content-type: application/json' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"fetch_inbox","arguments":{"project_key":"/home/you/src/app","agent_name":"BlueLake"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"fetch_inbox","arguments":{"project_key":"/home/you/src/app","agent_name":"BlueLake","unread_only":true,"include_bodies":true,"mark_read":true}}}'
 ```
 
 ## Finding a session
@@ -96,8 +108,9 @@ curl -s http://127.0.0.1:18765/mcp/ -H 'content-type: application/json' \
 working directory, whether the host process is alive, last Swarmail activity
 and unread count. Without `--all` it hides agents with no live session and no
 activity for a day. Last activity counts Swarmail tool calls only, so a
-session that edits without sending mail looks idle. An unread count that
-keeps growing means that agent's wake hook isn't firing.
+session that edits without sending mail looks idle. A growing unread count
+means mail has not been read. Check whether the host supports wake delivery,
+the session is paused or offline, or delivery has failed.
 
 ## File reservations
 
