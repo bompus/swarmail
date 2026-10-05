@@ -6,6 +6,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## 0.2.5 - 2026-10-05
 
+- Wake adapters can read current unread mailbox identities through `/wait/peek`
+  without changing wake cursors, mail receipts or an outstanding wait.
+
 - Tool help explains search and inbox selection, bounded thread results, retry
   keys, return fields and reservation filters. Handlers and API defaults stay
   unchanged.
