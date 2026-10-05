@@ -44,7 +44,7 @@ const TASK = prop(
 );
 const IDEMPOTENCY_KEY = prop(
   "string",
-  "Any string. A retry with the same key and arguments returns the first result.",
+  "Nonempty key for this tool and agent. Identical arguments replay with idempotent_replay:true; different arguments fail with IDEMPOTENCY_KEY_CONFLICT. Hourly cleanup removes keys older than 7 days. Retries can replay until removal; afterward a retry may perform the operation again.",
 );
 const IMPORTANCE = prop("string", "low, normal, high or urgent.");
 const RESERVATION_PATHS = strings("Only your reservations with exactly these patterns.");
@@ -166,10 +166,10 @@ export const TOOLS: Tool[] = [
   {
     name: "ensure_project",
     description:
-      "Create the project for a repository path if it does not exist, and return it. Other " +
-      "tools fail with NOT_FOUND until the project exists. register_agent and " +
-      "macro_start_session create it themselves, so call this only to create a project " +
-      "without registering.",
+      "Create a project without registering an agent, returning id, slug, human_key and " +
+      "created_at. Repeating the same repository path returns the existing project. Other tools " +
+      "fail with NOT_FOUND until it exists; register_agent and macro_start_session create it " +
+      "themselves.",
     properties: { human_key: PROJECT },
     required: ["human_key"],
     idempotent: true,
@@ -201,11 +201,12 @@ export const TOOLS: Tool[] = [
   {
     name: "macro_start_session",
     description:
-      "Start a session in one call: ensure the project, register the agent, optionally " +
-      "reserve paths, and return the latest inbox without marking it read. If the register " +
-      "hook already told you your name, pass it as agent_name, or start task_description with " +
-      "the session tag it gave you; otherwise you get a second name. Paths another agent " +
-      "holds come back as conflicts, as in file_reservation_paths.",
+      "Ensure the project, register an agent, optionally reserve paths, and return {project, " +
+      "agent, file_reservations, inbox}. The inbox contains the latest metadata without marking " +
+      "mail read; use fetch_inbox for bodies and unread-mail draining. Reuse the hook's name as " +
+      "agent_name or its session tag in task_description to avoid a second identity. Conflicting " +
+      "paths appear under file_reservations.conflicts; other paths are granted. If already " +
+      "registered and only checking mail, use fetch_inbox instead.",
     properties: {
       human_key: PROJECT,
       program: PROGRAM,
@@ -267,9 +268,11 @@ export const TOOLS: Tool[] = [
   {
     name: "list_agents",
     description:
-      "List a project's agents that are not retired, most recently active first, with each " +
-      "one's program, model, task and session. Use it to find who to message; whois returns " +
-      "one agent.",
+      "Return an array of non-retired agents in a project, most recently active first, with " +
+      "program, model, task and session details. Use it to find who to message; whois returns " +
+      "one agent. active_within_days filters recent activity, not whether a session is running. " +
+      "limit caps this single result; there is no continuation cursor, so a full result may omit " +
+      "agents.",
     properties: {
       project_key: PROJECT,
       active_within_days: prop("number", "Above 0; fractions allowed. Omit for every agent."),
@@ -321,10 +324,11 @@ export const TOOLS: Tool[] = [
   {
     name: "unretire_agent",
     description:
-      "Bring a retired agent back into list_agents so it can receive messages again; its " +
-      "earlier messages are unchanged. An agent comes back on its own when it registers " +
-      "again or sends, reads mail or reserves files as itself, so use this to revive " +
-      "another agent.",
+      "Bring a retired agent back into list_agents so it can receive messages again; earlier " +
+      "messages stay unchanged. Returns {agent_name, retired:false}. Calling on an already " +
+      "active agent also succeeds and refreshes its activity time, as every revival does. " +
+      "Registering, sending, reading mail or reserving files revives the caller automatically; " +
+      "use this to revive another agent. An unknown name fails with NOT_FOUND.",
     properties: {
       project_key: PROJECT,
       agent_name: prop("string", "The retired agent to bring back."),
@@ -341,9 +345,11 @@ export const TOOLS: Tool[] = [
   {
     name: "send_message",
     description:
-      "Send a Markdown message to agents in the same project. An unknown or retired recipient " +
-      "fails the whole send. Returns the message, including its id. To answer a message, use " +
-      "reply_message, which keeps the thread and addresses the sender.",
+      "Send a Markdown message to named agents in the same project. An unknown or retired " +
+      "recipient fails the whole send. Returns the stored message, including its id. To answer a " +
+      "message, use reply_message, which keeps the thread and addresses the sender. Without " +
+      "idempotency_key, a retry sends another message; reuse a nonempty key with identical " +
+      "arguments within 7 days to replay its stored result instead.",
     properties: {
       project_key: PROJECT,
       sender_name: AGENT,
@@ -369,9 +375,12 @@ export const TOOLS: Tool[] = [
   {
     name: "reply_message",
     description:
-      "Reply in a message's thread. Defaults: to the original sender, the original's topic, " +
-      "importance and ack_required, and a 'Re:' subject. Returns the message with reply_to. " +
-      "To start a new thread, use send_message.",
+      "Reply in a message's thread, returning the stored message with reply_to. message_id " +
+      "selects the original in this project. Omit to to address its sender; cc and bcc are added " +
+      "only when supplied. The original's topic, importance and ack_required are inherited, with " +
+      "a 'Re:' subject; importance and ack_required can be overridden. For retries within 7 " +
+      "days, reuse a nonempty idempotency_key with identical arguments. To start a new thread, " +
+      "use send_message.",
     properties: {
       project_key: PROJECT,
       message_id: prop("integer", "The message to reply to."),
@@ -416,10 +425,13 @@ export const TOOLS: Tool[] = [
   {
     name: "fetch_inbox",
     description:
-      "Return your latest messages, newest first. At session start or after a mail notice, " +
-      "set unread_only:true, include_bodies:true and mark_read:true; repeat until a page is " +
-      "empty. For a metadata preview, set mark_read:false; include_bodies defaults to false " +
-      "and mark_read to true. To change one message, use mark_message_read or acknowledge_message.",
+      "Return an array of your latest received message metadata, newest first; include_bodies " +
+      "adds body_md. At session start or after a mail notice, set unread_only:true, " +
+      "include_bodies:true and mark_read:true; repeat until an empty array. For a metadata " +
+      "preview, set mark_read:false; include_bodies defaults to false and mark_read to true. " +
+      "Filters combine, so omit optional filters when draining all unread mail. Use " +
+      "search_messages for project-wide text matching, or mark_message_read or " +
+      "acknowledge_message for one message.",
     properties: {
       project_key: PROJECT,
       agent_name: AGENT,
@@ -446,10 +458,11 @@ export const TOOLS: Tool[] = [
   {
     name: "mark_message_read",
     description:
-      "Mark one message read for you, without acknowledging it; a repeat keeps the first " +
-      "read time. fetch_inbox already marks what it returns. When the message has " +
-      "ack_required, use acknowledge_message instead. Fails with NOT_FOUND unless you are " +
-      "a recipient.",
+      "Mark one received message read without acknowledging it, returning message_id, read and " +
+      "read_at. A repeat keeps the first read time but refreshes your agent's activity time. " +
+      "fetch_inbox already marks what it returns unless mark_read:false. When the message has " +
+      "ack_required, use acknowledge_message instead. Fails with NOT_FOUND unless you are a " +
+      "recipient.",
     properties: { project_key: PROJECT, agent_name: AGENT, message_id: MESSAGE },
     required: ["project_key", "agent_name", "message_id"],
     run: (s, a) => {
@@ -466,11 +479,12 @@ export const TOOLS: Tool[] = [
   {
     name: "acknowledge_message",
     description:
-      "Acknowledge one message and mark it read. Repeated calls preserve its first read " +
-      "and acknowledgement timestamps but refresh your agent's activity time. " +
-      "Use it for messages with ack_required: the sender sees it in " +
-      "get_message_delivery_receipt, and fetch_inbox stops listing it under " +
-      "ack_overdue_only. Fails with NOT_FOUND unless you are a recipient.",
+      "Acknowledge one received message and mark it read, returning message_id, acknowledged, " +
+      "acknowledged_at and read_at. Repeated calls preserve first read and acknowledgement " +
+      "timestamps but refresh your agent's activity time. Use it for ack_required messages so " +
+      "the sender sees the acknowledgement in get_message_delivery_receipt and ack_overdue_only " +
+      "stops listing it. To mark read without acknowledging, use mark_message_read. Fails with " +
+      "NOT_FOUND unless you are a recipient.",
     properties: { project_key: PROJECT, agent_name: AGENT, message_id: MESSAGE },
     required: ["project_key", "agent_name", "message_id"],
     run: (s, a) => {
@@ -492,8 +506,11 @@ export const TOOLS: Tool[] = [
   {
     name: "get_message_delivery_receipt",
     description:
-      "Show, per recipient, whether and when a message was read and acknowledged. Use it as " +
-      "the sender to check an ack_required message; recipients use fetch_inbox.",
+      "Return a message's persisted_at and recipients with kind, read_at, acknowledged and " +
+      "acknowledged_at. Null timestamps mean that recipient has not read or acknowledged it yet; " +
+      "they are not delivery errors. Use it as the sender to check an ack_required message; " +
+      "recipients use fetch_inbox. message_id must exist in this project or the call fails with " +
+      "NOT_FOUND.",
     properties: { project_key: PROJECT, message_id: MESSAGE },
     required: ["project_key", "message_id"],
     readOnly: true,
@@ -519,11 +536,13 @@ export const TOOLS: Tool[] = [
   {
     name: "search_messages",
     description:
-      "Full-text search over subjects and bodies in a project, best match first " +
-      "(ranking: 'recency' for newest first). Results include an excerpt of up to 512 Unicode " +
-      "code points from the best matching subject or body, with >>>matched text<<< markers. " +
-      "Pass next_cursor back as cursor for the next page. To read one whole thread, use " +
-      "summarize_thread.",
+      "Search subjects and bodies across a project, returning {result, next_cursor?} without " +
+      "marking mail read. All query words must match; filters narrow those matches. Results rank " +
+      "by best match unless ranking:'recency'. Each excerpt has up to 512 Unicode code points " +
+      "and >>>matched text<<< markers; include_body_md adds full bodies. Keep query, filters and " +
+      "ranking unchanged when passing next_cursor as cursor; no next_cursor means the last page. Use " +
+      "fetch_inbox for your received unread mail, or summarize_thread for a thread's " +
+      "participants and recent messages.",
     properties: {
       project_key: PROJECT,
       query: prop("string", "Words that must all appear; punctuation is ignored."),
@@ -544,8 +563,13 @@ export const TOOLS: Tool[] = [
   {
     name: "summarize_thread",
     description:
-      "Return a thread's participants, message count and messages with bodies, oldest " +
-      "first, for you to summarize. Find a thread_id with search_messages or fetch_inbox.",
+      "Return {thread_id, summary:{participants, total_messages}, messages} for you to " +
+      "summarize; this tool does not generate prose or mark mail read. Find thread_id with " +
+      "search_messages or fetch_inbox. per_thread_limit selects the newest messages with full " +
+      "bodies, returned oldest first. It defaults to 50 and caps at 1000, with no continuation " +
+      "cursor; total_messages counts the entire thread, even when messages is truncated. Use " +
+      "search_messages for text matching and fetch_inbox to drain unread mail. No matching " +
+      "thread returns zero messages.",
     properties: {
       project_key: PROJECT,
       thread_id: prop("string", "The first message's id, or the thread_id its replies carry."),
@@ -582,10 +606,11 @@ export const TOOLS: Tool[] = [
   {
     name: "file_reservation_paths",
     description:
-      "Advisory reservation of paths or globs so other agents know what you are editing. " +
-      "Paths another agent holds come back as conflicts, not grants. Nothing blocks the edit " +
-      "itself; the optional git guard refuses commits that touch another agent's exclusive " +
-      "reservation. Reserving a path you already hold updates it. Extend with " +
+      "Reserve repository-relative paths or globs so other agents know what you are editing. " +
+      "Returns {granted, conflicts}; grants include reservation ids and expiry times, while " +
+      "conflicts name the requested path and its holders. Conflicts do not fail the call, and " +
+      "nothing blocks the edit itself; the optional git guard refuses commits touching another " +
+      "agent's exclusive reservation. Reserving a path you already hold updates it. Extend with " +
       "renew_file_reservations and release with release_file_reservations when done.",
     properties: {
       project_key: PROJECT,
@@ -609,9 +634,12 @@ export const TOOLS: Tool[] = [
   {
     name: "renew_file_reservations",
     description:
-      "Extend your active reservations, all or those matching paths or ids, by " +
-      "extend_seconds past their current expiry; each call extends again. Expired " +
-      "reservations are not renewed; reserve them again with file_reservation_paths.",
+      "Extend your active reservations by extend_seconds past their current expiry; each call " +
+      "extends again. Omit paths and file_reservation_ids for all; empty filters impose no " +
+      "restriction, and two nonempty filters must both match. Returns {renewed, " +
+      "file_reservations} with old and new expiry times; no matches returns zero and an empty " +
+      "array. Expired reservations are not renewed; reserve them again with " +
+      "file_reservation_paths.",
     properties: {
       project_key: PROJECT,
       agent_name: AGENT,
