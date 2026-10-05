@@ -257,7 +257,7 @@ Code the wait also re-arms after each tool call, so a hint can join a running
 turn. The server answers `swarmail ping` itself, so a ping never wakes the
 model. Sessions on other hosts see mail on their next `fetch_inbox`.
 
-Adapters can revalidate a queued hint with `GET /wait?session=<id>&peek=1`.
+Adapters can revalidate a queued hint with `GET /wait/peek?session=<id>`.
 It returns `{ "mailboxes": [{ "recipient": "GreenCastle", "project": "/w/project" }] }`
 for the session's current unread mail, including mail already offered. High and
 urgent mailboxes come first. This request leaves waiters, wake cursors, read

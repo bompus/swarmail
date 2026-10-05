@@ -515,7 +515,7 @@ describe("read-only unread mailbox peek", () => {
   const session = "peek-native";
   const thread = "peek-thread";
   const projects = ['/w/peek"one', "/w/peek-two"];
-  const peek = (id = session, extra = "") => fetch(`${base}/wait?session=${id}&peek=1${extra}`);
+  const peek = (id = session, extra = "") => fetch(`${base}/wait/peek?session=${id}${extra}`);
 
   test("scopes exact identities, prioritizes mailboxes and leaves offered mail, pings and receipts unchanged", async () => {
     for (const project_key of projects) {
