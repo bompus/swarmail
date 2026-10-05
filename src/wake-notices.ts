@@ -66,15 +66,31 @@ export function reconcileNotices(db: Database): void {
   const extend = db.query(
     "UPDATE wake_notices SET covered_through = max(covered_through, ?) WHERE owner = ?",
   );
+  const unread = db.query<
+    { covered: number | null; latest: number | null },
+    [string, string, number, number]
+  >(`
+    SELECT max(CASE WHEN m.id <= ?3 THEN m.id END) AS covered,
+           max(CASE WHEN m.id <= ?4 THEN m.id END) AS latest
+    FROM agents a
+    JOIN message_recipients r ON r.agent_id = a.id JOIN messages m ON m.id = r.message_id
+    WHERE ${OWNER_MATCH} AND r.read_ts IS NULL AND m.subject <> ?2
+  `);
   for (const row of db
     .query<{ owner: string; covered_through: number }, []>(
       "SELECT owner, covered_through FROM wake_notices",
     )
     .all()) {
-    if (newestUnread(db, row.owner, row.covered_through) === null) {
+    const { covered, latest } = unread.get(
+      row.owner,
+      PING_SUBJECT,
+      row.covered_through,
+      Number.MAX_SAFE_INTEGER,
+    )!;
+    if (covered === null) {
       clear.run(row.owner);
     } else {
-      extend.run(newestUnread(db, row.owner), row.owner);
+      extend.run(latest, row.owner);
     }
   }
 }
