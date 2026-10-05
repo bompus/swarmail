@@ -181,7 +181,7 @@ keeps one name across repositories.
 | `swarmail inbox`, `send`, `search` | Read, send or search mail as this session |
 | `swarmail thread <id>` | One thread's messages, oldest first |
 | `swarmail ping <agent>` | Exit 0 if that agent's wake hook is waiting |
-| `swarmail register` | The register hook; `--tag` prints the tag for a manual registration |
+| `swarmail register` | The register hook; `--tag` prints the tag for a manual registration; `--host <host>` selects the host explicitly |
 | `swarmail hook wake <host>` | The Claude Code and Cursor wake hook |
 | `swarmail hook context <cursor\|devin\|agy> [stop]` | Check mail at a native context point without cancelling the task |
 | `swarmail hook rearm` | The Claude Code re-arm on Windows, which has no POSIX shell to run the Linux one |

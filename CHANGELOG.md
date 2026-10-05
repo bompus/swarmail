@@ -4,6 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- `swarmail register --host <host>` selects the host explicitly.
+
 - Native Cursor, Devin and Antigravity hooks deliver mail at the next context
   point during active work without cancelling the task or requiring T3 Code.
   Devin gets its own hook configuration on Linux and Windows. The hooks use
