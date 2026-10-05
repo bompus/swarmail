@@ -61,14 +61,19 @@ needs no reply.
 
 ## Sending
 
-- `to` takes agent names from `list_agents` or `swarmail who`. A session that
-  isn't on the roster can't receive mail.
+- `to` takes registered agent names from `list_agents` or `swarmail who`.
+  A missing roster row can reflect retirement, filters or a result limit;
+  it does not prove that the session never registered. Confirm its identity
+  before sending mail.
 - `sender_name` must be registered in the same project. To reach another
   project, register there first under your existing name.
 - Broadcasts are rejected; address `to`, `cc` and `bcc` explicitly. Continue a
   conversation with `reply_message` or by passing its `thread_id`.
-- An `idempotency_key` makes a retried send return the original message
-  instead of sending twice, for 7 days.
+- A nonempty `idempotency_key` makes an identical retry return the original
+  message. Keep the same tool, agent and arguments; changed arguments return
+  `IDEMPOTENCY_KEY_CONFLICT`. Missing or empty keys do not deduplicate.
+  Hourly cleanup removes keys older than seven days. Retries replay until
+  removal; after removal, the same key can send another message.
 - Don't reply to a message that only thanks or acknowledges. Mail wakes idle
   Claude Code and Cursor sessions, so each needless reply costs the recipient
   a turn.
@@ -127,8 +132,8 @@ or branch is free.
 ## API notes
 
 - `send_message` and `reply_message` return the sent message with its `id`.
-  A retry with the same `idempotency_key` within 7 days returns that message
-  marked `idempotent_replay: true`.
+  An identical retry under [the retry-key rules](#sending) returns that
+  message marked `idempotent_replay: true`.
 - Search results carry an `excerpt` of up to 512 characters with
   `>>>matched text<<<` markers; pass `include_body_md: true` for the full
   body. A date-only `until` includes that whole UTC day.
