@@ -456,6 +456,40 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "fetch_session_inbox",
+    description:
+      "Return one newest-first page across registrations matching your host/session tag or T3 thread. " +
+      "Use machine-derived host and session_id, with t3_thread when known; never guess from an agent name. " +
+      "Each receipt includes project_key and agent_name for replies and acknowledgements. Defaults: " +
+      "unread_only:true, mark_read:true, include_bodies:false, limit:20. To drain, include bodies and repeat " +
+      "until an empty array. With mark_read:false or unread_only:false, this is a bounded preview, not a drain. " +
+      "The CLI swarmail inbox --session discovers identity and drains without mailbox arguments. " +
+      "Swarmail is a trusted local service; session identity selects inboxes and is not authentication.",
+    properties: {
+      host: prop(
+        "string",
+        "Host tag, such as claude, codex, cursor, devin, opencode, grok or agy.",
+      ),
+      session_id: prop(
+        "string",
+        "Your native host session ID from its shell variable or registration.",
+      ),
+      t3_thread: prop(
+        "string",
+        "Your T3 thread ID when known; includes older provider registrations in that thread.",
+      ),
+      limit: prop("integer", "Positive page size; default 20, capped at 1000."),
+      unread_only: prop(
+        "boolean",
+        "Default true. False gives a bounded page including read receipts.",
+      ),
+      include_bodies: prop("boolean", "Include each body_md; default false."),
+      mark_read: prop("boolean", "Default true. False previews without marking receipts read."),
+    },
+    required: ["host", "session_id"],
+    run: (s, a) => s.sessionInbox(a),
+  },
+  {
     name: "mark_message_read",
     description:
       "Mark one received message read without acknowledging it, returning message_id, read and " +

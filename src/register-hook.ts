@@ -12,7 +12,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { primaryCheckout, worktreeRoot } from "./checkout.ts";
 import { hostProcess, sameHost } from "./proc.ts";
 import { openRegistry, serverRegister, type Session } from "./registry.ts";
-import { sessionTag } from "./tag.ts";
+import { sessionTag, SESSION_ENV } from "./tag.ts";
 import { t3ThreadId } from "./t3-state.ts";
 
 /** A hook payload. Each host sends its own shape, so every field is checked before use. */
@@ -245,15 +245,6 @@ function main(input: HookInput): string {
   }
   return startNotice(tag, state.name, project);
 }
-
-/** The variable each host sets in its shell to the session id; the README lists them. */
-const SESSION_ENV: Record<string, string> = {
-  claude: "CLAUDE_CODE_SESSION_ID",
-  codex: "CODEX_THREAD_ID",
-  cursor: "CURSOR_CONVERSATION_ID",
-  grok: "GROK_SESSION_ID",
-  agy: "ANTIGRAVITY_CONVERSATION_ID",
-};
 
 /**
  * `swarmail register`: the hook itself, reading the host's JSON (`read`, standard input from the CLI) and always

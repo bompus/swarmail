@@ -8,7 +8,7 @@
 // The sender is --as, else SWARMAIL_AGENT, else the name the register hook recorded for the agent host above this shell.
 import { swarmailUrl } from "./paths.ts";
 import { primaryCheckout } from "./checkout.ts";
-import { selfNames } from "./registry.ts";
+import { selfNames, selfSession } from "./registry.ts";
 import { PING_SUBJECT, PONG_SUBJECT } from "./wake.ts";
 
 interface Message {
@@ -118,6 +118,19 @@ export async function mail(
   const [command, ...rest] = args;
   const { opts, rest: positional } = parse(rest);
   try {
+    if (opts.session) {
+      if (
+        command !== "inbox" ||
+        opts.as !== undefined ||
+        opts.cursor !== undefined ||
+        positional.length
+      ) {
+        throw new Error(
+          "inbox --session cannot be combined with --as, --cursor or positional arguments",
+        );
+      }
+      return await sessionInbox(env, opts);
+    }
     const project = projectOf(cwd);
     if (command === "search") {
       return await search(env, project, positional.join(" "), opts);
@@ -152,6 +165,54 @@ export async function mail(
   }
 }
 
+/** Drain exact session registrations without needing a repository or mailbox name. */
+async function sessionInbox(
+  env: NodeJS.ProcessEnv,
+  opts: Record<string, string | true>,
+): Promise<number> {
+  const identity = selfSession(env);
+  const preview = !!(opts.peek || opts.all);
+  let shown = false;
+  for (;;) {
+    const messages: Array<Message & { project_key: string; agent_name: string }> = await call(
+      env,
+      "fetch_session_inbox",
+      {
+        ...identity,
+        unread_only: !opts.all,
+        mark_read: !opts.peek,
+        include_bodies: true,
+        limit: Number(opts.limit ?? 20),
+      },
+    );
+    if (opts.json) {
+      console.log(JSON.stringify(messages));
+    } else {
+      for (const message of messages.reverse()) {
+        console.log(`${message.agent_name} in ${JSON.stringify(message.project_key)}`);
+        printMessage(message);
+      }
+    }
+    if (!messages.length || preview) {
+      if (!opts.json && !shown && !messages.length) {
+        console.log(opts.all ? "no mail for this session" : "no unread mail for this session");
+      }
+      return 0;
+    }
+    shown = true;
+  }
+}
+
+function printMessage(m: Message): void {
+  const flags = [m.importance !== "normal" && m.importance, m.ack_required && "ack required"]
+    .filter(Boolean)
+    .join(", ");
+  console.log(`#${m.id} ${m.created_ts} from ${m.from}${flags ? ` (${flags})` : ""}: ${m.subject}`);
+  if (m.body_md) {
+    console.log(m.body_md.replace(/^/gm, "    "));
+  }
+}
+
 async function inbox(
   env: NodeJS.ProcessEnv,
   project: string,
@@ -174,15 +235,7 @@ async function inbox(
     console.log(`${agent}: no ${opts.all ? "" : "unread "}messages`);
   }
   for (const m of messages.reverse()) {
-    const flags = [m.importance !== "normal" && m.importance, m.ack_required && "ack required"]
-      .filter(Boolean)
-      .join(", ");
-    console.log(
-      `#${m.id} ${m.created_ts} from ${m.from}${flags ? ` (${flags})` : ""}: ${m.subject}`,
-    );
-    if (m.body_md) {
-      console.log(m.body_md.replace(/^/gm, "    "));
-    }
+    printMessage(m);
   }
   return 0;
 }

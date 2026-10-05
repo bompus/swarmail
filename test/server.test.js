@@ -61,6 +61,7 @@ test("negotiates the client's protocol version and lists the available tools", a
     "acknowledge_message",
     "ensure_project",
     "fetch_inbox",
+    "fetch_session_inbox",
     "file_reservation_paths",
     "get_message_delivery_receipt",
     "health_check",

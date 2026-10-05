@@ -4,6 +4,14 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Configured wake bridges are available through `swarmail wake-bridge` for
+  T3 Code, OpenCode and native Unix Codex/Grok targets. They preserve delivery
+  journals across restart and require explicit target configuration.
+
+- Mail notices use one short inbox instruction. `swarmail inbox --session`
+  discovers the receiving session and drains unread mail across repositories;
+  `fetch_session_inbox` provides the corresponding explicit MCP interface.
+
 - Usage guidance explains retry-key conflicts, empty keys and cleanup timing.
   A missing roster row no longer implies that a session never registered.
 

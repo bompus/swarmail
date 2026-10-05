@@ -11,6 +11,15 @@ export interface Tag {
   cwd: string | null;
 }
 
+/** Shell variables carrying native session IDs; hosts without one use registration process identity. */
+export const SESSION_ENV: Record<string, string> = {
+  claude: "CLAUDE_CODE_SESSION_ID",
+  codex: "CODEX_THREAD_ID",
+  cursor: "CURSOR_CONVERSATION_ID",
+  grok: "GROK_SESSION_ID",
+  agy: "ANTIGRAVITY_CONVERSATION_ID",
+};
+
 /**
  * The roster tag naming the session and where it runs, e.g.
  * `[t3:<thread id> claude:<session id> build:<hash> cwd:~/src/repo-task]`. The project key is

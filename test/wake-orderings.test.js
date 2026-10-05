@@ -82,8 +82,8 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
                 "offer covers exactly the remaining batches",
               );
               assert(
-                offer.hint.includes(`${remaining.length} new message`),
-                "offer counts remaining unread mail",
+                offer.hint === "Swarmail: Fetch all unread mail with swarmail inbox --session.",
+                "each admitted offer directs the receiver to drain its session inbox",
               );
               assert(!offer.hint.includes("private"), "hint excludes message content");
               nextAccepted = event === "admit response" ? offer.eventId : accepted;
