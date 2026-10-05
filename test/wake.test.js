@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { processIdentity } from "../src/proc.ts";
 import { createServer } from "../src/server.ts";
-import { hintFor } from "../src/wake.ts";
+import { createWaiters, hintFor } from "../src/wake.ts";
 
 // Run from a session that has the Claude Code mod, the hooks spawned here would inherit this and stand down.
 delete process.env.SWARMAIL_WAKE_MOD;
@@ -549,6 +549,20 @@ describe("read-only unread mailbox peek", () => {
       subject: "swarmail ping",
       body_md: "ping",
     });
+    await call("register_agent", {
+      project_key: projects[0],
+      name: "SilverOwl",
+      program: "codex",
+      model: "m",
+      task_description: `[codex:${session}]`,
+    });
+    await call("send_message", {
+      project_key: projects[0],
+      sender_name: "GoldOwl",
+      to: ["SilverOwl"],
+      subject: "swarmail ping",
+      body_md: "ping-only mailbox",
+    });
     const snapshot = () => ({
       receipts: db.query("SELECT * FROM message_recipients ORDER BY message_id, agent_id").all(),
       messages: db.query("SELECT * FROM messages ORDER BY id").all(),
@@ -568,6 +582,13 @@ describe("read-only unread mailbox peek", () => {
     expect(snapshot()).toEqual(before);
     const offered = await wait(session);
     expect(offered.status).toBe(200);
+    const accepted = await fetch(
+      `${base}/wait?session=${session}&after=${offered.headers.get("x-swarmail-event-id")}&retry=1&timeout=1`,
+    );
+    expect(accepted.status).toBe(204);
+    expect(
+      db.query("SELECT announced FROM wake_cursors WHERE session = ?").get(session).announced,
+    ).toBeGreaterThan(0);
     const afterOffer = snapshot();
     expect(await (await peek()).json()).toEqual(expected);
     expect(snapshot()).toEqual(afterOffer);
@@ -597,13 +618,13 @@ describe("read-only unread mailbox peek", () => {
       model: "m",
       task_description: `[codex:${id}]`,
     });
-    const polling = wait(id);
-    // This request follows the long poll on the same server. No delay or polling loop is needed.
-    expect(await (await peek(id)).json()).toEqual({ mailboxes: [] });
+    const waiters = createWaiters(db);
+    // Registration happens synchronously before wait returns its pending promise.
+    const polling = waiters.wait(id, 5000);
+    expect(waiters.peek(id)).toEqual({ mailboxes: [] });
     await send("WhiteOwl");
-    const response = await polling;
-    expect(response.status).toBe(200);
-    expect(await response.text()).toContain("WhiteOwl");
+    waiters.notify();
+    expect((await polling).hint).toContain("WhiteOwl");
   });
 
   test("rejects an oversized snapshot instead of returning a partial mailbox set", async () => {
