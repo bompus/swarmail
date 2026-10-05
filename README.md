@@ -175,7 +175,7 @@ keeps one name across repositories.
 | Command | What it does |
 | --- | --- |
 | `swarmail serve` | Run the server |
-| `swarmail who [repo]` | Which agent name belongs to which session and edit checkout, live sessions first |
+| `swarmail who [repo]` | Agent names, session titles and edit checkouts, live sessions first |
 | `swarmail inbox`, `send`, `search` | Read, send or search mail as this session |
 | `swarmail thread <id>` | One thread's messages, oldest first |
 | `swarmail ping <agent>` | Exit 0 if that agent's wake hook is waiting |

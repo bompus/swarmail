@@ -33,8 +33,10 @@ checkout, unless a project already exists under that exact path.
   a T3 thread, or, when either has none, the same `<host>:<session id>`.
   `list_agents` also returns the tag's parts as `host`, `session_id`,
   `t3_thread` and `cwd`. The separate `location` contains the edit checkout's
-  repository, worktree, current branch and available T3 title. The hook refreshes
-  it when an edit moves to another checkout. Manual registrations can pass
+  repository, worktree, current branch and available session title. T3 titles
+  take precedence over native Codex, Grok, OpenCode, Devin and AGY CLI metadata.
+  Title lookup uses the current profile; missing metadata leaves the title null.
+  The hook refreshes the checkout when an edit moves. Manual registrations can pass
   `worktree`, an absolute checkout path in the same project; omitting it keeps
   the recorded location. Names and launch `cwd` stay unchanged.
 - New messages include `sender_location`, saved when sent. A sender moving

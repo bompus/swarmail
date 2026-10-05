@@ -4,6 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Roster titles use native Codex, Grok, OpenCode, Devin and AGY CLI metadata
+  when no T3 title is available. Sender locations keep the title at send time.
+
 - README performance charts rank each metric, and smaller tables show latency,
   throughput, memory and startup with explicit sort columns.
 
