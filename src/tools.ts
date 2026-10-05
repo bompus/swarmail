@@ -539,8 +539,8 @@ export const TOOLS: Tool[] = [
       "Search subjects and bodies across a project, returning {result, next_cursor?} without " +
       "marking mail read. All query words must match; filters narrow those matches. Results rank " +
       "by best match unless ranking:'recency'. Each excerpt has up to 512 Unicode code points " +
-      "and >>>matched text<<< markers; include_body_md adds full bodies. Keep query and filters " +
-      "unchanged when passing next_cursor as cursor; no next_cursor means the last page. Use " +
+      "and >>>matched text<<< markers; include_body_md adds full bodies. Keep query, filters and " +
+      "ranking unchanged when passing next_cursor as cursor; no next_cursor means the last page. Use " +
       "fetch_inbox for your received unread mail, or summarize_thread for a thread's " +
       "participants and recent messages.",
     properties: {
