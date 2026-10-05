@@ -2,6 +2,13 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- Inbox help and usage explain how to read bodies and page through all unread
+  mail, and how to preview metadata without marking it read. Unread-count
+  guidance covers paused sessions and unavailable delivery. API defaults stay
+  unchanged.
+
 ## 0.2.4 - 2026-10-04
 
 - Roster titles use native Codex, Grok, OpenCode, Devin and AGY CLI metadata

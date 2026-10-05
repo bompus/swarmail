@@ -416,9 +416,10 @@ export const TOOLS: Tool[] = [
   {
     name: "fetch_inbox",
     description:
-      "Return your latest messages, newest first, and mark them read unless mark_read is " +
-      "false. Check it at the start of a session and when a wake hook says mail arrived. To " +
-      "change one message, use mark_message_read or acknowledge_message.",
+      "Return your latest messages, newest first. At session start or after a mail notice, " +
+      "set unread_only:true, include_bodies:true and mark_read:true; repeat until a page is " +
+      "empty. For a metadata preview, set mark_read:false; include_bodies defaults to false " +
+      "and mark_read to true. To change one message, use mark_message_read or acknowledge_message.",
     properties: {
       project_key: PROJECT,
       agent_name: AGENT,
