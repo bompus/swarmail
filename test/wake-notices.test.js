@@ -210,7 +210,7 @@ for (const admitted of [false, true]) {
         await f.wait(first.id);
       }
       f.send(f.projects[1]);
-      f.db.exec("DROP TABLE wake_notices; PRAGMA user_version = 2;");
+      f.db.exec("DROP TABLE wake_notices; DROP TABLE wake_notice_offers; PRAGMA user_version = 2;");
       f.db.close();
       f = fixture(path);
       const retry = await f.wait();
@@ -268,7 +268,7 @@ test("a released-v2 read notice does not suppress mail that arrived afterward", 
     await f.wait(first.id);
     f.inbox();
     const next = f.send();
-    f.db.exec("DROP TABLE wake_notices; PRAGMA user_version = 2;");
+    f.db.exec("DROP TABLE wake_notices; DROP TABLE wake_notice_offers; PRAGMA user_version = 2;");
     f.db.close();
     f = fixture(path);
     expect((await f.wait(first.id)).eventId).toBe(next.id);
@@ -473,6 +473,279 @@ test("reopening the database retains an admitted notice until its unread mail is
     expect((await f.wait(first.eventId)).eventId).toBe(next.id);
   } finally {
     f.db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("adding distinct T3 threads does not transfer an admitted native notice between them", async () => {
+  const f = fixture();
+  try {
+    for (const project_key of f.projects) {
+      f.tools.register_agent({
+        project_key,
+        name: "GreenCastle",
+        program: "codex",
+        model: "test",
+        task_description: "[codex:notice-session] receiver",
+      });
+    }
+    const first = f.send();
+    const second = f.send(f.projects[1]);
+    const notice = await f.wait(0, "notice-session");
+    await f.wait(notice.eventId, "notice-session");
+    for (const [project_key, thread] of [
+      [f.projects[0], "first-thread"],
+      [f.projects[1], "second-thread"],
+    ]) {
+      f.tools.register_agent({
+        project_key,
+        name: "GreenCastle",
+        program: "codex",
+        model: "test",
+        task_description: `[t3:${thread} codex:notice-session] receiver`,
+      });
+    }
+    expect(await f.wait(0, "notice-session")).toBeNull();
+    expect(await f.wait(0, "first-thread")).toBeNull();
+    expect((await f.wait(0, "second-thread")).eventId).toBe(second.id);
+    expect(f.inbox({ t3_thread: "first-thread" }).map((message) => message.id)).toEqual([first.id]);
+  } finally {
+    f.db.close();
+  }
+});
+
+for (const admitted of [false, true]) {
+  test(`reopening v3 recovers a cursor-only ${admitted ? "admitted" : "uncertain"} older-build notice`, async () => {
+    const dir = mkdtempSync(join(testScratch(), "case-"));
+    const path = join(dir, "mail.sqlite");
+    let f = fixture(path);
+    try {
+      const first = f.send();
+      // Older binaries retain user_version=3 and write only their released cursor fields.
+      f.db
+        .query("INSERT INTO wake_cursors(session, announced, offered) VALUES (?, ?, ?)")
+        .run("notice-thread", admitted ? first.id : 0, admitted ? null : first.id);
+      f.send(f.projects[1]);
+      expect(f.db.query("SELECT count(*) AS n FROM wake_notices").get().n).toBe(0);
+      f.db.close();
+      f = fixture(path);
+      const offer = await f.wait();
+      if (admitted) {
+        expect(offer).toBeNull();
+      } else {
+        expect(offer.eventId).toBe(first.id);
+      }
+      expect(await f.wait(0, "notice-session")).toBeNull();
+      expect(f.inbox()).toHaveLength(2);
+      const next = f.send();
+      expect((await f.wait(first.id)).eventId).toBe(next.id);
+    } finally {
+      f.db.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+test("removing the final T3 tags lets the standalone identity receive unread mail", async () => {
+  const f = fixture();
+  try {
+    const first = f.send();
+    await f.wait();
+    for (const project_key of f.projects) {
+      f.tools.register_agent({
+        project_key,
+        name: "GreenCastle",
+        program: "codex",
+        model: "test",
+        task_description: "[codex:notice-session] receiver",
+      });
+    }
+    expect((await f.wait(0, "notice-session")).eventId).toBe(first.id);
+    expect(f.inbox({ t3_thread: undefined }).map((message) => message.id)).toEqual([first.id]);
+  } finally {
+    f.db.close();
+  }
+});
+
+test("removing a T3 tag does not move its notice into a competing thread", async () => {
+  const f = fixture();
+  try {
+    f.send();
+    const notice = await f.wait();
+    await f.wait(notice.eventId);
+    const second = f.send(f.projects[1]);
+    f.tools.register_agent({
+      project_key: f.projects[1],
+      name: "GreenCastle",
+      program: "codex",
+      model: "test",
+      task_description: "[t3:second-thread codex:notice-session] receiver",
+    });
+    f.tools.register_agent({
+      project_key: f.projects[0],
+      name: "GreenCastle",
+      program: "codex",
+      model: "test",
+      task_description: "[codex:notice-session] receiver",
+    });
+    expect((await f.wait(0, "second-thread")).eventId).toBe(second.id);
+    expect(f.inbox({ t3_thread: "second-thread" })).toHaveLength(2);
+  } finally {
+    f.db.close();
+  }
+});
+
+test("removing a T3 tag does not claim an ambiguous native owner", async () => {
+  const f = fixture();
+  try {
+    f.send();
+    const notice = await f.wait();
+    await f.wait(notice.eventId);
+    for (const [project_key, thread] of [
+      [f.projects[1], "second-thread"],
+      ["/notice/three", "third-thread"],
+    ]) {
+      f.tools.register_agent({
+        project_key,
+        name: "GreenCastle",
+        program: "codex",
+        model: "test",
+        task_description: `[t3:${thread} codex:notice-session] receiver`,
+      });
+    }
+    f.tools.register_agent({
+      project_key: f.projects[0],
+      name: "GreenCastle",
+      program: "codex",
+      model: "test",
+      task_description: "[codex:notice-session] receiver",
+    });
+    expect(await f.wait(0, "notice-session")).toBeNull();
+    expect(f.db.query("SELECT count(*) AS n FROM wake_notices").get().n).toBe(0);
+    expect(f.inbox({ t3_thread: undefined })).toHaveLength(1);
+  } finally {
+    f.db.close();
+  }
+});
+
+for (const olderOffer of [false, true]) {
+  test(`reopening ${olderOffer ? "recovers a new older-build offer after" : "does not transfer a known offer during"} a receiver change`, async () => {
+    const dir = mkdtempSync(join(testScratch(), "case-"));
+    const path = join(dir, "mail.sqlite");
+    const f = fixture(path);
+    let reopened;
+    try {
+      f.send();
+      const notice = await f.wait(0, "notice-session");
+      await f.wait(notice.eventId, "notice-session");
+      f.tools.register_agent({
+        project_key: f.projects[1],
+        name: "GreenCastle",
+        program: "codex",
+        model: "test",
+        task_description: "[t3:second-thread codex:notice-session] receiver",
+      });
+      f.tools.register_agent({
+        project_key: f.projects[0],
+        name: "GreenCastle",
+        program: "codex",
+        model: "test",
+        task_description: "[codex:notice-session] receiver",
+      });
+      const second = f.send(f.projects[1]);
+      if (olderOffer) {
+        f.db
+          .query("UPDATE wake_cursors SET offered = ? WHERE session = 'notice-session'")
+          .run(second.id);
+        f.send(f.projects[1]);
+      }
+      f.db.close();
+      reopened = openDatabase(path);
+      const waiters = createWaiters(reopened);
+      const stop = new AbortController();
+      const pending = waiters.wait(
+        olderOffer ? "notice-session" : "second-thread",
+        60000,
+        stop.signal,
+        { retry: true, after: 0 },
+      );
+      stop.abort();
+      expect((await pending).eventId).toBe(second.id);
+    } finally {
+      (reopened ?? f.db).close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+test("reopening clears a drained older notice before recovering a newer cursor-only offer", async () => {
+  const dir = mkdtempSync(join(testScratch(), "case-"));
+  const path = join(dir, "mail.sqlite");
+  let f = fixture(path);
+  try {
+    const first = f.send();
+    await f.wait();
+    await f.wait(first.id);
+    f.db.exec(`UPDATE message_recipients SET read_ts = created_ts + 1;
+      INSERT INTO messages(project_id,sender_id,subject,body_md,created_ts)
+        SELECT project_id,sender_id,'new mail','info',created_ts+2 FROM messages WHERE id=${first.id};
+      INSERT INTO message_recipients(message_id,agent_id,created_ts)
+        SELECT last_insert_rowid(),agent_id,created_ts+2 FROM message_recipients WHERE message_id=${first.id};`);
+    const second = f.db.query("SELECT max(id) AS id FROM messages").get();
+    f.db
+      .query("UPDATE wake_cursors SET offered = ? WHERE session = 'notice-thread'")
+      .run(second.id);
+    f.db.exec(`INSERT INTO messages(project_id,sender_id,subject,body_md,created_ts)
+        SELECT project_id,sender_id,'later mail','info',created_ts+3 FROM messages WHERE id=${first.id};
+      INSERT INTO message_recipients(message_id,agent_id,created_ts)
+        SELECT last_insert_rowid(),agent_id,created_ts+3 FROM message_recipients WHERE message_id=${first.id};`);
+    f.db.close();
+    f = fixture(path);
+    expect((await f.wait(first.id)).eventId).toBe(second.id);
+    expect(f.inbox()).toHaveLength(2);
+  } finally {
+    f.db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("reopening an ambiguous native cursor does not claim either T3 thread", async () => {
+  const dir = mkdtempSync(join(testScratch(), "case-"));
+  const path = join(dir, "mail.sqlite");
+  const f = fixture(path);
+  let reopened;
+  try {
+    for (const [project_key, thread] of [
+      [f.projects[0], "first-thread"],
+      [f.projects[1], "second-thread"],
+    ]) {
+      f.tools.register_agent({
+        project_key,
+        name: "GreenCastle",
+        program: "codex",
+        model: "test",
+        task_description: `[t3:${thread} codex:notice-session] receiver`,
+      });
+    }
+    const first = f.send();
+    const second = f.send(f.projects[1]);
+    f.db
+      .query("INSERT INTO wake_cursors(session, announced, offered) VALUES (?, 0, ?)")
+      .run("notice-session", second.id);
+    f.db.close();
+    reopened = openDatabase(path);
+    const waiters = createWaiters(reopened);
+    const wait = async (session) => {
+      const stop = new AbortController();
+      const pending = waiters.wait(session, 60000, stop.signal, { retry: true, after: 0 });
+      stop.abort();
+      return await pending;
+    };
+    expect(await wait("notice-session")).toBeNull();
+    expect((await wait("first-thread")).eventId).toBe(first.id);
+    expect((await wait("second-thread")).eventId).toBe(second.id);
+  } finally {
+    (reopened ?? f.db).close();
     rmSync(dir, { recursive: true, force: true });
   }
 });

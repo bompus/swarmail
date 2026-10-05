@@ -98,6 +98,9 @@ still cover unread mail.
 
 Native IDs shared by distinct receiving sessions do not claim notifications.
 Use distinct native IDs or a matching T3 thread ID for delivery.
+Adding a T3 tag links a native notice only when that native ID maps to one
+thread. Removing or changing a T3 tag can change the receiving identity and
+rearm a notice. Stored mail remains available.
 
 ## Read the notice
 

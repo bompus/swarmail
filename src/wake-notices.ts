@@ -96,7 +96,7 @@ export function reconcileNotices(db: Database): void {
 }
 
 /** Preserve a standalone notice when registration adds its T3 identity. */
-export function rekeyNotice(db: Database, from: string | null, to: string | null): void {
+function rekeyNotice(db: Database, from: string | null, to: string | null): void {
   if (!from || !to || from === to) {
     return;
   }
@@ -105,6 +105,19 @@ export function rekeyNotice(db: Database, from: string | null, to: string | null
     ON CONFLICT(owner) DO UPDATE SET covered_through = max(covered_through, excluded.covered_through)
   `).run(to, from);
   db.query("DELETE FROM wake_notices WHERE owner = ?").run(from);
+  db.query("UPDATE wake_notice_offers SET owner = ? WHERE owner = ?").run(to, from);
+}
+
+/** Retain ownership after a notice drains, so an old cursor cannot be assigned to another receiver. */
+export function recordNoticeOffer(
+  db: Database,
+  session: string,
+  owner: string,
+  eventId: number,
+): void {
+  db.query(`INSERT INTO wake_notice_offers VALUES (?, ?, ?)
+    ON CONFLICT(session) DO UPDATE SET owner = excluded.owner, event_id = excluded.event_id
+  `).run(session, owner, eventId);
 }
 
 /** Registration in another repository can identify a previously standalone notice. */
@@ -123,7 +136,9 @@ export function repairNoticeOwners(db: Database): void {
   for (const row of db
     .query<{ host: string; session_id: string }, []>(`
     SELECT json_extract(owner, '$[1]') AS host, json_extract(owner, '$[2]') AS session_id
-    FROM wake_notices WHERE json_extract(owner, '$[0]') = 'native'
+    FROM (
+      SELECT owner FROM wake_notices UNION SELECT owner FROM wake_notice_offers
+    ) WHERE json_extract(owner, '$[0]') = 'native'
   `)
     .all()) {
     linkNotice(db, { ...row, t3_thread: null, build: null, cwd: null });
@@ -134,15 +149,24 @@ export function repairNoticeOwners(db: Database): void {
 export function backfillOutstandingNotices(db: Database): void {
   const set = db.query("INSERT OR IGNORE INTO wake_notices VALUES (?, ?, ?, ?)");
   for (const row of db
-    .query<{ session: string; event: number }, []>(`
-    SELECT session, max(announced, coalesce(offered, 0)) AS event FROM wake_cursors
-    WHERE max(announced, coalesce(offered, 0)) > 0 ORDER BY event
+    .query<
+      { session: string; event: number; known_owner: string | null; known_event: number | null },
+      []
+    >(`
+    SELECT c.session, max(c.announced, coalesce(c.offered, 0)) AS event,
+      known.owner AS known_owner, known.event_id AS known_event
+    FROM wake_cursors c LEFT JOIN wake_notice_offers known ON known.session = c.session
+    WHERE max(c.announced, coalesce(c.offered, 0)) > 0 ORDER BY event
   `)
     .all()) {
-    for (const owner of noticeOwners(db, row.session)) {
-      if (newestUnread(db, owner, row.event) !== null) {
-        set.run(owner, row.session, row.event, newestUnread(db, owner));
-      }
+    const owners = noticeOwners(db, row.session);
+    if (
+      owners.length === 1 &&
+      !(row.known_event === row.event && row.known_owner !== owners[0]) &&
+      newestUnread(db, owners[0]!, row.event) !== null
+    ) {
+      set.run(owners[0]!, row.session, row.event, newestUnread(db, owners[0]!));
+      recordNoticeOffer(db, row.session, owners[0]!, row.event);
     }
   }
 }

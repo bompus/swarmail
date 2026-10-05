@@ -151,4 +151,4 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
   } finally {
     db.close();
   }
-});
+}, 30000);

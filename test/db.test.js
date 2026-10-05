@@ -110,6 +110,7 @@ test("migrating a released database preserves messages without inventing sender 
     db.exec(`ALTER TABLE agents DROP COLUMN worktree;
       ALTER TABLE messages DROP COLUMN sender_location;
       DROP TABLE wake_notices;
+      DROP TABLE wake_notice_offers;
       PRAGMA user_version = 1;
       INSERT INTO wake_cursors(session, announced, offered) VALUES('previous-session',10,12);
       INSERT INTO projects VALUES (1,'repo','/r',1);

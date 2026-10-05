@@ -5,24 +5,10 @@ import { isAbsolute } from "node:path";
 import { primaryCheckout, worktreeRoot } from "./checkout.ts";
 import { overlaps } from "./glob.ts";
 import { locations } from "./location.ts";
-import {
-  identity,
-  leadingTag,
-  parseTag,
-  sameSession,
-  sameSessionRow,
-  tagOf,
-  type Identity,
-} from "./tag.ts";
+import { identity, leadingTag, parseTag, sameSessionRow, tagOf, type Identity } from "./tag.ts";
 import { InvalidTimestamp, iso, nowUs, parseIso } from "./db.ts";
 import { SESSION_RE } from "./wake.ts";
-import {
-  reconcileNotices,
-  linkNotice,
-  noticeOwner,
-  PING_SUBJECT,
-  rekeyNotice,
-} from "./wake-notices.ts";
+import { reconcileNotices, linkNotice, PING_SUBJECT } from "./wake-notices.ts";
 
 /** A tool failure reported to the caller as `{"error": {type, message, recoverable, data}}`. */
 export class ToolError extends Error {
@@ -516,7 +502,6 @@ export class MailStore {
       const task = String(a.task_description ?? "");
       const description = tag && !leadingTag(task) ? `${tag} ${task}`.trim() : task;
       const id = identity(description);
-      const previousOwner = noticeOwner(this.db, existing);
       this.db.run(
         `UPDATE agents SET program = ?, model = ?, task_description = ?, last_active_ts = ?, retired_at = NULL,
         host = ?, session_id = ?, t3_thread = ?, build = ?, cwd = ?, worktree = ? WHERE id = ?`,
@@ -534,9 +519,6 @@ export class MailStore {
           existing.id,
         ],
       );
-      if (sameSession(tagOf(existing), tagOf(id))) {
-        rekeyNotice(this.db, previousOwner, noticeOwner(this.db, id));
-      }
       linkNotice(this.db, id);
       reconcileNotices(this.db);
       return this.q.agentById.get(existing.id)!;

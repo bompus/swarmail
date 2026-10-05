@@ -8,7 +8,13 @@
 // no one either. `swarmail ping` uses this to prove a session's wake path is alive.
 import type { Database } from "bun:sqlite";
 import { nowUs } from "./db.ts";
-import { reconcileNotices, newestUnread, noticeOwners, PING_SUBJECT } from "./wake-notices.ts";
+import {
+  reconcileNotices,
+  newestUnread,
+  noticeOwners,
+  recordNoticeOffer,
+  PING_SUBJECT,
+} from "./wake-notices.ts";
 export { PING_SUBJECT } from "./wake-notices.ts";
 
 export const SESSION_RE = /^[\w:-]+$/;
@@ -95,6 +101,7 @@ function wakeCursor(db: Database) {
     offer(eventId: number, session: string, owner: string) {
       saveNotice.run(owner, session, eventId, newestUnread(db, owner) ?? eventId);
       offer.run(eventId, session);
+      recordNoticeOffer(db, session, owner, eventId);
     },
     begin(session: string, retry: boolean, after?: number) {
       const current = cursor.get(session);

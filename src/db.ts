@@ -109,6 +109,9 @@ const MIGRATIONS: ((db: Database) => void)[] = [
     db.run(`CREATE TABLE wake_notices (
       owner TEXT PRIMARY KEY, session TEXT NOT NULL, event_id INTEGER NOT NULL, covered_through INTEGER NOT NULL
     )`);
+    db.run(`CREATE TABLE wake_notice_offers (
+      session TEXT PRIMARY KEY, owner TEXT NOT NULL, event_id INTEGER NOT NULL
+    )`);
   },
 ];
 
@@ -152,11 +155,9 @@ function migrate(db: Database): void {
       db.run(`PRAGMA user_version = ${MIGRATIONS.length}`);
     }
     syncIdentity(db);
-    if (done < 3) {
-      backfillOutstandingNotices(db);
-    }
     repairNoticeOwners(db);
     reconcileNotices(db);
+    backfillOutstandingNotices(db);
   }).immediate();
 }
 
