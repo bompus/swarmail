@@ -96,6 +96,13 @@ retried by its original delivery path; alternate linked paths suppress their
 notices until the shared inbox drains. Upgrades preserve earlier offers that
 still cover unread mail.
 
+If an unconfirmed notice's original native session disappears during provider
+replacement, linked replacement paths remain suppressed. Registration alone
+cannot prove that the original notice was never delivered. Read the shared
+inbox from the replacement session with `swarmail inbox --session` to release
+the notice; previewing mail does not release it. Automatic transport takeover
+is not supported.
+
 Native IDs shared by distinct receiving sessions do not claim notifications.
 Use distinct native IDs or a matching T3 thread ID for delivery.
 Adding a T3 tag links a native notice only when that native ID maps to one
