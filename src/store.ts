@@ -5,9 +5,24 @@ import { isAbsolute } from "node:path";
 import { primaryCheckout, worktreeRoot } from "./checkout.ts";
 import { overlaps } from "./glob.ts";
 import { locations } from "./location.ts";
-import { identity, leadingTag, parseTag, sameSessionRow, tagOf, type Identity } from "./tag.ts";
+import {
+  identity,
+  leadingTag,
+  parseTag,
+  sameSession,
+  sameSessionRow,
+  tagOf,
+  type Identity,
+} from "./tag.ts";
 import { InvalidTimestamp, iso, nowUs, parseIso } from "./db.ts";
 import { SESSION_RE } from "./wake.ts";
+import {
+  reconcileNotices,
+  linkNotice,
+  noticeOwner,
+  PING_SUBJECT,
+  rekeyNotice,
+} from "./wake-notices.ts";
 
 /** A tool failure reported to the caller as `{"error": {type, message, recoverable, data}}`. */
 export class ToolError extends Error {
@@ -501,6 +516,7 @@ export class MailStore {
       const task = String(a.task_description ?? "");
       const description = tag && !leadingTag(task) ? `${tag} ${task}`.trim() : task;
       const id = identity(description);
+      const previousOwner = noticeOwner(this.db, existing);
       this.db.run(
         `UPDATE agents SET program = ?, model = ?, task_description = ?, last_active_ts = ?, retired_at = NULL,
         host = ?, session_id = ?, t3_thread = ?, build = ?, cwd = ?, worktree = ? WHERE id = ?`,
@@ -518,11 +534,16 @@ export class MailStore {
           existing.id,
         ],
       );
+      if (sameSession(tagOf(existing), tagOf(id))) {
+        rekeyNotice(this.db, previousOwner, noticeOwner(this.db, id));
+      }
+      linkNotice(this.db, id);
+      reconcileNotices(this.db);
       return this.q.agentById.get(existing.id)!;
     }
     const description = String(a.task_description ?? "");
     const id = identity(description);
-    return this.db
+    const registered = this.db
       .query<Agent, (string | number | null)[]>(
         `INSERT INTO agents (project_id, name, program, model, task_description, inception_ts, last_active_ts,
          host, session_id, t3_thread, build, cwd, worktree)
@@ -543,6 +564,8 @@ export class MailStore {
         id.cwd,
         worktree,
       )!;
+    linkNotice(this.db, id);
+    return registered;
   }
 
   // With a key, a repeat of the same arguments returns the first result marked idempotent_replay; the same key with
@@ -645,6 +668,9 @@ export class MailStore {
     for (const r of recipients) {
       add.run(m.id, r.agent.id, r.kind, m.created_ts);
     }
+    if (m.subject !== PING_SUBJECT) {
+      reconcileNotices(this.db);
+    }
     return payload(m, sender.name);
   }
 
@@ -678,6 +704,7 @@ export class MailStore {
         mark.run(now, r.id, who.id);
         r.read_ts = now;
       }
+      reconcileNotices(this.db);
     }
     return rows.map((m) => inboxOut(m, !!a.include_bodies));
   }
@@ -723,6 +750,9 @@ export class MailStore {
         mark.run(now, row.id, row.recipient_id);
         row.read_ts = now;
       }
+    }
+    if (a.mark_read ?? true) {
+      reconcileNotices(this.db);
     }
     return rows.map((row) => ({
       id: row.id,
@@ -770,6 +800,7 @@ export class MailStore {
       messageId,
       who.id,
     ]);
+    reconcileNotices(this.db);
   }
 
   acknowledge(messageId: number, who: Agent, ackTs: number, readTs: number): void {
@@ -777,6 +808,7 @@ export class MailStore {
       "UPDATE message_recipients SET ack_ts = ?, read_ts = ? WHERE message_id = ? AND agent_id = ?",
       [ackTs, readTs, messageId, who.id],
     );
+    reconcileNotices(this.db);
   }
 
   /** Each recipient of a message with its read and acknowledge times, by name. */

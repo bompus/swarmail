@@ -8,9 +8,10 @@
 // no one either. `swarmail ping` uses this to prove a session's wake path is alive.
 import type { Database } from "bun:sqlite";
 import { nowUs } from "./db.ts";
+import { reconcileNotices, newestUnread, noticeOwners, PING_SUBJECT } from "./wake-notices.ts";
+export { PING_SUBJECT } from "./wake-notices.ts";
 
 export const SESSION_RE = /^[\w:-]+$/;
-export const PING_SUBJECT = "swarmail ping";
 export const PONG_SUBJECT = "swarmail pong";
 
 interface WakeOffer {
@@ -32,6 +33,11 @@ interface Unread {
 }
 
 export const INBOX_NOTICE = "Swarmail: Fetch all unread mail with swarmail inbox --session.";
+
+function receivingOwner(db: Database, session: string): string | null {
+  const owners = noticeOwners(db, session);
+  return owners.length === 1 ? owners[0]! : null;
+}
 
 /**
  * Answers the pings among unread rows and returns the rest. Each ping is marked read and gets a pong on
@@ -83,9 +89,13 @@ function wakeCursor(db: Database) {
   const offer = db.query<unknown, [number, string]>(
     "UPDATE wake_cursors SET offered = max(coalesce(offered, 0), ?1) WHERE session = ?2",
   );
+  const saveNotice = db.query("INSERT INTO wake_notices VALUES (?, ?, ?, ?)");
   return {
     get: (session: string) => cursor.get(session),
-    offer: (eventId: number, session: string) => offer.run(eventId, session),
+    offer(eventId: number, session: string, owner: string) {
+      saveNotice.run(owner, session, eventId, newestUnread(db, owner) ?? eventId);
+      offer.run(eventId, session);
+    },
     begin(session: string, retry: boolean, after?: number) {
       const current = cursor.get(session);
       if (after !== undefined && after > Math.max(current?.announced ?? 0, current?.offered ?? 0)) {
@@ -146,18 +156,36 @@ export function createWaiters(db: Database, pollMs = 30_000) {
   const checks = new Map<string, () => void>();
   let scheduled = false;
 
-  function pending(session: string): WakeOffer | null {
+  const pending = db.transaction((session: string): WakeOffer | null => {
+    reconcileNotices(db);
     const ids = tagged.all(session).map((a) => a.id);
     if (!ids.length) {
       return null;
     }
-    const rows = withoutPings(unread.all(JSON.stringify(ids), cursor.get(session)?.announced ?? 0));
-    if (!rows.length) {
+    const owner = receivingOwner(db, session);
+    if (!owner) {
       return null;
     }
-    cursor.offer(rows.at(-1)!.id, session);
-    return { hint: INBOX_NOTICE, eventId: rows.at(-1)!.id };
-  }
+    const current = cursor.get(session)!;
+    const rows = withoutPings(unread.all(JSON.stringify(ids), current.announced));
+    const notice = db
+      .query<{ session: string; event_id: number }, [string]>(
+        "SELECT session, event_id FROM wake_notices WHERE owner = ?",
+      )
+      .get(owner);
+    if (notice?.session === session) {
+      // Uncertain transport admission must replay the original event, even as its inbox grows.
+      return current.announced >= notice.event_id
+        ? null
+        : { hint: INBOX_NOTICE, eventId: notice.event_id };
+    }
+    if (notice || !rows.length) {
+      return null;
+    }
+    const eventId = rows.at(-1)!.id;
+    cursor.offer(eventId, session, owner);
+    return { hint: INBOX_NOTICE, eventId };
+  });
 
   /** Resolves with a hint once mail arrives, null on timeout or abort, or false when a newer wait for the same session replaces it. */
   function wait(
@@ -181,7 +209,7 @@ export function createWaiters(db: Database, pollMs = 30_000) {
       };
       const stop = () => done(null);
       const check = () => {
-        const hint = pending(session);
+        const hint = pending.immediate(session);
         if (hint) {
           done(hint);
         }

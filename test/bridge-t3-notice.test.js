@@ -387,8 +387,10 @@ test("coalescing wake offers leaves all Swarmail messages unread in the durable 
     const response = await fetch(
       `${base}/wait?session=thread-notice&after=${f.state.acknowledged}&timeout=1&retry=1`,
     );
-    expect(response.status).toBe(200);
-    await f.deliver(Number(response.headers.get("x-swarmail-event-id")), await response.text());
+    expect(response.status).toBe(i === 0 ? 200 : 204);
+    if (i === 0) {
+      await f.deliver(Number(response.headers.get("x-swarmail-event-id")), await response.text());
+    }
   }
   const inbox = await call("fetch_inbox", {
     project_key: dir,
@@ -400,7 +402,7 @@ test("coalescing wake offers leaves all Swarmail messages unread in the durable 
   expect(inbox.map((message) => message.id).sort()).toEqual(ids.sort());
   expect(inbox.map((message) => message.body_md).sort()).toEqual(["body-0", "body-1"]);
   expect(f.queued()).toHaveLength(0);
-  expect(f.received).toHaveLength(2);
+  expect(f.received).toHaveLength(1);
   await call("fetch_inbox", {
     project_key: dir,
     agent_name: "BlueLake",

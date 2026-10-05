@@ -55,7 +55,7 @@ test("identity columns are backfilled from each tag, and every open repairs rows
     old.close();
 
     let db = openDatabase(path);
-    expect(db.query("PRAGMA user_version").get().user_version).toBe(2);
+    expect(db.query("PRAGMA user_version").get().user_version).toBe(3);
     expect(
       db.query("SELECT host, session_id, t3_thread, build, cwd FROM agents ORDER BY id").all(),
     ).toEqual([
@@ -86,7 +86,7 @@ test("identity columns are backfilled from each tag, and every open repairs rows
     `);
     db.close();
     db = openDatabase(path);
-    expect(db.query("PRAGMA user_version").get().user_version).toBe(2);
+    expect(db.query("PRAGMA user_version").get().user_version).toBe(3);
     expect(db.query("SELECT worktree FROM agents WHERE id = 1").get().worktree).toBe("/w/edit");
     expect(
       db
@@ -109,7 +109,9 @@ test("migrating a released database preserves messages without inventing sender 
     let db = openDatabase(path);
     db.exec(`ALTER TABLE agents DROP COLUMN worktree;
       ALTER TABLE messages DROP COLUMN sender_location;
+      DROP TABLE wake_notices;
       PRAGMA user_version = 1;
+      INSERT INTO wake_cursors(session, announced, offered) VALUES('previous-session',10,12);
       INSERT INTO projects VALUES (1,'repo','/r',1);
       INSERT INTO agents (id,project_id,name,program,model,inception_ts,last_active_ts) VALUES(1,1,'BlueLake','claude','m',1,1);
       INSERT INTO messages (id,project_id,sender_id,subject,body_md,created_ts) VALUES(1,1,1,'old','hello',1);`);
@@ -120,6 +122,9 @@ test("migrating a released database preserves messages without inventing sender 
         { id: 1, subject: "old", body_md: "hello", sender_location: null },
       ]);
       expect(db.query("SELECT worktree FROM agents").get().worktree).toBeNull();
+      expect(db.query("SELECT * FROM wake_cursors WHERE session='previous-session'").get()).toEqual(
+        { session: "previous-session", announced: 10, offered: 12 },
+      );
       db.close();
     }
   } finally {

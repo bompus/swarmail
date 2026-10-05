@@ -218,6 +218,20 @@ test("explicit acknowledgement retries a lost offer, including after restart, wi
   expect(first.status).toBe(200);
   expect(await first.text()).not.toContain("private");
   await f.send();
+  expect((await wait(firstId)).status).toBe(204);
+  await fetch(`${f.mailUrl}/mcp`, {
+    method: "POST",
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "fetch_inbox",
+        arguments: { project_key: f.dir, agent_name: "GreenCastle", unread_only: true },
+      },
+    }),
+  });
+  await f.send();
   const lost = await wait(firstId);
   const nextId = lost.headers.get("x-swarmail-event-id");
   expect(Number(nextId)).toBeGreaterThan(Number(firstId));
@@ -261,11 +275,14 @@ test("restart retries the saved request after uncertain admission and preserves 
   f.allow();
   const resumed = f.start();
   await until(
-    () => f.received.length >= 3 && f.state()?.pending === null && f.state()?.acknowledged >= 2,
+    () => f.received.length >= 2 && f.state()?.pending === null && f.state()?.acknowledged >= 1,
   );
   expect(f.received[1]).toEqual(original);
-  expect(f.received[2].id).not.toBe(original.id);
-  expect(f.received[2].text).toContain("swarmail inbox --session");
+  expect(f.received).toHaveLength(2);
+  expect(f.received[1].text).toContain("swarmail inbox --session");
+  expect(
+    f.mail.db.query("SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL").get().n,
+  ).toBe(2);
   expect(f.authorizations).toContain("Bearer rotated-test-token");
   resumed.kill();
   await resumed.exited;
@@ -276,11 +293,11 @@ test("restart retries the saved request after uncertain admission and preserves 
   await until(
     () =>
       f.mail.db.query("SELECT announced FROM wake_cursors WHERE session=?").get(f.id)?.announced >=
-      2,
+      1,
   );
   restarted.kill();
   await restarted.exited;
-  expect(f.received).toHaveLength(3);
+  expect(f.received).toHaveLength(2);
 }, 15000);
 
 test("mismatched admission keeps mail pending and never prints credentials or provider response", async () => {
