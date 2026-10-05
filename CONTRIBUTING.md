@@ -37,8 +37,11 @@ The maintainer cuts each release from `main`:
 2. After it merges, tag the squash commit `vX.Y.Z`, push the tag, and publish
    a GitHub release from it, marked latest, with that changelog section as its
    notes.
-3. When `packages/mcp-relay/` changed since its last version, set the new
-   version in its `package.json` and in both places in `server.json`. Then run
+3. When changes affect installation or relay behavior through the npm
+   package [`swarmail-mcp`](https://www.npmjs.com/package/swarmail-mcp), bump
+   the version in `packages/mcp-relay/package.json` and both version fields
+   in `server.json`. Check this even when the changed files are outside
+   `packages/mcp-relay/`. Then run
    `npm publish` in `packages/mcp-relay/` and `mcp-publisher publish` in the
    repository root.
 4. Check that Glama's admin Releases page lists `X.Y.Z`. With Auto-Release
