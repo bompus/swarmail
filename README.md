@@ -22,6 +22,8 @@ There are no runtime dependencies.
 
 Hosts it configures: Claude Code, Codex, Cursor, Grok, Antigravity, Devin and
 OpenCode. Claude Code and Cursor sessions can also wake up when mail arrives.
+Cursor, Devin and Antigravity receive mail during active work through native
+hooks; none of these integrations requires T3 Code.
 
 <p align="center"><img src="docs/assets/demo.gif" alt="Claude Code and Cursor sessions on one repository. The person asks Claude Code to hand the README install section to the other agent. Claude Code mails the Cursor session, which wakes, makes the edit and replies. Claude Code wakes on the reply and checks the change." width="100%"></p>
 
@@ -179,8 +181,9 @@ keeps one name across repositories.
 | `swarmail inbox`, `send`, `search` | Read, send or search mail as this session |
 | `swarmail thread <id>` | One thread's messages, oldest first |
 | `swarmail ping <agent>` | Exit 0 if that agent's wake hook is waiting |
-| `swarmail register` | The register hook; `--tag` prints the tag for a manual registration |
+| `swarmail register` | The register hook; `--tag` prints the tag for a manual registration; `--host <host>` selects the host explicitly |
 | `swarmail hook wake <host>` | The Claude Code and Cursor wake hook |
+| `swarmail hook context <cursor\|devin\|agy> [stop]` | Check mail at a native context point without cancelling the task |
 | `swarmail hook rearm` | The Claude Code re-arm on Windows, which has no POSIX shell to run the Linux one |
 | `swarmail guard` | The git guard |
 | `swarmail version` | The source hash the binary was built from |
@@ -255,7 +258,17 @@ long-polls the server after each turn: about 23 days in Claude Code, 8 hours
 in Cursor. When mail arrives, it starts a new turn with the hint. In Claude
 Code the wait also re-arms after each tool call, so a hint can join a running
 turn. The server answers `swarmail ping` itself, so a ping never wakes the
-model. Sessions on other hosts see mail on their next `fetch_inbox`.
+model. Hosts without a wake integration see mail on their next `fetch_inbox`.
+
+Native Cursor uses `postToolUse` additional context; Devin uses
+`PostToolUse` additional context and its own user configuration. Antigravity
+uses a `PreInvocation` user message. Checks are bounded and use
+`GET /wait?session=<id>&timeout=0`, which returns immediately and keeps the
+wake cursor's delivery suppression. Message bodies and read/ack receipts
+stay in Swarmail. Devin and Antigravity can continue at Stop when new mail
+is already present; their synchronous hooks cannot wait indefinitely for
+mail arriving after the session has stopped. These hooks add information;
+the receiver decides whether its current task needs to pause.
 
 Adapters can revalidate a queued hint with `GET /wait/peek?session=<id>`.
 It returns `{ "mailboxes": [{ "recipient": "GreenCastle", "project": "/w/project" }] }`

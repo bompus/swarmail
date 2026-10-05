@@ -399,3 +399,27 @@ test("keeps a user's disabled Antigravity group disabled", () => {
   configureSwarmailHooks(dir);
   expect(JSON.parse(readFileSync(agy, "utf8"))["swarmail-register-hook"].enabled).toBe(false);
 });
+
+test("standalone Devin installs native hooks without T3 and preserves user settings", () => {
+  const dir = home();
+  const configDir = join(
+    dir,
+    ...(windows ? ["AppData", "Roaming", "devin"] : [".config", "devin"]),
+  );
+  mkdirSync(configDir, { recursive: true });
+  const path = join(configDir, "config.json");
+  const other = { hooks: [{ type: "command", command: "audit" }] };
+  writeFileSync(path, JSON.stringify({ theme: "dark", hooks: { PostToolUse: [other] } }));
+  configureSwarmailHooks(dir);
+  const config = JSON.parse(readFileSync(path, "utf8"));
+  expect(config.theme).toBe("dark");
+  expect(config.hooks.PostToolUse[0]).toEqual(other);
+  expect(config.hooks.PostToolUse[1].hooks[0].command).toContain("hook context devin");
+  expect(config.hooks.SessionStart[0].hooks[0].command).toContain("register --host devin");
+  expect(config.hooks.Stop[0].hooks[0].command).toContain("hook context devin stop");
+  for (const tool of ["edit", "write", "apply_patch", "Edit", "Write"]) {
+    expect(new RegExp(`^(?:${config.hooks.PreToolUse[0].matcher})$`).test(tool)).toBe(true);
+  }
+  expect(existsSync(join(dir, ".t3"))).toBe(false);
+  expect(configureSwarmailHooks(dir).changed).toEqual([]);
+});

@@ -8,6 +8,8 @@
 //   cursor: stop hook in hooks.json; a {"followup_message": ...} reply starts a turn, {} otherwise.
 // `swarmail hook rearm` is the PostToolUse re-arm for hosts with no POSIX shell (Windows): the checks the Linux
 // installer writes as shell, then the Claude wait.
+import { openHookDelivery } from "./hook-delivery.ts";
+import { SESSION_RE } from "./wake.ts";
 import { stateHome, wakeUrl } from "./paths.ts";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -158,6 +160,13 @@ export const WAKE_SECONDS = { claude: 1_999_900, cursor: 28_800 };
 // The server ends each /wait after at most a day (server.ts), so a longer hook waits again.
 const MAX_WAIT = 86_400;
 
+function quietWake(host: string | undefined): number {
+  if (host === "cursor") {
+    console.log("{}");
+  }
+  return 0;
+}
+
 export async function wakeHook(
   host: string | undefined,
   seconds?: number,
@@ -169,12 +178,7 @@ export async function wakeHook(
     console.error("usage: swarmail hook wake <claude|cursor> [seconds]");
     return 0;
   }
-  const quiet = () => {
-    if (host === "cursor") {
-      console.log("{}");
-    }
-    return 0;
-  };
+  const quiet = () => quietWake(host);
   let payload: Record<string, unknown> = {};
   try {
     payload = JSON.parse(input);
@@ -214,7 +218,11 @@ export async function wakeHook(
   );
   let hint = "";
   let retry = "";
+  let delivery: ReturnType<typeof openHookDelivery> | undefined;
   try {
+    if (host === "cursor") {
+      delivery = openHookDelivery(sid, env);
+    }
     // Only the watcher aborts `request`, so an aborted one means the host has gone.
     while (!request.signal.aborted && end - Date.now() >= 1000) {
       const left = Math.min(Math.floor((end - Date.now()) / 1000), MAX_WAIT);
@@ -228,14 +236,17 @@ export async function wakeHook(
         if (!health.ok) {
           throw new Error(`healthz ${health.status}`);
         }
-        const res = await fetch(`${base}/wait?session=${sid}&timeout=${left}${retry}`, {
-          signal: AbortSignal.any([request.signal, AbortSignal.timeout((left + 5) * 1000)]),
-        });
+        const res = await fetch(
+          `${base}/wait?session=${sid}&timeout=${left}${delivery?.query() ?? retry}`,
+          {
+            signal: AbortSignal.any([request.signal, AbortSignal.timeout((left + 5) * 1000)]),
+          },
+        );
         retry = "";
         // 200 carries the hint, and an HTTP error (409: a newer wait replaced this one) ends the hook too.
         // 204 ends one wait; the loop waits again until the hook's own time is up.
         if (res.status === 200) {
-          hint = (await res.text()).trim();
+          hint = delivery ? await delivery.receive(res) : (await res.text()).trim();
         }
         if (res.status !== 204) {
           break;
@@ -251,6 +262,7 @@ export async function wakeHook(
     }
   } finally {
     clearInterval(watch);
+    delivery?.close();
     // A newer waiter that replaced this one owns the file now.
     if (pidFile && readWaiter(pidFile).pid === process.pid) {
       rmSync(pidFile, { force: true });
@@ -307,4 +319,62 @@ export async function rearmHook(input = "", env = process.env): Promise<number> 
     return 0;
   }
   return wakeHook("claude", undefined, input, env);
+}
+
+async function nativeContextHint(sid: string, env: NodeJS.ProcessEnv): Promise<string> {
+  const delivery = openHookDelivery(sid, env);
+  try {
+    const url = new URL("/wait", wakeUrl(env));
+    url.search = new URLSearchParams({ session: sid, timeout: "0" }).toString() + delivery.query();
+    const response = await fetch(url, { signal: AbortSignal.timeout(1500), redirect: "error" });
+    return response.status === 200 ? await delivery.receive(response) : "";
+  } finally {
+    delivery.close();
+  }
+}
+
+/** Deliver mail at a native host's next safe context point; never cancel its active task. */
+export async function contextHook(
+  host: string | undefined,
+  stop = false,
+  input = "",
+  env = process.env,
+): Promise<number> {
+  const key =
+    host === "cursor"
+      ? "conversation_id"
+      : host === "devin"
+        ? "session_id"
+        : host === "agy"
+          ? "conversationId"
+          : null;
+  let hint = "";
+  try {
+    const payload = JSON.parse(input);
+    const sid = key ? payload[key] : undefined;
+    if (
+      typeof sid === "string" &&
+      SESSION_RE.test(sid) &&
+      !openRegistry(registryDir(env)).read(sid)?.ended
+    ) {
+      hint = await nativeContextHint(sid, env);
+    }
+  } catch {
+    // Mail delivery must never block a tool or grant permissions when the server is unavailable.
+  }
+  const output = !hint
+    ? {}
+    : host === "cursor"
+      ? { additional_context: hint }
+      : host === "devin"
+        ? stop
+          ? { decision: "block", reason: hint }
+          : {
+              hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: hint },
+            }
+        : stop
+          ? { decision: "continue", reason: hint }
+          : { injectSteps: [{ userMessage: hint }] };
+  console.log(JSON.stringify(output));
+  return 0;
 }

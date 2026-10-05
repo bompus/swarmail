@@ -100,7 +100,12 @@ export function hookOutput(host: string, event: unknown, text: string): string {
     return JSON.stringify({ additional_context: text });
   }
   const events = ["PreToolUse", "UserPromptSubmit", "SessionStart"];
-  if (!text || host !== "claude" || !events.includes(String(event))) {
+  if (
+    !text ||
+    !["claude", "devin"].includes(host) ||
+    !events.includes(String(event)) ||
+    (host === "devin" && event === "PreToolUse")
+  ) {
     return "";
   }
   return JSON.stringify({ hookSpecificOutput: { hookEventName: event, additionalContext: text } });
@@ -128,7 +133,11 @@ export function hookSession(input: HookInput, env: NodeJS.ProcessEnv = process.e
   ): Session => ({ host, program, model, sessionId, cwd });
   const named = str(input.swarmail_host);
   if (named) {
-    return session(named);
+    return session(
+      named,
+      undefined,
+      str(input.cwd) ?? (named === "devin" ? str(env.DEVIN_PROJECT_DIR) : null),
+    );
   }
   const grokSession = str(input.sessionId);
   if (grokSession) {
@@ -266,6 +275,15 @@ export async function registerHook(args: string[], read: () => Promise<string>):
   }
   try {
     const input = JSON.parse(await read()) as HookInput;
+    if (args[0] === "--host") {
+      if (
+        args.length !== 2 ||
+        !["claude", "codex", "cursor", "devin", "grok", "agy", "opencode"].includes(args[1] ?? "")
+      ) {
+        return;
+      }
+      input.swarmail_host = args[1];
+    }
     const out = hookOutput(hookSession(input).host, input.hook_event_name, main(input));
     if (out) {
       process.stdout.write(out + "\n");

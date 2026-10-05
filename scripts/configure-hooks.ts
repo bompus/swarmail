@@ -64,6 +64,8 @@ export function swarmailHookPaths(home: string, platform: NodeJS.Platform = proc
   return {
     bin,
     command: `${run} register`,
+    register: (host: string) => `${run} register --host ${host}`,
+    context: (host: string, stop = false) => `${run} hook context ${host}${stop ? " stop" : ""}`,
     // The compiled binary rather than a shell script: about 9.4 MB per waiting session against 3.2 MB
     // (measured 2026-09-28), for one code path on every host.
     wake: (host: string) => `${run} hook wake ${host}${host === "claude" ? keepExit : ""}`,
@@ -216,6 +218,71 @@ export default {
 `;
 }
 
+/** Native hook configuration shared by the installer and a Windows profile mirror. */
+export function withCursorHooks(
+  config: Record<string, unknown>,
+  paths: ReturnType<typeof swarmailHookPaths>,
+) {
+  return withHook(
+    withHook(
+      withHook({ version: 1, ...config }, "sessionStart", {
+        command: paths.command,
+        timeout: 15,
+      }),
+      "postToolUse",
+      { command: paths.context("cursor"), timeout: 2 },
+    ),
+    "stop",
+    {
+      command: paths.wake("cursor"),
+      timeout: WAKE_SECONDS.cursor + 100,
+    },
+  );
+}
+
+export function withDevinHooks(
+  config: Record<string, unknown>,
+  paths: ReturnType<typeof swarmailHookPaths>,
+) {
+  const register = { type: "command", command: paths.register("devin"), timeout: 15 };
+  let next = config;
+  for (const event of ["SessionStart", "UserPromptSubmit", "SessionEnd"]) {
+    next = withHook(next, event, { hooks: [register] });
+  }
+  next = withHook(next, "PreToolUse", {
+    matcher: "Edit|Write|edit|write|apply_patch|notebook_edit",
+    hooks: [register],
+  });
+  next = withHook(next, "PostToolUse", {
+    hooks: [{ type: "command", command: paths.context("devin"), timeout: 2 }],
+  });
+  return withHook(next, "Stop", {
+    hooks: [{ type: "command", command: paths.context("devin", true), timeout: 2 }],
+  });
+}
+
+export function withAntigravityHooks(
+  config: Record<string, unknown>,
+  paths: ReturnType<typeof swarmailHookPaths>,
+) {
+  const group = object(config[marker] ?? {}, marker);
+  return {
+    ...config,
+    [marker]: {
+      ...(group.enabled === false && { enabled: false }),
+      PreToolUse: [
+        {
+          matcher:
+            "code_action|file_change|write_to_file|replace_file_content|multi_replace_file_content",
+          hooks: [{ type: "command", command: paths.command, timeout: 15 }],
+        },
+      ],
+      PreInvocation: [{ type: "command", command: paths.context("agy"), timeout: 2 }],
+      Stop: [{ type: "command", command: paths.context("agy", true), timeout: 2 }],
+    },
+  };
+}
+
 /**
  * Writes the hooks into the host configs under `home`. `swarmailHome` is where scripts/build.ts put the binary and
  * where the mod goes: HOME first, which on Windows can differ from the profile the hosts read their configs from.
@@ -226,7 +293,8 @@ export function configureSwarmailHooks(
 ) {
   home = resolve(home);
   swarmailHome = resolve(swarmailHome);
-  const { bin, command, wake, rearm } = swarmailHookPaths(swarmailHome);
+  const paths = swarmailHookPaths(swarmailHome);
+  const { bin, command, wake, rearm } = paths;
   const windows = process.platform === "win32";
   const mod = claudeModPlugin(swarmailHome);
   // Only Claude Code loads the mod; Cursor, Devin and Grok keep the wake hooks.
@@ -238,8 +306,7 @@ export function configureSwarmailHooks(
       ...planJson(join(home, ".claude", "settings.json"), home, (config) =>
         withPluginDir(withClaudeHooks(config, command, wake("claude"), rearm), mod.dir, withMod),
       ),
-      // Devin keeps its own config under AppData on Windows (scripts/lib/mcp-hosts.ts).
-      hosts: [".claude", ".cursor", ".grok", windows ? "AppData/Roaming/devin" : ".config/devin"],
+      hosts: [".claude", ".cursor", ".grok"],
     },
     ...(withMod ? Object.entries(mod.files) : []).map(([path, next]) => ({
       path,
@@ -254,13 +321,17 @@ export function configureSwarmailHooks(
     // registration at session start has its own entry here.
     {
       ...planJson(join(home, ".cursor", "hooks.json"), home, (config) =>
-        withHook(
-          withHook({ version: 1, ...config }, "sessionStart", { command, timeout: 15 }),
-          "stop",
-          { command: wake("cursor"), timeout: WAKE_SECONDS.cursor + 100 },
-        ),
+        withCursorHooks(config, paths),
       ),
       hosts: [".cursor"],
+    },
+    {
+      ...planJson(
+        join(home, windows ? "AppData/Roaming/devin/config.json" : ".config/devin/config.json"),
+        home,
+        (config) => withDevinHooks(config, paths),
+      ),
+      hosts: [windows ? "AppData/Roaming/devin" : ".config/devin"],
     },
     // Codex matches `apply_patch` as Edit|Write and adds `turn_id`, which the hook uses to tell it from Claude.
     {
@@ -282,21 +353,9 @@ export function configureSwarmailHooks(
     // model calls write_to_file / replace_file_content, so match both.
     // A user's `"enabled": false` on the group survives reinstalls.
     {
-      ...planJson(join(home, ".gemini", "config", "hooks.json"), home, (config) => ({
-        ...config,
-        [marker]: {
-          ...((config[marker] as { enabled?: unknown } | undefined)?.enabled === false && {
-            enabled: false,
-          }),
-          PreToolUse: [
-            {
-              matcher:
-                "code_action|file_change|write_to_file|replace_file_content|multi_replace_file_content",
-              hooks: [hookEntry],
-            },
-          ],
-        },
-      })),
+      ...planJson(join(home, ".gemini", "config", "hooks.json"), home, (config) =>
+        withAntigravityHooks(config, paths),
+      ),
       hosts: [".gemini"],
     },
   ];
