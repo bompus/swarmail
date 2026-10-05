@@ -1,6 +1,11 @@
 // Swarmail storage with microsecond timestamps, SQLite WAL and FTS5 search.
 import { Database } from "bun:sqlite";
 import { identity, type Identity } from "./tag.ts";
+import {
+  backfillOutstandingNotices,
+  reconcileNotices,
+  repairNoticeOwners,
+} from "./wake-notices.ts";
 
 // The schema as first released. MIGRATIONS bring it, or an older database, up to date.
 const schema = `
@@ -100,6 +105,14 @@ const MIGRATIONS: ((db: Database) => void)[] = [
     db.run("ALTER TABLE agents ADD COLUMN worktree TEXT");
     db.run("ALTER TABLE messages ADD COLUMN sender_location TEXT");
   },
+  (db) => {
+    db.run(`CREATE TABLE wake_notices (
+      owner TEXT PRIMARY KEY, session TEXT NOT NULL, event_id INTEGER NOT NULL, covered_through INTEGER NOT NULL
+    )`);
+    db.run(`CREATE TABLE wake_notice_offers (
+      session TEXT PRIMARY KEY, owner TEXT NOT NULL, event_id INTEGER NOT NULL
+    )`);
+  },
 ];
 
 const IDENTITY = ["host", "session_id", "t3_thread", "build", "cwd"] as const;
@@ -142,6 +155,9 @@ function migrate(db: Database): void {
       db.run(`PRAGMA user_version = ${MIGRATIONS.length}`);
     }
     syncIdentity(db);
+    repairNoticeOwners(db);
+    reconcileNotices(db);
+    backfillOutstandingNotices(db);
   }).immediate();
 }
 

@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Generic inbox notices are suppressed after admission until the receiving
+  session drains its unread mail. Partial reads and previews keep the notice
+  outstanding; lost offers retry their original event across restart.
+
 - Configured wake bridges are available through `swarmail wake-bridge` for
   T3 Code, OpenCode and native Unix Codex/Grok targets. They preserve delivery
   journals across restart and require explicit target configuration.

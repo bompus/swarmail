@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -47,6 +47,15 @@ beforeAll(async () => {
     task_description: "[cursor:c-1] cursor",
   });
   await call("register_agent", { project_key: P, program: "codex", model: "m", name: "BlueLake" });
+});
+beforeEach(async () => {
+  await call("fetch_session_inbox", {
+    host: "claude",
+    session_id: "s-1",
+    t3_thread: "th-1",
+    limit: 1000,
+  });
+  await call("fetch_session_inbox", { host: "cursor", session_id: "c-1", limit: 1000 });
 });
 afterAll(() => {
   if (previousState === undefined) {
@@ -104,6 +113,12 @@ test("wakes a session for unread mail to its tagged agent only with one inbox in
   let res = await wait("s-1");
   expect(res.status).toBe(200);
   expect(await res.text()).toBe("Swarmail: Fetch all unread mail with swarmail inbox --session.\n");
+  await call("fetch_session_inbox", {
+    host: "claude",
+    session_id: "s-1",
+    t3_thread: "th-1",
+    limit: 1000,
+  });
   const pending = wait("s-1");
   await Bun.sleep(100);
   await send("TanOwl"); // tag claude:s-10, not s-1
@@ -131,6 +146,12 @@ test("a retried wait gets a lost hint again, and a restarted server does not re-
     const waitOther = (timeout) =>
       fetch(`http://127.0.0.1:${other.server.port}/wait?session=s-1&timeout=${timeout}`);
     expect((await waitOther(1)).status).toBe(204);
+    await call("fetch_session_inbox", {
+      host: "claude",
+      session_id: "s-1",
+      t3_thread: "th-1",
+      limit: 1000,
+    });
     const pending = waitOther(5);
     await Bun.sleep(100);
     await send("GreenCastle");

@@ -60,7 +60,7 @@ for (const [host, key] of [
   ["devin", "session_id"],
   ["agy", "conversationId"],
 ]) {
-  test(`${host} receives native active-context mail once per arrival without T3 or inbox mutation`, async () => {
+  test(`${host} coalesces native active-context mail until an inbox read without T3`, async () => {
     const f = fixture(host, key);
     await f.call("register_agent", {
       project_key: f.dir,
@@ -88,6 +88,10 @@ for (const [host, key] of [
       expect(sent.id).toBeGreaterThan(0);
       expect(await f.run("unrelated-session")).toEqual({});
       const output = await f.run();
+      if (importance !== "low") {
+        expect(output).toEqual({});
+        continue;
+      }
       const hint =
         host === "cursor"
           ? output.additional_context
@@ -425,7 +429,7 @@ for (const stop of [false, true]) {
   });
 }
 
-test("an older concurrent offer remains acknowledgeable after a higher message is read", async () => {
+test("concurrent offers keep one notification while an older receipt remains unread", async () => {
   const f = fixture("devin", "session_id");
   await f.call("register_agent", {
     project_key: f.dir,
@@ -480,7 +484,12 @@ test("an older concurrent offer remains acknowledgeable after a higher message i
   });
   expect(JSON.stringify(await f.run())).toContain("Swarmail:");
   release();
-  expect(JSON.stringify(await delayed)).toContain("Swarmail:");
+  expect(await delayed).toEqual({});
+  await send();
+  expect(await f.run()).toEqual({});
+  expect(
+    await f.call("fetch_inbox", { project_key: f.dir, agent_name: "BlueLake", unread_only: true }),
+  ).toHaveLength(2);
   await send();
   expect(JSON.stringify(await f.run())).toContain("Swarmail:");
   expect(await f.run()).toEqual({});

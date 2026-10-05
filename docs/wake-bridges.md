@@ -78,6 +78,37 @@ T3 V2 holds delivery during settlement or pending operator requests. It uses
 agent messages and explicit steering, preserves user prompts and automatic
 notifications, and consolidates bridge-owned queued mail notices.
 
+## Notification deduplication
+
+Each receiving session has one outstanding generic inbox notice. Native IDs
+and T3 thread IDs linked by its registration tags share that notice. Once its
+transport confirms admission, later mail is covered by that notice until all
+of the session's unread mail has been marked read. Previewing mail or reading
+only part of an inbox does not rearm notifications. Sender acknowledgements
+are separate: messages can still need `acknowledge_message` after being read.
+
+An uncertain delivery retries the saved offer with the same event ID, including
+across restart. Reading the inbox and releasing its notice happen in one
+transaction, so mail arriving after the drain can trigger a new notice.
+
+Delivery cursors remain separate for each target ID. An unconfirmed offer is
+retried by its original delivery path; alternate linked paths suppress their
+notices until the shared inbox drains. Upgrades preserve earlier offers that
+still cover unread mail.
+
+If an unconfirmed notice's original native session disappears during provider
+replacement, linked replacement paths remain suppressed. Registration alone
+cannot prove that the original notice was never delivered. Read the shared
+inbox from the replacement session with `swarmail inbox --session` to release
+the notice; previewing mail does not release it. Automatic transport takeover
+is not supported.
+
+Native IDs shared by distinct receiving sessions do not claim notifications.
+Use distinct native IDs or a matching T3 thread ID for delivery.
+Adding a T3 tag links a native notice only when that native ID maps to one
+thread. Removing or changing a T3 tag can change the receiving identity and
+rearm a notice. Stored mail remains available.
+
 ## Read the notice
 
 New notices contain one instruction:
