@@ -19,6 +19,16 @@ afterEach(() => {
   process.env.XDG_STATE_HOME = savedHome;
 });
 
+// Bun 1.4.2 on Windows reenters socket dispatch inside expect().rejects.
+async function rejected(promise) {
+  try {
+    await promise;
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected the promise to reject");
+}
+
 function fixture(swarmailUrl) {
   const dir = mkdtempSync(join(scratch, "case-"));
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
@@ -592,10 +602,10 @@ test("human requests and settlement hold obsolete notice cancellation across res
     } else {
       f.projection.thread.settledOverride = "settled";
     }
-    await expect(f.deliver(1, hint("repo-a"))).rejects.toMatchObject({ retryable: true });
+    expect(await rejected(f.deliver(1, hint("repo-a")))).toMatchObject({ retryable: true });
     const pending = structuredClone(f.state.pending);
     f.restart();
-    await expect(f.deliver(1, hint("repo-a"))).rejects.toMatchObject({ retryable: true });
+    expect(await rejected(f.deliver(1, hint("repo-a")))).toMatchObject({ retryable: true });
     expect(f.received).toHaveLength(1);
     expect(f.queued()).toHaveLength(1);
     expect(f.state.pending).toEqual(pending);
@@ -629,7 +639,7 @@ test("unavailable or malformed snapshots retain the pending offer and queued not
     await f.legacy(1, hint("repo-a"));
     const original = structuredClone(f.queued());
     f.snapshot(response);
-    await expect(f.deliver(2, hint("repo-b"))).rejects.toMatchObject({ retryable: true });
+    expect(await rejected(f.deliver(2, hint("repo-b")))).toMatchObject({ retryable: true });
     expect(f.received).toHaveLength(1);
     expect(f.queued()).toEqual(original);
     expect(f.state.acknowledged).toBe(1);
@@ -653,15 +663,17 @@ test("an older core rejects snapshots without entering its mutating wait route",
     },
   });
   cleanups.push(() => legacy.stop(true));
-  await expect(
-    peekUnreadMailboxes(
-      {
-        swarmailUrl: `http://127.0.0.1:${legacy.port}`,
-        target: { id: "legacy-session" },
-      },
-      new AbortController().signal,
+  expect(
+    await rejected(
+      peekUnreadMailboxes(
+        {
+          swarmailUrl: `http://127.0.0.1:${legacy.port}`,
+          target: { id: "legacy-session" },
+        },
+        new AbortController().signal,
+      ),
     ),
-  ).rejects.toMatchObject({ retryable: true });
+  ).toMatchObject({ retryable: true });
   expect(waits).toHaveLength(0);
 });
 
@@ -691,7 +703,7 @@ for (const status of ["preparing", "starting", "waiting"]) {
   test(`steering holds ${status} transitions before saving an operation`, async () => {
     const f = fixture();
     f.projection.runs.push({ id: "active", status, userMessageId: null });
-    await expect(f.deliver(1, hint("repo-a"))).rejects.toMatchObject({ retryable: true });
+    expect(await rejected(f.deliver(1, hint("repo-a")))).toMatchObject({ retryable: true });
     expect(f.received).toHaveLength(0);
     expect(f.state.pending.command.operation).toBeUndefined();
     f.projection.runs[0].status = "running";
@@ -707,7 +719,7 @@ test("unsupported steering holds the offer rather than silently queueing", async
   f.projection.runs.push({ id: "active", status: "running", userMessageId: null });
   f.projection.providerSessions[0].capabilities.turns.supportsActiveSteering = false;
   f.projection.providerSessions[0].capabilities.turns.supportsSteeringByInterruptRestart = false;
-  await expect(f.deliver(1, hint("repo-a"))).rejects.toMatchObject({ retryable: true });
+  expect(await rejected(f.deliver(1, hint("repo-a")))).toMatchObject({ retryable: true });
   expect(f.received).toHaveLength(0);
   expect(f.state.acknowledged).toBe(0);
 });
@@ -768,9 +780,11 @@ for (const sequence of sequences) {
       }
       const before = { received: f.received.length, acknowledged: f.state.acknowledged };
       if (held && offers.length) {
-        await expect(f.deliver(offers[0].eventId, hint(offers[0].mailbox))).rejects.toMatchObject({
-          retryable: true,
-        });
+        expect(await rejected(f.deliver(offers[0].eventId, hint(offers[0].mailbox)))).toMatchObject(
+          {
+            retryable: true,
+          },
+        );
       } else {
         while (offers.length) {
           const offer = offers[0];
@@ -882,7 +896,7 @@ for (const text of ["/compact", "/logout", "  /COMPACT  "]) {
       status: "running",
       userMessageId: "maintenance",
     });
-    await expect(f.deliver(1, hint("repo-a"))).rejects.toMatchObject({ retryable: true });
+    expect(await rejected(f.deliver(1, hint("repo-a")))).toMatchObject({ retryable: true });
     expect(f.received).toHaveLength(0);
     expect(f.state.pending.command.operation).toBeUndefined();
     f.projection.runs[0].status = "completed";

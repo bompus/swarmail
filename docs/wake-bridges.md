@@ -70,6 +70,9 @@ registration tag. Keep one bridge per Swarmail origin and target ID. A second
 process for that pair is refused by the journal's owner lock. Stop the process
 with SIGINT or SIGTERM. A permanent target rejection exits with status `1`;
 connection failures and other retryable errors retain the offer and retry.
+A native Codex or Grok delivery whose outcome is unknown after its attempt
+exits with status `1` and retains the command without resending it. Restart
+the bridge to reconcile admission evidence, or inspect the session.
 
 T3 V2 holds delivery during settlement or pending operator requests. It uses
 agent messages and explicit steering, preserves user prompts and automatic

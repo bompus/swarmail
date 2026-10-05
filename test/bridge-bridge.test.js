@@ -327,12 +327,11 @@ for (const type of ["t3-v1-steer", "t3-v2-queue"]) {
 }
 
 test("rejects destination changes with pending mail", async () => {
-  const f = await fixture("opencode-v2-queue", { reject: true });
+  const f = await fixture("opencode-v2-queue", { mismatch: true });
   await f.send();
   const rejected = f.start();
-  await until(() => f.received.length === 1 && f.state()?.pending);
-  rejected.kill();
-  expect(await rejected.exited).toBe(0);
+  expect(await rejected.exited).toBe(1);
+  expect(f.state().pending).not.toBeNull();
   const config = JSON.parse(readFileSync(f.config, "utf8"));
   config.target.url = "http://127.0.0.1:9";
   writeFileSync(f.config, JSON.stringify(config));
