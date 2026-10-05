@@ -13,6 +13,13 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   keys, return fields and reservation filters. Handlers and API defaults stay
   unchanged.
 
+- `swarmail register --host <host>` selects the host explicitly.
+
+- Native Cursor, Devin and Antigravity hooks deliver mail at the next context
+  point during active work without cancelling the task or requiring T3 Code.
+  Devin gets its own hook configuration on Linux and Windows. The hooks use
+  an immediate wake check, suppress repeated notices and preserve inbox mail.
+
 - Inbox help and usage explain how to read bodies and page through all unread
   mail, and how to preview metadata without marking it read. Unread-count
   guidance covers paused sessions and unavailable delivery. API defaults stay

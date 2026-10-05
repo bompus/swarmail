@@ -76,7 +76,8 @@ async function waitResponse(req: Request, url: URL, waiters: ReturnType<typeof c
   if (rawAfter !== null && (!/^\d+$/.test(rawAfter) || !Number.isSafeInteger(after))) {
     return new Response("after must be a nonnegative safe integer", { status: 400 });
   }
-  const seconds = Math.min(Math.max(Number(url.searchParams.get("timeout")) || 600, 1), 86_400);
+  const timeout = url.searchParams.get("timeout");
+  const seconds = timeout === "0" ? 0 : Math.min(Math.max(Number(timeout) || 600, 1), 86_400);
   let offer;
   try {
     offer = await waiters.wait(session, seconds * 1000, req.signal, {

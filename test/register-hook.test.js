@@ -192,6 +192,18 @@ test("tells Claude hook input from Cursor, Devin and Grok input", () => {
     sessionId: "d1",
     cwd: "/w",
   });
+  expect(
+    hookSession(
+      { swarmail_host: "devin", session_id: "d1" },
+      { DEVIN_PROJECT_DIR: "/w", CLAUDECODE: "1" },
+    ),
+  ).toMatchObject({ host: "devin", sessionId: "d1", cwd: "/w" });
+  expect(
+    hookSession(
+      { swarmail_host: "devin", session_id: "d1", cwd: "/other" },
+      { DEVIN_PROJECT_DIR: "/w" },
+    ),
+  ).toMatchObject({ host: "devin", cwd: "/other" });
   expect(hookSession({ sessionId: "g1", cwd: "/w" }, {})).toMatchObject({
     host: "grok",
     sessionId: "g1",

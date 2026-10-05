@@ -120,7 +120,7 @@ function wakeCursor(db: Database) {
     "UPDATE wake_cursors SET announced = max(announced, ?1) WHERE session = ?2",
   );
   const offer = db.query<unknown, [number, string]>(
-    "UPDATE wake_cursors SET offered = ?1 WHERE session = ?2",
+    "UPDATE wake_cursors SET offered = max(coalesce(offered, 0), ?1) WHERE session = ?2",
   );
   return {
     get: (session: string) => cursor.get(session),
