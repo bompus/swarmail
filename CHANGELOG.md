@@ -2,7 +2,13 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## 0.2.5 - 2026-10-04
+## Unreleased
+
+## 0.2.5 - 2026-10-05
+
+- Tool help explains search and inbox selection, bounded thread results, retry
+  keys, return fields and reservation filters. Handlers and API defaults stay
+  unchanged.
 
 - Inbox help and usage explain how to read bodies and page through all unread
   mail, and how to preview metadata without marking it read. Unread-count
