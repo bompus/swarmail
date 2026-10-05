@@ -25,6 +25,12 @@ OpenCode. Claude Code and Cursor sessions can also wake up when mail arrives.
 Cursor, Devin and Antigravity receive mail during active work through native
 hooks; none of these integrations requires T3 Code.
 
+[Configured bridges](docs/wake-bridges.md) also deliver mail to explicit T3
+Code, OpenCode, native Codex and native Grok targets with steering. They are
+opt-in foreground processes; installation does not start them. Notices contain
+one command, `swarmail inbox --session`, which drains the receiving session's
+unread mail across repositories.
+
 <p align="center"><img src="docs/assets/demo.gif" alt="Claude Code and Cursor sessions on one repository. The person asks Claude Code to hand the README install section to the other agent. Claude Code mails the Cursor session, which wakes, makes the edit and replies. Claude Code wakes on the reply and checks the change." width="100%"></p>
 
 If you are an AI agent reading this for your user, the prompt under
@@ -180,6 +186,8 @@ keeps one name across repositories.
 | `swarmail who [repo]` | Agent names, session titles and edit checkouts, live sessions first |
 | `swarmail inbox`, `send`, `search` | Read, send or search mail as this session |
 | `swarmail thread <id>` | One thread's messages, oldest first |
+| `swarmail inbox --session` | Drain this session's unread mail across repositories |
+| `swarmail wake-bridge <config.json>` | Deliver notices to one explicitly configured local target |
 | `swarmail ping <agent>` | Exit 0 if that agent's wake hook is waiting |
 | `swarmail register` | The register hook; `--tag` prints the tag for a manual registration; `--host <host>` selects the host explicitly |
 | `swarmail hook wake <host>` | The Claude Code and Cursor wake hook |
@@ -247,7 +255,7 @@ which waits for mail for as long as the session runs. The installer copies it to
 `env.CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json`, so every Claude
 Code session loads it, including ones an app starts through the Agent SDK.
 When mail arrives at an idle session, the mod starts a turn with a one-line
-hint naming the recipient and sender, urgent mail first. During a turn the
+short instruction to read the session inbox. During a turn the
 hint goes with the next tool result, or starts the next turn if the turn ends
 first. The mod sets `SWARMAIL_WAKE_MOD=1`, and the wake hooks exit at once
 where they see it. It was tested with Claude Code 2.1.288. A Claude Code

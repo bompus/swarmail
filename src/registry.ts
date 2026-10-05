@@ -2,7 +2,7 @@
 // under a lock file, and the server calls that register a session. The hook and the T3 supervisor
 // register through `openRegistry`; `who`, the guard and the wake hook only read.
 import { renameOver } from "./files.ts";
-import { stateHome } from "./paths.ts";
+import { stateHome, t3Home } from "./paths.ts";
 import {
   closeSync,
   mkdirSync,
@@ -16,7 +16,9 @@ import {
 import { join } from "node:path";
 import { callTool, swarmailUrl } from "./client.ts";
 import { hostProcess, type HostProcess } from "./proc.ts";
-import { leadingTag, parseTag, sameSessionRow, withoutTag, type Tag } from "./tag.ts";
+import { leadingTag, parseTag, sameSessionRow, withoutTag, SESSION_ENV, type Tag } from "./tag.ts";
+import { t3StatePath, t3ThreadId } from "./t3-state.ts";
+import { SESSION_RE } from "./wake.ts";
 
 /** Per-session state under ~/.local/state/swarmail-register/<session id>.json. */
 export interface RegisterState {
@@ -422,4 +424,60 @@ export function selfNames(env: NodeJS.ProcessEnv = process.env, host = hostProce
     }
   }
   return names;
+}
+
+/** Exact current-session identity; names and checkout locations are never ownership evidence. */
+export function selfSession(env: NodeJS.ProcessEnv = process.env, host = hostProcess()) {
+  const fail = (): never => {
+    throw new Error(
+      "cannot identify one agent session; check its session variables and registration process",
+    );
+  };
+  const variables = Object.entries(SESSION_ENV).filter(([, key]) => !!env[key]);
+  if (variables.length > 1) {
+    return fail();
+  }
+  const owned =
+    host?.start === undefined
+      ? []
+      : openRegistry(registryDir(env))
+          .all()
+          .filter((state) => state.host?.pid === host.pid && state.host.start === host.start);
+  const explicit = variables[0];
+  const states = explicit ? owned.filter((state) => state.sessionId === env[explicit[1]]) : owned;
+  const tags = states
+    .flatMap((state) => Object.values(state.tags ?? {}).map(parseTag))
+    .filter((tag): tag is Tag => !!tag?.host && !!tag.sessionId);
+  const identities = new Map(tags.map((tag) => [`${tag.host}:${tag.sessionId}`, tag]));
+  const hostName =
+    explicit?.[0] ?? (identities.size === 1 ? [...identities.values()][0]!.host : null);
+  const sessionId = explicit
+    ? env[explicit[1]]
+    : identities.size === 1
+      ? [...identities.values()][0]!.sessionId
+      : null;
+  const ownerName = host?.name
+    .match(/^(claude|codex|cursor-agent|opencode|devin|grok|agy|antigravity)/i)?.[1]
+    ?.toLowerCase();
+  const ownerHost =
+    ownerName === "cursor-agent" ? "cursor" : ownerName === "antigravity" ? "agy" : ownerName;
+  if (
+    !hostName ||
+    !sessionId ||
+    !SESSION_RE.test(sessionId) ||
+    (ownerHost && ownerHost !== hostName) ||
+    tags.some((tag) => tag.host !== hostName || tag.sessionId !== sessionId)
+  ) {
+    return fail();
+  }
+  const threads = new Set(tags.map((tag) => tag.t3).filter((id): id is string => !!id));
+  const mapped = t3ThreadId(sessionId, t3StatePath(t3Home(env)), hostName);
+  if (mapped) {
+    threads.add(mapped);
+  }
+  if (threads.size > 1) {
+    return fail();
+  }
+  const thread = [...threads][0];
+  return { host: hostName, session_id: sessionId, ...(thread && { t3_thread: thread }) };
 }

@@ -7,6 +7,7 @@ import { overlaps } from "./glob.ts";
 import { locations } from "./location.ts";
 import { identity, leadingTag, parseTag, sameSessionRow, tagOf, type Identity } from "./tag.ts";
 import { InvalidTimestamp, iso, nowUs, parseIso } from "./db.ts";
+import { SESSION_RE } from "./wake.ts";
 
 /** A tool failure reported to the caller as `{"error": {type, message, recoverable, data}}`. */
 export class ToolError extends Error {
@@ -679,6 +680,64 @@ export class MailStore {
       }
     }
     return rows.map((m) => inboxOut(m, !!a.include_bodies));
+  }
+
+  /** One bounded page across exact session registrations, including idle-retired agents. */
+  sessionInbox(a: Args) {
+    const host = str(a.host, "host"),
+      session = str(a.session_id, "session_id");
+    const thread = a.t3_thread === undefined ? null : str(a.t3_thread, "t3_thread");
+    if (
+      !/^[\w-]+$/.test(host) ||
+      !SESSION_RE.test(session) ||
+      (thread && !SESSION_RE.test(thread))
+    ) {
+      throw new ToolError("INVALID_ARGUMENT", "invalid host or session identity");
+    }
+    const now = nowUs();
+    const rows = this.db
+      .query<Row, any[]>(`
+      SELECT m.id, m.thread_id, m.subject, m.importance,
+             m.ack_required, m.created_ts, m.body_md, s.name AS "from",
+             r.read_ts, r.ack_ts, a.id AS recipient_id, a.name AS agent_name,
+             p.human_key AS project_key
+      FROM agents a JOIN projects p ON p.id = a.project_id
+      JOIN message_recipients r ON r.agent_id = a.id
+      JOIN messages m ON m.id = r.message_id JOIN agents s ON s.id = m.sender_id
+      WHERE ((?3 IS NOT NULL AND a.t3_thread IS NOT NULL AND a.t3_thread = ?3)
+        OR ((?3 IS NULL OR a.t3_thread IS NULL) AND a.host = ?1 AND a.session_id = ?2))
+        AND (?4 = 0 OR r.read_ts IS NULL)
+      ORDER BY r.created_ts DESC, r.message_id DESC, r.agent_id DESC LIMIT ?5
+    `)
+      .all(host, session, thread, (a.unread_only ?? true) ? 1 : 0, pageLimit(a.limit, "limit", 20));
+    const mark = this.db.query(
+      "UPDATE message_recipients SET read_ts = ? WHERE message_id = ? AND agent_id = ? AND read_ts IS NULL",
+    );
+    const touched = new Set<number>();
+    for (const row of rows) {
+      if (!touched.has(row.recipient_id)) {
+        this.q.touch.run(now, row.recipient_id);
+        touched.add(row.recipient_id);
+      }
+      if ((a.mark_read ?? true) && row.read_ts == null) {
+        mark.run(now, row.id, row.recipient_id);
+        row.read_ts = now;
+      }
+    }
+    return rows.map((row) => ({
+      id: row.id,
+      thread_id: row.thread_id,
+      subject: row.subject,
+      importance: row.importance,
+      ack_required: !!row.ack_required,
+      from: row.from,
+      created_ts: iso(row.created_ts),
+      ...(row.read_ts != null && { read_ts: iso(row.read_ts) }),
+      ...(row.ack_ts != null && { ack_ts: iso(row.ack_ts) }),
+      ...(a.include_bodies && { body_md: row.body_md }),
+      project_key: row.project_key,
+      agent_name: row.agent_name,
+    }));
   }
 
   message(p: Project, messageId: unknown) {

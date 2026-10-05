@@ -37,6 +37,15 @@ const serve: Command = {
 
 const COMMANDS: Record<string, Command> = {
   serve,
+  "wake-bridge": {
+    usage: [
+      "swarmail wake-bridge <config.json>              deliver mail notices to one explicit local target",
+    ],
+    run: async (args) => {
+      const { wakeBridge } = await import("./wake-bridge.ts");
+      process.exit(await wakeBridge(args));
+    },
+  },
   hook: {
     usage: [
       "swarmail hook wake <claude|cursor> [seconds]     the wake hook (wake-hook.ts)",
@@ -103,7 +112,7 @@ const COMMANDS: Record<string, Command> = {
   ...Object.fromEntries([
     mail(
       "inbox",
-      "swarmail inbox [--all] [--peek] [--json] [--as NAME]  this session's mail in the current repository (mail.ts)",
+      "swarmail inbox [--all] [--peek] [--json] [--as NAME]  this session's mail in the current repository (mail.ts)\n  swarmail inbox --session [--limit N] [--json]     drain all session inboxes; --peek/--all preview one page",
     ),
     mail(
       "send",

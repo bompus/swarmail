@@ -1,8 +1,7 @@
 // Wake delivery: an idle session's hook long-polls GET /wait?session=<host session id> and gets a
-// one-line hint when unread mail arrives for any agent whose roster tag names that session or T3 thread
-// (`[t3:… claude:<session id> cwd:…]`, written by the register hook and stored as columns by the store). The hint names recipients and
-// senders only, never a subject or body: hosts show it to the model as hook output. Recipients with
-// urgent or high mail come first, with that count, so the woken session reads those first.
+// one-line instruction when unread mail arrives for any agent whose roster tag names that session or T3 thread
+// (`[t3:… claude:<session id> cwd:…]`, written by the register hook and stored as columns by the store). The hint carries
+// no mailbox names, paths, subjects or bodies: hosts show it as hook output and the CLI discovers inboxes.
 //
 // A message with subject PING_SUBJECT never wakes the model: while the recipient's hook waits, the
 // server marks it read and replies PONG_SUBJECT on the same thread, already read so the pong wakes
@@ -32,45 +31,7 @@ interface Unread {
   thread_id: string | null;
 }
 
-/**
- * One line naming each recipient's unread count and senders, safe to embed in a JSON string. A Windows project path
- * keeps its separators as forward slashes.
- */
-export function hintFor(rows: Unread[]): string {
-  const groups = new Map<
-    string,
-    { recipient: string; project: string; count: number; urgent: number; senders: Set<string> }
-  >();
-  for (const row of rows) {
-    const key = `${row.recipient}\n${row.project}`;
-    const group = groups.get(key) ?? {
-      recipient: row.recipient,
-      project: row.project,
-      count: 0,
-      urgent: 0,
-      senders: new Set(),
-    };
-    group.count++;
-    if (row.importance === "urgent" || row.importance === "high") {
-      group.urgent++;
-    }
-    group.senders.add(row.sender);
-    groups.set(key, group);
-  }
-  const parts = [...groups.values()]
-    .sort((a, b) => b.urgent - a.urgent)
-    .map(
-      (g) =>
-        `${g.count} new message${g.count === 1 ? "" : "s"}${g.urgent ? ` (${g.urgent} urgent or high)` : ""}` +
-        ` for ${g.recipient} in ${g.project} from ${[...g.senders].join(", ")}`,
-    );
-  // Hook scripts wrap the hint in JSON without an encoder.
-  // oxlint-disable-next-line no-control-regex -- strips control characters on purpose
-  const unsafe = /["\\\x00-\x1f\x7f]/g;
-  return `Swarmail: ${parts.join("; ")}. Call fetch_inbox to read them.`
-    .replaceAll("\\", "/")
-    .replace(unsafe, "");
-}
+export const INBOX_NOTICE = "Swarmail: Fetch all unread mail with swarmail inbox --session.";
 
 /**
  * Answers the pings among unread rows and returns the rest. Each ping is marked read and gets a pong on
@@ -195,7 +156,7 @@ export function createWaiters(db: Database, pollMs = 30_000) {
       return null;
     }
     cursor.offer(rows.at(-1)!.id, session);
-    return { hint: hintFor(rows), eventId: rows.at(-1)!.id };
+    return { hint: INBOX_NOTICE, eventId: rows.at(-1)!.id };
   }
 
   /** Resolves with a hint once mail arrives, null on timeout or abort, or false when a newer wait for the same session replaces it. */

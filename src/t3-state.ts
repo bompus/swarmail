@@ -46,13 +46,33 @@ export const T3_V2_THREADS = `
  * thread id to the provider process, but V1's resume cursor for the thread and V2's native
  * thread reference hold the session id.
  */
-export function t3ThreadId(sessionId: string, dbPath = t3StatePath(t3Home())): string | null {
+export function t3ThreadId(
+  sessionId: string,
+  dbPath = t3StatePath(t3Home()),
+  host?: string,
+): string | null {
   if (!existsSync(dbPath)) {
     return null;
   }
   try {
     const db = new Database(dbPath, { readonly: true });
     try {
+      if (host !== undefined) {
+        // V1 resume cursors do not establish the native provider. Use the registration tag there.
+        if (!isT3V2(db)) {
+          return null;
+        }
+        const driver = host === "claude" ? "claudeAgent" : host === "agy" ? "antigravity" : host;
+        const rows = db
+          .query<{ thread_id: string }, [string, string]>(
+            "SELECT DISTINCT thread_id FROM orchestration_v2_projection_provider_threads WHERE thread_id IS NOT NULL AND driver = ?1 AND json_extract(payload_json, '$.nativeThreadRef.nativeId') = ?2 LIMIT 2",
+          )
+          .all(driver, sessionId);
+        if (rows.length > 1) {
+          throw new Error("ambiguous provider session");
+        }
+        return rows[0]?.thread_id ?? null;
+      }
       const row = isT3V2(db)
         ? db
             .query<{ thread_id: string }, [string]>(
@@ -69,6 +89,9 @@ export function t3ThreadId(sessionId: string, dbPath = t3StatePath(t3Home())): s
       db.close();
     }
   } catch {
+    if (host !== undefined) {
+      throw new Error("cannot identify one T3 thread for this provider session");
+    }
     return null;
   }
 }

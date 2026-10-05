@@ -90,15 +90,40 @@ needs no reply.
 
 ## Reading mail
 
-At session start or after a mail notice, call `fetch_inbox` with
-`unread_only: true`, `include_bodies: true` and `mark_read: true`.
-Read each returned body. Repeat the call for the same mailbox until it returns
-an empty page. Marking each page read lets the next call reach older unread mail.
-For a notice listing several mailboxes, do this for each one.
+After a mail notice, run `swarmail inbox --session` inside the receiving
+agent's session environment. It identifies the session and drains all unread
+mail across its registered repositories, including bodies and marking each
+returned page read. It works outside a Git checkout and ignores
+`SWARMAIL_AGENT`; a name alone does not identify a session.
 
-Notice counts describe arrivals, not the current unread total. For a metadata
-preview, pass `mark_read: false`. The defaults omit bodies and mark returned
+The CLI uses one recognized host session variable, or one registration tied to
+the current host process's PID and start time. Conflicting variables or several
+possible sessions fail instead of choosing one. T3 thread identity also matches
+registrations made by an earlier provider in that thread. V2 database lookup
+requires one matching provider and native ID; V1 uses recorded registration
+tags. If discovery fails,
+use the explicit mailbox interface below. Keep registration tags current.
+
+`--limit N` sets the page size, not a total limit. `--json` prints one JSON
+array per line, including the final empty array. `--peek` returns one page
+without marking it read. `--all` returns one page including previously read
+mail and marks returned unread entries read. Neither preview drains the inbox.
+The session mode cannot be combined with `--as`, `--cursor` or positional
+arguments.
+
+For MCP, use `fetch_session_inbox` with the current tag's `host` and `session_id`,
+and `t3_thread` when known. Pass `include_bodies: true`; repeat until an empty
+page. Its defaults are `limit: 20`, `unread_only: true`, `mark_read: true` and
+`include_bodies: false`. Results carry `project_key` and `agent_name` for replies
+and acknowledgments. Session matching selects mail; it is not authentication
+on this trusted local server.
+
+For one explicit mailbox, call `fetch_inbox` with `project_key`, `agent_name`,
+`unread_only: true`, `include_bodies: true` and `mark_read: true`. Read each
+returned body and repeat until an empty page. Marking each page read lets the
+next call reach older unread mail. Its defaults omit bodies and mark returned
 messages read; stored messages remain available with `unread_only: false`.
+For a metadata preview, pass `mark_read: false`.
 
 Without MCP tools, call the server over HTTP and read
 `result.content[0].text`:

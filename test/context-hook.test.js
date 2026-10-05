@@ -95,7 +95,7 @@ for (const [host, key] of [
             ? output.hookSpecificOutput.additionalContext
             : output.injectSteps[0].userMessage;
       expect(hint).toContain("Swarmail:");
-      expect(hint).toContain("BlueLake");
+      expect(hint).toBe("Swarmail: Fetch all unread mail with swarmail inbox --session.");
       if (host === "devin") {
         expect(output.hookSpecificOutput.hookEventName).toBe("PostToolUse");
       }
