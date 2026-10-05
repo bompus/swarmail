@@ -16,9 +16,12 @@ const HOOKS = {
   "swarmail hook wake": [process.execPath, join(import.meta.dir, "../src/cli.ts"), "hook", "wake"],
 };
 let dir, server, db, base;
+let previousState;
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "swarmail-wake-"));
+  previousState = process.env.XDG_STATE_HOME;
+  process.env.XDG_STATE_HOME = join(dir, "state");
   // No short poll: waits here end only through the notify on send.
   ({ server, db } = createServer(join(dir, "mail.sqlite3"), 0));
   base = `http://127.0.0.1:${server.port}`;
@@ -46,6 +49,11 @@ beforeAll(async () => {
   await call("register_agent", { project_key: P, program: "codex", model: "m", name: "BlueLake" });
 });
 afterAll(() => {
+  if (previousState === undefined) {
+    delete process.env.XDG_STATE_HOME;
+  } else {
+    process.env.XDG_STATE_HOME = previousState;
+  }
   server.stop(true);
   db.close();
   rmSync(dir, { recursive: true, force: true });
@@ -457,12 +465,18 @@ for (const [name, hook] of Object.entries(HOOKS)) {
           waits.push(url.searchParams.get("timeout"));
           return waits.length === 1
             ? new Response(null, { status: 204 })
-            : new Response("Swarmail: 1 new message for PinkFox in /w/project from BlueLake.");
+            : new Response("Swarmail: 1 new message for PinkFox in /w/project from BlueLake.", {
+                headers: { "x-swarmail-event-id": "1" },
+              });
         },
       });
       const waiting = Bun.spawn([...hook, "cursor", "15"], {
         stdin: new Blob(['{"conversation_id":"c-1"}']),
-        env: { ...process.env, SWARMAIL_WAKE_URL: `http://127.0.0.1:${fake.port}` },
+        env: {
+          ...process.env,
+          XDG_STATE_HOME: join(dir, "fake-state"),
+          SWARMAIL_WAKE_URL: `http://127.0.0.1:${fake.port}`,
+        },
       });
       try {
         expect(await waiting.exited).toBe(0);

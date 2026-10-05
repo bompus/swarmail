@@ -41,6 +41,7 @@ const COMMANDS: Record<string, Command> = {
     usage: [
       "swarmail hook wake <claude|cursor> [seconds]     the wake hook (wake-hook.ts)",
       "swarmail hook rearm                              the Claude PostToolUse re-arm where there is no shell",
+      "swarmail hook context <cursor|devin|agy> [stop]  check mail at the next native context point",
     ],
     run: async (args) => {
       // The Windows Claude hooks end in `; exit $LASTEXITCODE` (configure-hooks.ts). cmd has no `;` separator and
@@ -48,21 +49,28 @@ const COMMANDS: Record<string, Command> = {
       const end = args.findIndex((arg) => arg.endsWith(";"));
       const [kind, host, seconds] =
         end === -1 ? args : [...args.slice(0, end), args[end]!.slice(0, -1)];
-      if ((kind !== "wake" && kind !== "rearm") || (seconds && !(Number(seconds) > 0))) {
+      if (
+        !["wake", "rearm", "context"].includes(kind ?? "") ||
+        (kind === "context"
+          ? seconds !== undefined && seconds !== "stop"
+          : seconds && !(Number(seconds) > 0))
+      ) {
         usage(64);
       }
-      const { rearmHook, wakeHook } = await import("./wake-hook.ts");
+      const { contextHook, rearmHook, wakeHook } = await import("./wake-hook.ts");
       const input = await stdin();
       process.exit(
-        kind === "rearm"
-          ? await rearmHook(input)
-          : await wakeHook(host, seconds ? Number(seconds) : undefined, input),
+        kind === "context"
+          ? await contextHook(host, seconds === "stop", input)
+          : kind === "rearm"
+            ? await rearmHook(input)
+            : await wakeHook(host, seconds ? Number(seconds) : undefined, input),
       );
     },
   },
   register: {
     usage: [
-      "swarmail register [--tag <host> [session id]]    the register hook, or the tag for a manual registration (register-hook.ts)",
+      "swarmail register [--host <host> | --tag <host> [session id]]  register a hook session or print its tag",
     ],
     run: async (args) => {
       const { registerHook } = await import("./register-hook.ts");
