@@ -70,8 +70,9 @@ needs no reply.
 - Broadcasts are rejected; address `to`, `cc` and `bcc` explicitly. Continue a
   conversation with `reply_message` or by passing its `thread_id`.
 - A nonempty `idempotency_key` makes an identical retry return the original
-  message. Keep the same tool, agent and arguments; changed arguments return
-  `IDEMPOTENCY_KEY_CONFLICT`. Missing or empty keys do not deduplicate.
+  message. Reuse the same key, tool, calling agent and arguments. Changed
+  arguments with that key return `IDEMPOTENCY_KEY_CONFLICT`.
+  Missing or empty keys do not deduplicate.
   Hourly cleanup removes keys older than seven days. Retries replay until
   removal; after removal, the same key can send another message.
 - Don't reply to a message that only thanks or acknowledges. Mail wakes idle
