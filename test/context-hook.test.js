@@ -277,7 +277,7 @@ test("native Devin CLI registers documented payloads without cwd and follows edi
     .all();
   expect(rows).toHaveLength(2);
   expect(new Set(rows.map((r) => r.name)).size).toBe(1);
-  expect(rows.map((r) => r.human_key)).toEqual(repos.map((repo) => realpathSync(repo)));
+  expect(rows.map((r) => r.human_key)).toEqual(repos.map((repo) => realpathSync.native(repo)));
   expect(rows.every((r) => r.program === "devin" && r.session_id === "native-devin")).toBe(true);
 });
 
