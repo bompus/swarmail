@@ -510,3 +510,127 @@ test("a wait by T3 thread id wakes the thread's agent", async () => {
   expect(res.status).toBe(200);
   expect(await res.text()).toContain("for GreenCastle");
 });
+
+describe("read-only unread mailbox peek", () => {
+  const session = "peek-native";
+  const thread = "peek-thread";
+  const projects = ['/w/peek"one', "/w/peek-two"];
+  const peek = (id = session, extra = "") => fetch(`${base}/wait?session=${id}&peek=1${extra}`);
+
+  test("scopes exact identities, prioritizes mailboxes and leaves offered mail, pings and receipts unchanged", async () => {
+    for (const project_key of projects) {
+      for (const [name, task_description] of [
+        ["SilverLake", `[t3:${thread} codex:${session}]`],
+        ["GoldOwl", "sender"],
+        ["RedFox", "[codex:peek-unrelated]"],
+      ]) {
+        await call("register_agent", {
+          project_key,
+          name,
+          task_description,
+          program: "codex",
+          model: "m",
+        });
+      }
+      await call("send_message", {
+        project_key,
+        sender_name: "GoldOwl",
+        to: ["SilverLake", "RedFox"],
+        subject: "private subject",
+        body_md: "private body",
+        ack_required: true,
+        importance: project_key === projects[1] ? "urgent" : "normal",
+      });
+    }
+    await call("send_message", {
+      project_key: projects[0],
+      sender_name: "GoldOwl",
+      to: ["SilverLake"],
+      subject: "swarmail ping",
+      body_md: "ping",
+    });
+    const snapshot = () => ({
+      receipts: db.query("SELECT * FROM message_recipients ORDER BY message_id, agent_id").all(),
+      messages: db.query("SELECT * FROM messages ORDER BY id").all(),
+      cursors: db.query("SELECT * FROM wake_cursors ORDER BY session").all(),
+    });
+    const before = snapshot();
+    const expected = {
+      mailboxes: [
+        { recipient: "SilverLake", project: projects[1] },
+        { recipient: "SilverLake", project: projects[0] },
+      ],
+    };
+    const response = await peek(session, "&after=999999999&retry=1");
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(expected);
+    expect(await (await peek(thread)).json()).toEqual(expected);
+    expect(snapshot()).toEqual(before);
+    const offered = await wait(session);
+    expect(offered.status).toBe(200);
+    const afterOffer = snapshot();
+    expect(await (await peek()).json()).toEqual(expected);
+    expect(snapshot()).toEqual(afterOffer);
+    for (const project_key of projects) {
+      await call("fetch_inbox", { project_key, agent_name: "SilverLake", unread_only: true });
+    }
+    expect(await (await peek()).json()).toEqual({ mailboxes: [] });
+    await call("send_message", {
+      project_key: projects[0],
+      sender_name: "GoldOwl",
+      to: ["SilverLake"],
+      subject: "new",
+      body_md: "new",
+    });
+    await call("retire_agent", { project_key: projects[0], agent_name: "SilverLake" });
+    expect(await (await peek()).json()).toEqual({ mailboxes: [] });
+    expect(await (await peek("peek-unknown")).json()).toEqual({ mailboxes: [] });
+    expect((await peek("bad/session")).status).toBe(400);
+  });
+
+  test("does not replace an outstanding long poll", async () => {
+    const id = "peek-waiter";
+    await call("register_agent", {
+      project_key: P,
+      name: "WhiteOwl",
+      program: "codex",
+      model: "m",
+      task_description: `[codex:${id}]`,
+    });
+    const polling = wait(id);
+    // This request follows the long poll on the same server. No delay or polling loop is needed.
+    expect(await (await peek(id)).json()).toEqual({ mailboxes: [] });
+    await send("WhiteOwl");
+    const response = await polling;
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain("WhiteOwl");
+  });
+
+  test("rejects an oversized snapshot instead of returning a partial mailbox set", async () => {
+    const project = db
+      .query(
+        "INSERT INTO projects(slug, human_key, created_at) VALUES ('peek-limit', ?, 1) RETURNING id",
+      )
+      .get("/w/peek-limit");
+    const insertAgent = db.query(
+      "INSERT INTO agents(project_id, name, program, model, inception_ts, last_active_ts, session_id) VALUES (?, ?, 'codex', 'm', 1, 1, 'peek-limit') RETURNING id",
+    );
+    const insertMail = db.query(
+      "INSERT INTO messages(project_id, sender_id, subject, body_md, created_ts, recipients_json) VALUES (?, ?, 's', 'b', 1, '{}') RETURNING id",
+    );
+    const insertReceipt = db.query(
+      "INSERT INTO message_recipients(message_id, agent_id, created_ts) VALUES (?, ?, 1)",
+    );
+    db.transaction(() => {
+      for (let i = 0; i < 1001; i++) {
+        const agent = insertAgent.get(project.id, `Limit${i}`);
+        const message = insertMail.get(project.id, agent.id);
+        insertReceipt.run(message.id, agent.id);
+      }
+    })();
+    const response = await peek("peek-limit");
+    expect(response.status).toBe(503);
+    expect(await response.text()).toBe("unread mailbox snapshot unavailable");
+    expect(db.query("SELECT * FROM wake_cursors WHERE session = 'peek-limit'").get()).toBeNull();
+  });
+});

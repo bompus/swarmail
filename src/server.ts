@@ -64,6 +64,13 @@ async function waitResponse(req: Request, url: URL, waiters: ReturnType<typeof c
   if (!SESSION_RE.test(session)) {
     return new Response("invalid session identifier", { status: 400 });
   }
+  if (url.searchParams.get("peek") === "1") {
+    try {
+      return Response.json(waiters.peek(session));
+    } catch {
+      return new Response("unread mailbox snapshot unavailable", { status: 503 });
+    }
+  }
   const rawAfter = url.searchParams.get("after");
   const after = rawAfter === null ? undefined : Number(rawAfter);
   if (rawAfter !== null && (!/^\d+$/.test(rawAfter) || !Number.isSafeInteger(after))) {
