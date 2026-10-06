@@ -52,7 +52,7 @@ const DELIVERY_POLICY = {
   type: "string",
   enum: ["checked", "durable"],
   description:
-    "checked (default) or explicit durable offline mail. Neither bypasses closed T3 or unavailable bound sources. Unqualified standalone state remains unknown and is returned with warnings; storage does not transfer task ownership.",
+    "checked (default) or durable. Both currently admit and store mail the same way. Neither bypasses closed T3 or unavailable bound sources. Unqualified standalone state remains unknown and is returned with warnings; storage does not transfer task ownership.",
 };
 const RESERVATION_PATHS = strings("Only your reservations with exactly these patterns.");
 const RESERVATION_IDS = {
