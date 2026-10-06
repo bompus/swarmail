@@ -427,7 +427,8 @@ export const TOOLS: Tool[] = [
     description:
       "Return an array of your latest received message metadata, newest first; include_bodies " +
       "adds body_md. At session start or after a mail notice, set unread_only:true, " +
-      "include_bodies:true and mark_read:true; repeat until an empty array. For a metadata " +
+      "include_bodies:true and mark_read:true. Stop when fewer than limit messages return " +
+      "(default 20, capped at 1000); repeat only after a full page. For a metadata " +
       "preview, set mark_read:false; include_bodies defaults to false and mark_read to true. " +
       "Filters combine, so omit optional filters when draining all unread mail. Use " +
       "search_messages for project-wide text matching, or mark_message_read or " +
@@ -461,8 +462,9 @@ export const TOOLS: Tool[] = [
       "Return one newest-first page across registrations matching your host/session tag or T3 thread. " +
       "Use machine-derived host and session_id, with t3_thread when known; never guess from an agent name. " +
       "Each receipt includes project_key and agent_name for replies and acknowledgements. Defaults: " +
-      "unread_only:true, mark_read:true, include_bodies:false, limit:20. To drain, include bodies and repeat " +
-      "until an empty array. With mark_read:false or unread_only:false, this is a bounded preview, not a drain. " +
+      "unread_only:true, mark_read:true, include_bodies:false, limit:20. To drain, include bodies; " +
+      "stop when fewer than limit messages return (default 20, capped at 1000), repeating only after a full page. " +
+      "With mark_read:false or unread_only:false, this is a bounded preview, not a drain. " +
       "The CLI swarmail inbox --session discovers identity and drains without mailbox arguments. " +
       "Swarmail is a trusted local service; session identity selects inboxes and is not authentication.",
     properties: {

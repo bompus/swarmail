@@ -7,6 +7,7 @@
 //   swarmail thread <id> [--limit N] [--json]                   a thread's messages, oldest first; needs no sender name
 // The sender is --as, else SWARMAIL_AGENT, else the name the register hook recorded for the agent host above this shell.
 import { swarmailUrl } from "./paths.ts";
+import { pageLimit } from "./store.ts";
 import { primaryCheckout } from "./checkout.ts";
 import { selfNames, selfSession } from "./registry.ts";
 import { PING_SUBJECT, PONG_SUBJECT } from "./wake.ts";
@@ -172,6 +173,7 @@ async function sessionInbox(
 ): Promise<number> {
   const identity = selfSession(env);
   const preview = !!(opts.peek || opts.all);
+  const limit = pageLimit(Number(opts.limit ?? 20), "limit", 20);
   let shown = false;
   for (;;) {
     const messages: Array<Message & { project_key: string; agent_name: string }> = await call(
@@ -182,7 +184,7 @@ async function sessionInbox(
         unread_only: !opts.all,
         mark_read: !opts.peek,
         include_bodies: true,
-        limit: Number(opts.limit ?? 20),
+        limit,
       },
     );
     if (opts.json) {
@@ -193,7 +195,7 @@ async function sessionInbox(
         printMessage(message);
       }
     }
-    if (!messages.length || preview) {
+    if (messages.length < limit || preview) {
       if (!opts.json && !shown && !messages.length) {
         console.log(opts.all ? "no mail for this session" : "no unread mail for this session");
       }
