@@ -276,7 +276,7 @@ export function whoRows(
       hostAlive: null,
       ended: null,
       roomOwner: false,
-      task: "not registered: mail cannot reach it",
+      task: "not in visible roster; registration and delivery unknown",
       sameSessionAs: [],
       unread: 0,
       oldestUnread: null,
@@ -321,7 +321,9 @@ export function main(args: string[]): void {
   console.log(`${basename(project)} (${project}), ${new Date(now).toISOString()}`);
   for (const row of rows) {
     const who =
-      row.name === null ? "(unregistered)" : `${row.name}${self.has(row.name) ? " (you)" : ""}`;
+      row.name === null
+        ? "(registration unknown)"
+        : `${row.name}${self.has(row.name) ? " (you)" : ""}`;
     const live =
       [
         row.ended && `session ended ${ago(row.ended, now)}`,

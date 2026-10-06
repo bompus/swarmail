@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Roster entries absent from the visible result now show registration and
+  delivery as unknown. A capped or filtered roster does not prove a session
+  never registered or cannot receive mail.
+
 - Explicit local T3 V2 lifecycle reconciliation hides settled, archived and
   deleted identities from the roster and rejects new mail or reservations.
   Verified reopening preserves names, history and unread mail. Wake delivery
