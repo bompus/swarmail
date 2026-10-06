@@ -31,7 +31,7 @@ records the findings, not a checked-in benchmark reproduction.
 | Zod and Zod Mini | Explicit schema definitions pass the broad screen | Direct JSON Schema conversion failed 28 cases; conversion/refinements need maintenance |
 | Valibot | Explicit schema definitions pass the broad screen | Different schema API and diagnostics; no confirmed throughput advantage |
 | Typia | Transformer execution was not qualified | Compiler integration and contract parity remain untested |
-| Handwritten validation | Not implemented | Would make this project responsible for schema semantics and validation maintenance |
+| Dependency-free checks | Not implemented or qualified | Can suit small contracts; must preserve the actual rules without becoming a general validator engine |
 
 ### TypeBox needs an explicit branch definition
 
@@ -120,6 +120,23 @@ was not established by this research.
 This does not qualify Elysia route generation, Workers deployment, an ODM,
 input transformations or another application's contracts. Those need their
 own fixtures and integration checks.
+
+## Dependency-free checks remain an option
+
+Simple contracts may need only direct checks using JavaScript and the runtime,
+without an external validator package or a generator. Swarmail is a candidate
+for evaluating that approach; its suitability has not been tested here.
+
+Compare the actual checks and their maintenance cost with the library and
+build wiring they replace. A few type, range and required-field checks can be
+simpler than introducing a schema engine. Reimplementing a general JSON Schema
+validator would be a different, larger undertaking.
+
+For Swarmail, qualification must preserve closed objects, nested fields,
+historical replay and the tested undefined and numeric behavior. Keep the
+advertised MCP schema and runtime acceptance rules aligned. The existing
+contract corpus can check that alignment without requiring a production
+validator dependency. Evaluating direct checks remains unselected.
 
 ## Recommendation
 
