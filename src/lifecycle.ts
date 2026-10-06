@@ -48,6 +48,7 @@ function readSnapshot(
   config: LifecycleConfig,
   previous: Cursor | null,
   threads: string[],
+  verified: Set<string>,
 ): Snapshot {
   const source = new Database(config.databasePath, { readonly: true, strict: true });
   try {
@@ -91,10 +92,17 @@ function readSnapshot(
         )
         .all(JSON.stringify(threads));
       for (const row of rows) {
-        states.set(row.thread_id, stateOf(row));
+        try {
+          states.set(row.thread_id, stateOf(row));
+        } catch (error) {
+          if (verified.has(row.thread_id)) {
+            throw error;
+          }
+          // An unverified registration holds only itself, not the configured profile.
+        }
       }
-      if (states.size !== threads.length) {
-        throw new Error("missing registered thread");
+      if (threads.some((thread) => verified.has(thread) && !states.has(thread))) {
+        throw new Error("missing verified thread");
       }
       return { sequence: meta.last_sequence, eventId, states };
     })();
@@ -166,7 +174,15 @@ export class Lifecycle {
             )
             .all(this.config.profile)
             .map((row) => row.t3_thread);
-          const snapshot = readSnapshot(this.config, prior, threads);
+          const verified = new Set(
+            this.db
+              .query<{ thread_id: string }, [string]>(
+                "SELECT thread_id FROM session_lifecycle WHERE profile = ?",
+              )
+              .all(this.config.profile)
+              .map((row) => row.thread_id),
+          );
+          const snapshot = readSnapshot(this.config, prior, threads, verified);
           let changed = 0;
           const get = this.db.query<{ state: State; revision: number }, [string, string]>(
             "SELECT state, revision FROM session_lifecycle WHERE profile = ? AND thread_id = ?",

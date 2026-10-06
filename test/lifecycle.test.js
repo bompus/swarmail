@@ -213,6 +213,8 @@ test.each([
   "replace-higher",
   "prune",
   "missing-thread",
+  "thread-json",
+  "thread-schema",
   "schema",
   "equal-conflict",
 ])("source %s holds last verified state and cursor atomically", (failure) => {
@@ -240,6 +242,15 @@ test.each([
   }
   if (failure === "missing-thread") {
     f.source.run("DELETE FROM orchestration_v2_projection_threads");
+  }
+  if (failure === "thread-json" || failure === "thread-schema") {
+    f.source
+      .query("UPDATE orchestration_v2_projection_threads SET payload_json=?")
+      .run(
+        failure === "thread-json"
+          ? "{"
+          : JSON.stringify({ settledAt: null, settledOverride: "unknown" }),
+      );
   }
   if (failure === "schema") {
     f.source.run("UPDATE orchestration_v2_projection_metadata SET schema_version=99");
@@ -289,6 +300,57 @@ test("inactive waits cannot acknowledge an outstanding notice, and reopening coa
   );
   expect(f.db.query("SELECT count(*) AS n FROM wake_notices").get().n).toBe(1);
 });
+
+test.each(["missing", "invalid-json", "unknown-state"])(
+  "unverified %s registrations hold only their identity and recover when projected",
+  async (failure) => {
+    const f = fixture();
+    if (failure !== "missing") {
+      f.source
+        .query("INSERT INTO orchestration_v2_projection_threads VALUES (?,NULL,NULL,?)")
+        .run(
+          "unverified-thread",
+          failure === "invalid-json"
+            ? "{"
+            : JSON.stringify({ settledAt: null, settledOverride: "unknown" }),
+        );
+    }
+    f.register("PinkFox", "[t3:unverified-thread codex:unverified-native]");
+    expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 0 });
+    expect(f.roster().sort()).toEqual(["BlueLake", "GreenCastle"]);
+    expect(sessionEligible(f.db, "unverified-native")).toBe(false);
+    expect(() =>
+      f.tools.send_message({
+        project_key: "/repo/one",
+        sender_name: "BlueLake",
+        to: ["PinkFox"],
+        subject: "held",
+        body_md: "mail",
+      }),
+    ).toThrow("retired");
+    f.send();
+    const app = createServer(f.prefix + "-mail.sqlite", 0, { t3Lifecycle: f.config });
+    cleanups.push(() => {
+      app.server.stop(true);
+      app.db.close();
+    });
+    const status = async (session) =>
+      (await fetch(new URL(`/wait/status?session=${session}`, app.server.url))).json();
+    expect(await status("native-one")).toEqual({ eligible: true });
+    expect(await status("unverified-native")).toEqual({ eligible: false });
+    const wake = await fetch(
+      new URL("/wait?session=native-one&timeout=0&after=0&retry=1", app.server.url),
+    );
+    expect(wake.status).toBe(200);
+    expect(await wake.text()).toContain("inbox --session");
+    f.transition(2);
+    f.source
+      .query("INSERT OR REPLACE INTO orchestration_v2_projection_threads VALUES (?,NULL,NULL,?)")
+      .run("unverified-thread", JSON.stringify({ settledAt: null, settledOverride: null }));
+    expect(await status("unverified-native")).toEqual({ eligible: true });
+    expect(f.roster()).toContain("PinkFox");
+  },
+);
 
 test("initial source proof is required and the reconciliation HTTP boundary accepts no caller observations", async () => {
   const f = fixture();

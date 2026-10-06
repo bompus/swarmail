@@ -191,7 +191,10 @@ reopen restores the same identity. Process exit, provider replacement and
 idle status do not establish app closure. T3 reservations retain their
 existing expiry because they lack activation provenance.
 
-The reader holds its last verified state when a row or anchor disappears,
+A new registration whose thread projection is missing or invalid stays
+ineligible without holding healthy identities. It becomes eligible after the
+source supplies a valid active projection. The reader holds its last verified
+state when a previously verified row or an anchor disappears,
 the schema is unknown, or source history regresses or changes. Renaming the
 profile or replacing its path cannot silently rebind that history. Repair the
 source history before resuming; rebinding retained data requires a separate,
