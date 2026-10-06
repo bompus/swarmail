@@ -92,7 +92,7 @@ test("closure rejects mail and claims but keeps exact identity, unread history a
   f.transition(2, "settled");
   expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
   expect(f.roster()).toEqual(["BlueLake"]);
-  expect(() => f.send({ importance: "urgent" })).toThrow("retired");
+  expect(() => f.send({ importance: "urgent" })).toThrow("settled");
   expect(() =>
     f.tools.unretire_agent({ project_key: "/repo/one", agent_name: "GreenCastle" }),
   ).toThrow("lifecycle-inactive");
@@ -327,7 +327,7 @@ test.each(["missing", "invalid-json", "unknown-state"])(
         subject: "held",
         body_md: "mail",
       }),
-    ).toThrow("retired");
+    ).toThrow("identity_unverified");
     f.send();
     const app = createServer(f.prefix + "-mail.sqlite", 0, { t3Lifecycle: f.config });
     cleanups.push(() => {
@@ -481,7 +481,7 @@ test("native-only aliases retain lifecycle and notice ownership across projects 
   expect(f.tools.list_agents({ project_key: "/repo/two" }).map((a) => a.name)).toEqual([
     "BlueLake",
   ]);
-  expect(() => sendAlias()).toThrow("retired");
+  expect(() => sendAlias()).toThrow("settled");
   expect(() =>
     f.tools.file_reservation_paths({
       project_key: "/repo/two",

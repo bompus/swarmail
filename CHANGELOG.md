@@ -4,6 +4,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Sends and replies refresh configured T3 lifecycle state before admission.
+  Rejected recipients have explicit reasons and leave no partial message.
+  Stored mail includes durable admission observations and warns when session
+  availability or wake support is unknown. Replayed observations are historical.
+
 - Roster entries absent from the visible result now show registration and
   delivery as unknown. A capped or filtered roster does not prove a session
   never registered or cannot receive mail.

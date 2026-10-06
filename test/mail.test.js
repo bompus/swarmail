@@ -49,6 +49,32 @@ test("send and inbox act as the session's agent in the current repository", asyn
         repo,
       ),
     ).toBe(0);
+    expect(err.mock.calls.flat().join("\n")).toContain(
+      "BlueRiver: unknown; wake support unverified",
+    );
+    log.mockClear();
+    expect(
+      await mail(
+        [
+          "send",
+          "BlueRiver",
+          "JSON result",
+          "body",
+          "--as",
+          "GreenLake",
+          "--delivery-policy",
+          "durable",
+          "--json",
+        ],
+        async () => "",
+        env,
+        repo,
+      ),
+    ).toBe(0);
+    expect(JSON.parse(log.mock.calls.at(-1)[0]).delivery).toMatchObject({
+      persisted: true,
+      historical: false,
+    });
     expect(await mail(["inbox"], async () => "", env, repo)).toBe(1);
     expect(err.mock.calls.at(-1)[0]).toContain("pass --as NAME");
 

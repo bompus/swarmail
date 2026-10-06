@@ -78,7 +78,13 @@ function parse(args: string[]) {
   const rest: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
-    if (arg === "--as" || arg === "--limit" || arg === "--timeout" || arg === "--cursor") {
+    if (
+      arg === "--as" ||
+      arg === "--limit" ||
+      arg === "--timeout" ||
+      arg === "--cursor" ||
+      arg === "--delivery-policy"
+    ) {
       opts[arg.slice(2)] = args[++i] ?? "";
     } else if (arg.startsWith("--")) {
       opts[arg.slice(2)] = true;
@@ -157,8 +163,16 @@ export async function mail(
       to: to.split(","),
       subject,
       body_md: body ?? (await stdin()),
+      ...(opts["delivery-policy"] !== undefined && { delivery_policy: opts["delivery-policy"] }),
     });
+    if (opts.json) {
+      console.log(JSON.stringify(sent));
+      return 0;
+    }
     console.log(`sent #${sent.id} from ${agent} to ${to}`);
+    for (const warning of sent.delivery?.warnings ?? []) {
+      console.error(`swarmail send: stored #${sent.id}; ${warning}`);
+    }
     return 0;
   } catch (e) {
     console.error(`swarmail ${command}: ${e instanceof Error ? e.message : e}`);

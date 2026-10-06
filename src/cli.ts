@@ -116,7 +116,7 @@ const COMMANDS: Record<string, Command> = {
     ),
     mail(
       "send",
-      "swarmail send <to[,to]> <subject> [body]         send as this session; body from stdin when omitted (mail.ts)",
+      "swarmail send <to[,to]> <subject> [body] [--delivery-policy checked|durable] [--json]  send with availability feedback; body from stdin when omitted (mail.ts)",
     ),
     mail(
       "ping",

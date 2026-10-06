@@ -337,7 +337,11 @@ test("durable message retries preserve identity across restart orderings", async
       let acknowledged = false;
       restart();
       const check = async () => {
-        expect(await invoke(tool, args)).toEqual({ ...expected, idempotent_replay: true });
+        expect(await invoke(tool, args)).toEqual({
+          ...expected,
+          delivery: { ...expected.delivery, historical: true },
+          idempotent_replay: true,
+        });
         expect(runtime.db.query("SELECT count(*) AS n FROM messages").get().n).toBe(
           original ? 2 : 1,
         );

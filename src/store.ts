@@ -10,6 +10,7 @@ import { InvalidTimestamp, iso, nowUs, parseIso } from "./db.ts";
 import { lifecycleEligible, type Lifecycle } from "./lifecycle.ts";
 import { SESSION_RE } from "./wake.ts";
 import { reconcileNotices, linkNotice, PING_SUBJECT } from "./wake-notices.ts";
+import { admitRecipients } from "./availability.ts";
 
 /** A tool failure reported to the caller as `{"error": {type, message, recoverable, data}}`. */
 export class ToolError extends Error {
@@ -301,8 +302,10 @@ export class MailStore {
   private readonly tx: (run: () => unknown) => unknown;
 
   private readonly lifecycle?: Lifecycle;
-  constructor(db: Database, lifecycle?: Lifecycle) {
+  private readonly registry?: string;
+  constructor(db: Database, lifecycle?: Lifecycle, registry?: string) {
     this.lifecycle = lifecycle;
+    this.registry = registry;
     this.db = db;
     this.q = queries(db);
     this.tx = db.transaction((run: () => unknown) => run());
@@ -362,18 +365,6 @@ export class MailStore {
   ensureProject(key: unknown): Project {
     const { k, p } = this.lookup(str(key, "human_key"));
     return p ?? this.q.insertProject.get(slugify(k), k, nowUs())!;
-  }
-
-  recipient(p: Project, name: string): Agent {
-    const a = this.agent(p, name, "to");
-    if (a.retired_at != null || !this.lifecycleAllows(a)) {
-      throw new ToolError(
-        "NOT_FOUND",
-        `Agent '${a.name}' is retired and does not accept new messages.`,
-        { agent_name: a.name },
-      );
-    }
-    return a;
   }
 
   private lifecycleAllows(who: Agent): boolean {
@@ -625,7 +616,12 @@ export class MailStore {
           },
         );
       }
-      return { ...JSON.parse(hit.result), idempotent_replay: true } as T;
+      const result = JSON.parse(hit.result);
+      return {
+        ...result,
+        ...(result.delivery && { delivery: { ...result.delivery, historical: true } }),
+        idempotent_replay: true,
+      } as T;
     }
     const result = run();
     this.db.run("INSERT INTO idempotency_keys VALUES (?, ?, ?, ?, ?, ?)", [
@@ -640,30 +636,16 @@ export class MailStore {
   }
 
   deliver(p: Project, sender: Agent, a: Args, defaults: Row = {}) {
-    this.requireLifecycle(sender);
-    // No broadcast: every message names its recipients.
-    if (a.broadcast) {
-      throw new ToolError("INVALID_ARGUMENT", "broadcast is not supported; name the recipients", {
-        field: "broadcast",
-      });
-    }
-    const to = list(a.to),
-      cc = list(a.cc),
-      bcc = list(a.bcc);
-    if (to.length + cc.length + bcc.length === 0) {
-      throw new ToolError("INVALID_ARGUMENT", "at least one recipient is required", {
-        field: "to",
-      });
-    }
-    // Resolve every name first so an unknown recipient sends nothing.
-    const recipients = [
-      ...to.map((n) => [n, "to"]),
-      ...cc.map((n) => [n, "cc"]),
-      ...bcc.map((n) => [n, "bcc"]),
-    ].map(([n, kind]) => ({
-      agent: this.recipient(p, n!),
-      kind: kind!,
-    }));
+    const {
+      sender: currentSender,
+      recipients,
+      checkedAt,
+    } = admitRecipients(this, p, sender, a, {
+      db: this.db,
+      lifecycle: this.lifecycle,
+      registry: this.registry,
+    });
+    sender = currentSender;
     const names = (kind: string) =>
       recipients.filter((r) => r.kind === kind).map((r) => r.agent.name);
     const m = this.db
@@ -686,15 +668,26 @@ export class MailStore {
         JSON.stringify(locations(p.human_key, [sender])[0]),
       )!;
     const add = this.db.query(
-      "INSERT OR IGNORE INTO message_recipients (message_id, agent_id, kind, created_ts) VALUES (?, ?, ?, ?)",
+      "INSERT OR IGNORE INTO message_recipients (message_id, agent_id, kind, created_ts, admission_json) VALUES (?, ?, ?, ?, ?)",
     );
     for (const r of recipients) {
-      add.run(m.id, r.agent.id, r.kind, m.created_ts);
+      add.run(m.id, r.agent.id, r.kind, m.created_ts, JSON.stringify(r.observation));
     }
     if (m.subject !== PING_SUBJECT) {
       reconcileNotices(this.db);
     }
-    return payload(m, sender.name);
+    return {
+      ...payload(m, sender.name),
+      delivery: {
+        persisted: true,
+        admission_checked_at: checkedAt,
+        historical: false,
+        recipients: recipients.map((r) => r.observation),
+        warnings: recipients.map(
+          (r) => `${r.agent.name}: ${r.observation.availability}; wake support unverified.`,
+        ),
+      },
+    };
   }
 
   inbox(p: Project, who: Agent, a: Args, markRead: boolean) {
@@ -838,7 +831,7 @@ export class MailStore {
   receipts(messageId: number): Row[] {
     return this.db
       .query<Row, [number]>(
-        `SELECT a.name, r.kind, r.read_ts, r.ack_ts FROM message_recipients r JOIN agents a ON a.id = r.agent_id
+        `SELECT a.name, r.kind, r.read_ts, r.ack_ts, r.admission_json FROM message_recipients r JOIN agents a ON a.id = r.agent_id
          WHERE r.message_id = ? ORDER BY a.name`,
       )
       .all(messageId);

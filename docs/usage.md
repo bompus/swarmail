@@ -69,12 +69,34 @@ needs no reply.
   project, register there first under your existing name.
 - Broadcasts are rejected; address `to`, `cc` and `bcc` explicitly. Continue a
   conversation with `reply_message` or by passing its `thread_id`.
+- Sends and replies check configured T3 lifecycle state again before storage.
+  Unregistered, retired or closed recipients reject the whole send. A bound
+  source that cannot be verified also rejects. The error includes
+  `persisted:false` and per-recipient reasons. Confirm the intended owner;
+  Swarmail does not reroute mail or reopen closed sessions.
+- Successful sends return `delivery` with admission-time recipient observations
+  and warnings. Unknown standalone state still permits storage. An absent
+  process or an end hook does not prove a resumable session is dead.
+  Wake support remains unverified unless established for that exact route.
+  These fields stay out of the receiver's inbox message.
+- `delivery_policy` accepts `checked` (default) or `durable`; the CLI uses
+  `--delivery-policy`. Neither bypasses a closed T3 session or an unverifiable
+  bound source. Standalone lifecycle authority is not enabled, so both policies
+  currently store unknown standalone mail with the same warnings.
+  `swarmail send --json` prints the full result; ordinary output prints warnings.
 - A nonempty `idempotency_key` makes an identical retry return the original
   message. Reuse the same key, tool, calling agent and arguments. Changed
   arguments with that key return `IDEMPOTENCY_KEY_CONFLICT`.
   Missing or empty keys do not deduplicate.
   Hourly cleanup removes keys older than seven days. Retries replay until
   removal; after removal, the same key can send another message.
+- Replayed delivery observations have `historical:true`. They describe the
+  original admission, not current session availability. Delivery receipts keep
+  that snapshot alongside read and acknowledgement timestamps. Older messages
+  have `admission:null` rather than invented history.
+- Keep a handed-off task in your ledger until the receiving session explicitly
+  accepts its scope in a reply. Stored, read and acknowledged mail do not prove
+  task acceptance or completion. Report an unanswered handoff instead of dropping it.
 - Don't reply to a message that only thanks or acknowledges. Mail wakes idle
   Claude Code and Cursor sessions, so each needless reply costs the recipient
   a turn.
