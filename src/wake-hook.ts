@@ -10,6 +10,7 @@
 // installer writes as shell, then the Claude wait.
 import { ensureWakeEligible } from "./wake-lifecycle.ts";
 import { openHookDelivery } from "./hook-delivery.ts";
+import { updateHint } from "./updates.ts";
 import { SESSION_RE } from "./wake.ts";
 import { stateHome, wakeUrl } from "./paths.ts";
 import { spawnSync } from "node:child_process";
@@ -376,7 +377,10 @@ export async function contextHook(
       SESSION_RE.test(sid) &&
       !openRegistry(registryDir(env)).read(sid)?.ended
     ) {
-      hint = await nativeContextHint(sid, env);
+      if (!stop && host !== "agy") {
+        hint = updateHint(sid, false, env, host);
+      }
+      hint = [await nativeContextHint(sid, env), hint].filter(Boolean).join("\n");
     }
   } catch {
     // Mail delivery must never block a tool or grant permissions when the server is unavailable.

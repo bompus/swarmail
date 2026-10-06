@@ -109,6 +109,20 @@ const COMMANDS: Record<string, Command> = {
       }
     },
   },
+  updates: {
+    usage: [
+      "swarmail updates --session [--json] [--reset-context] [--ack COMPONENT --revision REVISION]  approved targets and loaded attestations",
+    ],
+    run: async (args) => {
+      const { updatesCommand } = await import("./updates.ts");
+      try {
+        await updatesCommand(args);
+      } catch (error) {
+        console.error(`swarmail updates: ${(error as Error).message}`);
+        process.exit(1);
+      }
+    },
+  },
   ...Object.fromEntries([
     mail(
       "inbox",

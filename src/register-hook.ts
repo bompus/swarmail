@@ -14,6 +14,7 @@ import { hostProcess, sameHost } from "./proc.ts";
 import { openRegistry, serverRegister, type Session } from "./registry.ts";
 import { sessionTag, SESSION_ENV } from "./tag.ts";
 import { t3ThreadId } from "./t3-state.ts";
+import { updateHint } from "./updates.ts";
 
 /** A hook payload. Each host sends its own shape, so every field is checked before use. */
 export interface HookInput {
@@ -275,7 +276,23 @@ export async function registerHook(args: string[], read: () => Promise<string>):
       }
       input.swarmail_host = args[1];
     }
-    const out = hookOutput(hookSession(input).host, input.hook_event_name, main(input));
+    const session = hookSession(input);
+    const text = main(input);
+    const canNotify = !!hookOutput(session.host, input.hook_event_name, "update");
+    const hint =
+      canNotify && session.sessionId
+        ? updateHint(
+            session.sessionId,
+            eventName(input.hook_event_name) === "SessionStart",
+            process.env,
+            session.host,
+          )
+        : "";
+    const out = hookOutput(
+      session.host,
+      input.hook_event_name,
+      [text, hint].filter(Boolean).join("\n"),
+    );
     if (out) {
       process.stdout.write(out + "\n");
     }

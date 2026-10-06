@@ -4,6 +4,12 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Opt-in approved update targets produce one pending hint at supported session
+  context hooks. Loaded attestations are separate from mail acknowledgments;
+  frozen contexts can hold updates. `swarmail updates --session` exposes pending
+  targets, and `/versions` reports the running build and protocol-specific tool
+  fingerprint. Checks never install, restart or wake idle sessions.
+
 - Mail result validation uses direct checks without runtime package dependencies.
   JSON Schema validation remains a development test reference.
 
