@@ -55,7 +55,7 @@ test("identity columns are backfilled from each tag, and every open repairs rows
     old.close();
 
     let db = openDatabase(path);
-    expect(db.query("PRAGMA user_version").get().user_version).toBe(3);
+    expect(db.query("PRAGMA user_version").get().user_version).toBe(4);
     expect(
       db.query("SELECT host, session_id, t3_thread, build, cwd FROM agents ORDER BY id").all(),
     ).toEqual([
@@ -86,7 +86,7 @@ test("identity columns are backfilled from each tag, and every open repairs rows
     `);
     db.close();
     db = openDatabase(path);
-    expect(db.query("PRAGMA user_version").get().user_version).toBe(3);
+    expect(db.query("PRAGMA user_version").get().user_version).toBe(4);
     expect(db.query("SELECT worktree FROM agents WHERE id = 1").get().worktree).toBe("/w/edit");
     expect(
       db
@@ -111,6 +111,10 @@ test("migrating a released database preserves messages without inventing sender 
       ALTER TABLE messages DROP COLUMN sender_location;
       DROP TABLE wake_notices;
       DROP TABLE wake_notice_offers;
+      DROP TABLE lifecycle_sources;
+      DROP TABLE session_lifecycle;
+      ALTER TABLE agents DROP COLUMN lifecycle_profile;
+      ALTER TABLE agents DROP COLUMN lifecycle_thread;
       PRAGMA user_version = 1;
       INSERT INTO wake_cursors(session, announced, offered) VALUES('previous-session',10,12);
       INSERT INTO projects VALUES (1,'repo','/r',1);

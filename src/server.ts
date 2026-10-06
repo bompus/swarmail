@@ -9,6 +9,12 @@ import { processIdentity } from "./proc.ts";
 import { nowUs, openDatabase } from "./db.ts";
 import { buildSource } from "./build.ts";
 import { createTools, TOOL_DEFINITIONS, ToolError, WAKES } from "./tools.ts";
+import {
+  Lifecycle,
+  sessionEligible,
+  sessionLifecycleBound,
+  type LifecycleConfig,
+} from "./lifecycle.ts";
 import { createWaiters, SESSION_RE } from "./wake.ts";
 import { openRegistry, registryDir } from "./registry.ts";
 
@@ -59,7 +65,12 @@ async function rpc(
   }
 }
 
-async function waitResponse(req: Request, url: URL, waiters: ReturnType<typeof createWaiters>) {
+async function waitResponse(
+  req: Request,
+  url: URL,
+  waiters: ReturnType<typeof createWaiters>,
+  eligible: (session: string) => boolean,
+) {
   const session = url.searchParams.get("session") ?? "";
   if (!SESSION_RE.test(session)) {
     return new Response("invalid session identifier", { status: 400 });
@@ -90,9 +101,53 @@ async function waitResponse(req: Request, url: URL, waiters: ReturnType<typeof c
   if (offer === false) {
     return new Response("replaced by a newer wait\n", { status: 409 });
   }
-  return offer
+  return offer && eligible(session)
     ? new Response(offer.hint + "\n", { headers: { "x-swarmail-event-id": String(offer.eventId) } })
     : new Response(null, { status: 204 });
+}
+
+async function lifecycleResponse(
+  req: Request,
+  url: URL,
+  lifecycle: Lifecycle | undefined,
+  eligible: (session: string) => boolean,
+  notify: () => void,
+): Promise<Response> {
+  if (url.pathname === "/lifecycle/reconcile") {
+    if (req.method !== "POST") {
+      return new Response(null, { status: 405 });
+    }
+    if ((await req.text()).trim()) {
+      return new Response("reconciliation takes no arguments", { status: 400 });
+    }
+    const state = lifecycle?.reconcile() ?? { status: "ready", changed: 0 };
+    notify();
+    return Response.json(state);
+  }
+  if (url.pathname === "/wait/status") {
+    const session = url.searchParams.get("session") ?? "";
+    if (!SESSION_RE.test(session)) {
+      return new Response("invalid session identifier", { status: 400 });
+    }
+    return Response.json({ eligible: eligible(session) });
+  }
+  return new Response("not found", { status: 404 });
+}
+
+function initializeLifecycle(db: Database, config?: LifecycleConfig): Lifecycle | undefined {
+  if (!config) {
+    return undefined;
+  }
+  try {
+    const lifecycle = new Lifecycle(db, config);
+    if (lifecycle.reconcile().status !== "ready") {
+      throw new Error("unavailable");
+    }
+    return lifecycle;
+  } catch {
+    db.close();
+    throw new Error("T3 lifecycle initialization unavailable; server activation held");
+  }
 }
 
 export function createServer(
@@ -102,10 +157,21 @@ export function createServer(
     wakePollMs = 30_000,
     retireIdleDays = 7,
     registry,
-  }: { wakePollMs?: number; retireIdleDays?: number; registry?: string } = {},
+    t3Lifecycle,
+  }: {
+    wakePollMs?: number;
+    retireIdleDays?: number;
+    registry?: string;
+    t3Lifecycle?: LifecycleConfig;
+  } = {},
 ) {
   mkdirSync(dirname(databasePath), { recursive: true });
   const db = openDatabase(databasePath);
+  const lifecycle = initializeLifecycle(db, t3Lifecycle);
+  const eligible = (session: string) => {
+    const bound = sessionLifecycleBound(db, session);
+    return (!bound || lifecycle?.reconcile().status === "ready") && sessionEligible(db, session);
+  };
   // Sessions end without retiring, so the roster fills with dead names; any tool call as the agent brings it back.
   const sweep = () => {
     if (retireIdleDays > 0) {
@@ -119,8 +185,8 @@ export function createServer(
   };
   sweep();
   setInterval(sweep, 3_600_000).unref();
-  const tools = createTools(db, { databasePath });
-  const waiters = createWaiters(db, wakePollMs);
+  const tools = createTools(db, { databasePath, lifecycle });
+  const waiters = createWaiters(db, wakePollMs, eligible);
 
   const callTool = (name: string, args: Record<string, unknown>) => {
     const fn = Object.hasOwn(tools, name) ? tools[name] : undefined;
@@ -162,9 +228,12 @@ export function createServer(
       if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) {
         return new Response("forbidden origin", { status: 403 });
       }
+      if (path === "/lifecycle/reconcile" || path === "/wait/status") {
+        return lifecycleResponse(req, url, lifecycle, eligible, waiters.notify);
+      }
       if (path === "/wait" || path === "/wait/peek") {
         server.timeout(req, 0);
-        return waitResponse(req, url, waiters);
+        return waitResponse(req, url, waiters, eligible);
       }
       if (path !== "/mcp" && path !== "/mcp/") {
         return new Response("not found", { status: 404 });
@@ -240,6 +309,7 @@ export function main(args: string[]): void {
   const { server } = createServer(database, Number(env("PORT") ?? DEFAULT_PORT), {
     retireIdleDays: Number(env("RETIRE_DAYS") ?? 7),
     registry: registryDir(),
+    ...(env("T3_LIFECYCLE") ? { t3Lifecycle: JSON.parse(env("T3_LIFECYCLE")!) } : {}),
   });
   console.log(`swarmail listening on ${server.url} (${database})`);
   if (process.platform === "win32") {

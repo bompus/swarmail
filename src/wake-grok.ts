@@ -292,11 +292,14 @@ class GrokClient {
   }
 }
 
+const isAborted = (signal: AbortSignal) => signal.aborted;
+
 export async function deliverGrok(
   target: GrokTarget,
   command: Record<string, unknown>,
   markAttempted: () => void,
   signal: AbortSignal,
+  guard?: () => Promise<void>,
 ): Promise<void> {
   const { promptId, text } = savedNative(command, "Grok");
   let client: GrokClient | undefined;
@@ -311,6 +314,10 @@ export async function deliverGrok(
       }
     } else {
       if (signal.aborted) {
+        return;
+      }
+      await guard?.();
+      if (isAborted(signal)) {
         return;
       }
       // Commit before writing to the transport. Even a crash before write requires reconciliation.

@@ -22,12 +22,13 @@ export function openHookDelivery(sid: string, env: NodeJS.ProcessEnv) {
   );
   return {
     query: () => `&retry=1&after=${read.get()!.announced}`,
-    async receive(response: Response): Promise<string> {
+    async receive(response: Response, guard?: () => Promise<void>): Promise<string> {
       const hint = (await response.text()).trim();
       const id = Number(response.headers.get("x-swarmail-event-id"));
       if (!hint.startsWith("Swarmail: ") || !Number.isSafeInteger(id) || id <= 0) {
         throw new Error("invalid native wake offer");
       }
+      await guard?.();
       // Concurrent context and Stop hooks can receive the same offer; only one claims its output.
       return claim.get(id) ? hint : "";
     },

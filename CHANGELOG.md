@@ -4,6 +4,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Explicit local T3 V2 lifecycle reconciliation hides settled, archived and
+  deleted identities from the roster and rejects new mail or reservations.
+  Verified reopening preserves names, history and unread mail. Wake delivery
+  holds pending notices when lifecycle is inactive or unavailable.
+
 - Session inbox drains stop after an underfull page, avoiding an extra empty
   fetch. MCP and usage guidance use the same capped page-size rule.
 

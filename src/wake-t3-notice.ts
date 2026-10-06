@@ -1,3 +1,4 @@
+import { ensureWakeEligible } from "./wake-lifecycle.ts";
 import { INBOX_NOTICE } from "./wake.ts";
 // Steer mail into active T3 threads and reconcile only owned legacy queues. Commands are saved before sending and never edited on retry.
 import {
@@ -159,8 +160,10 @@ export function t3NoticeAdapter(
   state: WakeState,
 ): Pick<DeliveryAdapter, "wait" | "prepare" | "deliver"> {
   const target = config.target;
+  const guard = (signal?: AbortSignal) => ensureWakeEligible(config.swarmailUrl, target.id, signal);
   return {
     wait: async (after, signal) => {
+      await guard(signal);
       const queued = queuedNotices(await t3Projection(target), [state.readContext()?.messageId]);
       if (queued.length) {
         // Promote a matching legacy notice too, even when no new mail arrives.
@@ -177,6 +180,7 @@ export function t3NoticeAdapter(
       const notice = pending.command as unknown as Notice;
       const save = () => state.savePending(pending);
       while (!signal.aborted) {
+        await guard(signal);
         const projection = await t3Projection(target);
         ensureT3Unsettled(projection.thread);
         if (
@@ -188,7 +192,9 @@ export function t3NoticeAdapter(
         }
         if (pending.command.type !== "t3.notice") {
           // Keep a previously journaled command's id and payload across rollout.
-          await t3V2Adapter.deliver(target, pending.command, attempted, signal);
+          await t3V2Adapter.deliver(target, pending.command, attempted, signal, () =>
+            guard(signal),
+          );
           if (typeof pending.command.messageId === "string") {
             state.saveContext({ messageId: pending.command.messageId });
           }
@@ -197,7 +203,7 @@ export function t3NoticeAdapter(
         if (notice.operation) {
           const operation = notice.operation;
           try {
-            await sendT3Command(target, operation);
+            await sendT3Command(target, operation, () => guard(signal));
           } catch (error) {
             await reconcileRejection(target, notice, operation, error);
             save();

@@ -477,6 +477,9 @@ for (const [name, hook] of Object.entries(HOOKS)) {
           if (url.pathname === "/healthz") {
             return new Response("ok");
           }
+          if (url.pathname === "/wait/status") {
+            return Response.json({ eligible: true });
+          }
           waits.push(url.searchParams.get("timeout"));
           return waits.length === 1
             ? new Response(null, { status: 204 })

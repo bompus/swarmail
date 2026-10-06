@@ -6,6 +6,7 @@
 // A message with subject PING_SUBJECT never wakes the model: while the recipient's hook waits, the
 // server marks it read and replies PONG_SUBJECT on the same thread, already read so the pong wakes
 // no one either. `swarmail ping` uses this to prove a session's wake path is alive.
+import { lifecycleEligible, sessionEligible } from "./lifecycle.ts";
 import type { Database } from "bun:sqlite";
 import { nowUs } from "./db.ts";
 import {
@@ -103,11 +104,13 @@ function wakeCursor(db: Database) {
       offer.run(eventId, session);
       recordNoticeOffer(db, session, owner, eventId);
     },
-    begin(session: string, retry: boolean, after?: number) {
+    validate(session: string, after?: number) {
       const current = cursor.get(session);
       if (after !== undefined && after > Math.max(current?.announced ?? 0, current?.offered ?? 0)) {
         throw new Error("acknowledgement exceeds offered mail");
       }
+    },
+    begin(session: string, retry: boolean, after?: number) {
       (retry || after !== undefined ? keep : promote).run(session);
       if (after !== undefined) {
         acknowledge.run(after, session);
@@ -123,7 +126,7 @@ function mailboxSnapshot(db: Database) {
     JOIN projects p ON p.id = a.project_id
     JOIN message_recipients r ON r.agent_id = a.id
     JOIN messages m ON m.id = r.message_id
-    WHERE a.retired_at IS NULL AND (a.session_id = ?1 OR a.t3_thread = ?1)
+    WHERE a.retired_at IS NULL AND ${lifecycleEligible("a")} AND (a.session_id = ?1 OR a.t3_thread = ?1)
       AND r.read_ts IS NULL AND m.subject <> ?2
     GROUP BY a.id
     ORDER BY min(CASE WHEN m.importance IN ('urgent', 'high') THEN 0 ELSE 1 END), p.human_key, a.name
@@ -139,12 +142,10 @@ function mailboxSnapshot(db: Database) {
   };
 }
 
-// Sends and registrations call notify(), so a waiter wakes as soon as its mail commits. The poll is only a fallback
-// for writes this process does not see, such as another server on the same database.
-export function createWaiters(db: Database, pollMs = 30_000) {
+function pendingMail(db: Database, eligible: (session: string) => boolean) {
   // A waiter names its host session or its T3 thread (tag.ts); the identity columns hold both, indexed.
   const tagged = db.query<{ id: number }, [string]>(
-    "SELECT id FROM agents WHERE retired_at IS NULL AND (session_id = ?1 OR t3_thread = ?1)",
+    `SELECT id FROM agents WHERE retired_at IS NULL AND ${lifecycleEligible("agents")} AND (session_id = ?1 OR t3_thread = ?1)`,
   );
   const unread = db.query<Unread, [string, number]>(`
     SELECT m.id, s.name AS sender, s.id AS sender_id, a.name AS recipient, a.id AS recipient_id,
@@ -159,11 +160,10 @@ export function createWaiters(db: Database, pollMs = 30_000) {
 
   const cursor = wakeCursor(db);
   const withoutPings = pingAnswerer(db);
-  const waiting = new Map<string, (value: null | false) => void>();
-  const checks = new Map<string, () => void>();
-  let scheduled = false;
-
   const pending = db.transaction((session: string): WakeOffer | null => {
+    if (!eligible(session)) {
+      return null;
+    }
     reconcileNotices(db);
     const ids = tagged.all(session).map((a) => a.id);
     if (!ids.length) {
@@ -194,6 +194,21 @@ export function createWaiters(db: Database, pollMs = 30_000) {
     return { hint: INBOX_NOTICE, eventId };
   });
 
+  return { cursor, pending };
+}
+
+// Sends and registrations call notify(), so a waiter wakes as soon as its mail commits. The poll is only a fallback
+// for writes this process does not see, such as another server on the same database.
+export function createWaiters(
+  db: Database,
+  pollMs = 30_000,
+  eligible = (session: string) => sessionEligible(db, session),
+) {
+  const { cursor, pending } = pendingMail(db, eligible);
+  const waiting = new Map<string, (value: null | false) => void>();
+  const checks = new Map<string, () => void>();
+  let scheduled = false;
+
   /** Resolves with a hint once mail arrives, null on timeout or abort, or false when a newer wait for the same session replaces it. */
   function wait(
     session: string,
@@ -201,7 +216,8 @@ export function createWaiters(db: Database, pollMs = 30_000) {
     signal?: AbortSignal,
     { retry = false, after }: { retry?: boolean; after?: number } = {},
   ): Promise<WakeOffer | null | false> {
-    cursor.begin(session, retry, after);
+    cursor.validate(session, after);
+    let started = false;
     waiting.get(session)?.(false);
     return new Promise((resolve) => {
       const done = (value: WakeOffer | null | false) => {
@@ -216,6 +232,13 @@ export function createWaiters(db: Database, pollMs = 30_000) {
       };
       const stop = () => done(null);
       const check = () => {
+        if (!eligible(session)) {
+          return;
+        }
+        if (!started) {
+          cursor.begin(session, retry, after);
+          started = true;
+        }
         const hint = pending.immediate(session);
         if (hint) {
           done(hint);

@@ -17,7 +17,7 @@ export function noticeOwner(
   }
   const threads = db
     .query<{ t3_thread: string }, [string, string]>(
-      "SELECT DISTINCT t3_thread FROM agents WHERE host = ? AND session_id = ? AND t3_thread IS NOT NULL LIMIT 2",
+      "SELECT DISTINCT coalesce(lifecycle_thread, t3_thread) AS t3_thread FROM agents WHERE host = ? AND session_id = ? AND coalesce(lifecycle_thread, t3_thread) IS NOT NULL LIMIT 2",
     )
     .all(agent.host, agent.session_id);
   return threads.length === 1
@@ -28,7 +28,7 @@ export function noticeOwner(
 export function noticeOwners(db: Database, session: string): string[] {
   const owners = db
     .query<Identity, [string]>(
-      "SELECT host, session_id, t3_thread FROM agents WHERE session_id = ?1 OR t3_thread = ?1",
+      "SELECT host, session_id, coalesce(lifecycle_thread, t3_thread) AS t3_thread FROM agents WHERE session_id = ?1 OR t3_thread = ?1 OR lifecycle_thread = ?1",
     )
     .all(session)
     .map((agent) => noticeOwner(db, agent))
@@ -37,7 +37,7 @@ export function noticeOwners(db: Database, session: string): string[] {
 }
 
 const OWNER_MATCH = `(
-  (json_extract(?1, '$[0]') = 't3' AND (a.t3_thread = json_extract(?1, '$[1]') OR
+  (json_extract(?1, '$[0]') = 't3' AND (a.lifecycle_thread = json_extract(?1, '$[1]') OR a.t3_thread = json_extract(?1, '$[1]') OR
     (a.t3_thread IS NULL AND EXISTS (SELECT 1 FROM agents linked
       WHERE linked.host = a.host AND linked.session_id = a.session_id AND linked.t3_thread = json_extract(?1, '$[1]'))
       AND NOT EXISTS (SELECT 1 FROM agents other

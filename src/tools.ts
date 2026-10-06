@@ -1,5 +1,6 @@
 // Swarmail tools, one row each: the MCP definition, its flags and its handler. Shared lookups and writes live in
 // store.ts.
+import type { Lifecycle } from "./lifecycle.ts";
 import type { Database } from "bun:sqlite";
 import { iso, nowUs } from "./db.ts";
 import { locations } from "./location.ts";
@@ -180,8 +181,8 @@ export const TOOLS: Tool[] = [
     description:
       "Register or update an agent identity in a project, creating the project if needed. " +
       "Omit name to get a generated adjective+noun name, unless task_description starts with " +
-      "a session tag a live agent already has; then that agent is updated. Re-registering an " +
-      "existing name replaces its program, model and task and brings it back if retired. If " +
+      "a session tag an eligible or lifecycle-bound agent already has; then that agent is updated. Re-registering an " +
+      "existing name replaces its program, model and task and clears inactivity retirement. Authoritative lifecycle closure requires a verified reopen. If " +
       "the register hook already told you your name, pass it as name, or start " +
       "task_description with the session tag it gave you. To also reserve paths and read " +
       "your inbox in one call, use macro_start_session.",
@@ -687,6 +688,7 @@ export const TOOLS: Tool[] = [
     run: (s, a) => {
       const p = s.project(a.project_key),
         who = s.acting(p, a.agent_name);
+      s.requireLifecycle(who);
       const extend = reservationSeconds(a.extend_seconds, "extend_seconds", 1800) * 1_000_000;
       const renewed = s.ownActive(p, who, a).map((r) => {
         const next = r.expires_ts + extend;
@@ -753,9 +755,9 @@ export const WAKES = new Set(TOOLS.filter((t) => t.wakes).map((t) => t.name));
 // writes nothing.
 export function createTools(
   db: Database,
-  info: { databasePath: string },
+  info: { databasePath: string; lifecycle?: Lifecycle },
 ): Record<string, (a: Args) => unknown> {
-  const s = new MailStore(db);
+  const s = new MailStore(db, info.lifecycle);
   return Object.fromEntries(
     TOOLS.map((t) => [t.name, (a: Args) => s.atomic(() => t.run(s, a, info))]),
   );

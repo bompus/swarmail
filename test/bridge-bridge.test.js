@@ -439,7 +439,11 @@ for (const boundary of ["mail", "target"]) {
           return;
         }
         const eventId = response.headers.get("x-swarmail-event-id");
-        if (!broken && response.status === 200 && (boundary === "mail" || method === "POST")) {
+        if (
+          !broken &&
+          response.status === 200 &&
+          ((boundary === "mail" && path.startsWith("/wait?")) || method === "POST")
+        ) {
           broken = true;
           socket.end(
             "HTTP/1.1 200 OK\r\nContent-Length: 99999\r\nConnection: close\r\n" +

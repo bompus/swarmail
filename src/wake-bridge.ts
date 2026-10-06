@@ -1,5 +1,6 @@
 // One destination per bridge: a `wake-bridge` process, or a runner inside the T3 supervisor.
 // SQLite holds the pending command and an owner lock released when its connection closes.
+import { ensureWakeEligible } from "./wake-lifecycle.ts";
 import { readFileSync } from "node:fs";
 import { BridgeError, localUrl, openCodeAdapter, t3V1Adapter, t3V2Adapter } from "./wake-target.ts";
 import type { TargetAdapter, WakeTarget } from "./wake-target.ts";
@@ -60,14 +61,20 @@ export async function runBridge(
 ) {
   const target = config.target;
   const adapter = adapterFor(target.type)!;
+  const guard = () => ensureWakeEligible(config.swarmailUrl, target.id, stop.signal);
   const delivery =
     target.type === "t3-v2-queue"
       ? t3NoticeAdapter(config as BridgeConfig & { target: WakeTarget }, state)
       : {
-          wait: (after: number, signal: AbortSignal) => waitForOffer(config, after, signal),
+          wait: async (after: number, signal: AbortSignal) => {
+            await guard();
+            return waitForOffer(config, after, signal);
+          },
           prepare: (offer: { hint: string }) => adapter.prepare(target, offer.hint),
-          deliver: (pending: Pending, attempted: () => void, signal: AbortSignal) =>
-            adapter.deliver(target, pending.command, attempted, signal),
+          deliver: async (pending: Pending, attempted: () => void, signal: AbortSignal) => {
+            await guard();
+            return adapter.deliver(target, pending.command, attempted, signal, guard);
+          },
         };
   await deliveryLoop(
     state,

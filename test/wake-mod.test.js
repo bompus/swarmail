@@ -9,6 +9,9 @@ function session({ registered = true, entrypoint = "cli", home = { HOME: "/h" } 
   const state = {
     sid: "s-1",
     registered,
+    eligible: true,
+    statusCalls: 0,
+    statusRead: async () => {},
     /** @type {({ status: number, text: string, headers?: object } | Error | (() => object))[]} */
     responses: [],
     fetched: [],
@@ -32,6 +35,11 @@ function session({ registered = true, entrypoint = "cli", home = { HOME: "/h" } 
     session: { id: async () => state.sid },
     http: {
       fetch: async (url) => {
+        if (url.includes("/wait/status?")) {
+          state.statusCalls++;
+          await state.statusRead();
+          return { status: 200, text: JSON.stringify({ eligible: state.eligible }), headers: {} };
+        }
         state.fetched.push(url);
         const queued = state.responses.shift() ?? { status: 204, text: "" };
         const next = typeof queued === "function" ? queued() : queued;
@@ -188,4 +196,35 @@ test("does nothing in `claude -p`, which exits after one prompt", async () => {
   await s.start();
   expect(s.timers).toEqual([]);
   expect(s.state.env).toEqual({});
+});
+
+test("held hints survive inactive lifecycle and deliver after reopen without early acknowledgment", async () => {
+  const s = session();
+  await s.start();
+  await s.turnStart();
+  s.state.responses.push(hint(42));
+  await s.tick();
+  s.state.eligible = false;
+  expect(await s.toolCall({}, { context: ["original"] })).toEqual({ context: ["original"] });
+  await s.turnComplete();
+  expect(await s.tick()).toBe(1000);
+  expect(s.state.submitted).toEqual([]);
+  s.state.eligible = true;
+  expect(await s.tick()).toBe(0);
+  expect(s.state.submitted).toEqual(["Swarmail: 1 new message"]);
+  await s.tick();
+  expect(s.state.fetched.at(-1)).toEndWith("after=42");
+});
+
+test("a session change during final lifecycle lookup cannot inject the old held hint", async () => {
+  const s = session();
+  await s.start();
+  await s.turnStart();
+  s.state.responses.push(hint(42));
+  await s.tick();
+  s.state.statusRead = async () => {
+    s.state.sid = "new-session";
+  };
+  expect(await s.toolCall({}, { context: ["original"] })).toEqual({ context: ["original"] });
+  expect(s.state.submitted).toEqual([]);
 });
