@@ -128,6 +128,15 @@ const MIGRATIONS: ((db: Database) => void)[] = [
   (db) => {
     db.run("ALTER TABLE message_recipients ADD COLUMN admission_json TEXT");
   },
+  (db) => {
+    db.run("ALTER TABLE message_recipients ADD COLUMN withdrawn_ts INTEGER");
+    db.run("ALTER TABLE messages ADD COLUMN revision INTEGER NOT NULL DEFAULT 0");
+    db.run(`CREATE TABLE message_mutations (
+      id INTEGER PRIMARY KEY, message_id INTEGER NOT NULL REFERENCES messages(id),
+      actor_id INTEGER NOT NULL REFERENCES agents(id), kind TEXT NOT NULL, created_ts INTEGER NOT NULL,
+      revision INTEGER NOT NULL, details_json TEXT NOT NULL
+    )`);
+  },
 ];
 
 const IDENTITY = ["host", "session_id", "t3_thread", "build", "cwd"] as const;
@@ -155,14 +164,20 @@ function syncIdentity(db: Database): void {
 }
 
 /**
- * Applies the migrations `db` lacks, then syncIdentity, in one transaction. A database a newer build migrated further
- * keeps its version.
+ * Applies the migrations `db` lacks, then identity and notice repairs, in one transaction.
+ * openDatabase refuses unsupported newer schemas before these writes.
  */
 function migrate(db: Database): void {
   db.transaction(() => {
     const { user_version: done } = db
       .query<{ user_version: number }, []>("PRAGMA user_version")
       .get()!;
+    if (done > MIGRATIONS.length) {
+      throw new Error(
+        `Unsupported mailbox schema ${done}; this build supports ${MIGRATIONS.length}`,
+      );
+    }
+    db.exec(schema);
     if (done < MIGRATIONS.length) {
       for (const step of MIGRATIONS.slice(done)) {
         step(db);
@@ -189,11 +204,22 @@ export function openDatabase(
   // First, so the journal_mode read waits out a hook or `swarmail who` that holds the file or is recovering its WAL
   // (SQLITE_BUSY_RECOVERY), instead of failing the start.
   db.run("PRAGMA busy_timeout = 5000");
+  const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
+  if (version > MIGRATIONS.length) {
+    db.close();
+    throw new Error(
+      `Unsupported mailbox schema ${version}; this build supports ${MIGRATIONS.length}`,
+    );
+  }
   db.run("PRAGMA journal_mode = WAL");
   db.run(`PRAGMA synchronous = ${synchronous.toUpperCase()}`);
   db.run("PRAGMA foreign_keys = ON");
-  db.exec(schema);
-  migrate(db);
+  try {
+    migrate(db);
+  } catch (error) {
+    db.close();
+    throw error;
+  }
   return db;
 }
 

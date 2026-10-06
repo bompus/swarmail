@@ -88,6 +88,7 @@ test("session inbox drains pages across projects without reading unrelated recei
     "importance",
     "project_key",
     "read_ts",
+    "revision",
     "subject",
     "thread_id",
   ]);

@@ -94,12 +94,16 @@ export function unreadQueues(dbPath: string, project: string): Map<string, Queue
   }
   const db = new Database(dbPath, { readonly: true });
   try {
+    const version = db
+      .query<{ user_version: number }, []>("PRAGMA user_version")
+      .get()!.user_version;
+    const live = version >= 6 ? "AND r.withdrawn_ts IS NULL" : "";
     return new Map(
       db
         .query<{ name: string; unread: number; oldest: number }, [string]>(
           `SELECT a.name, count(*) AS unread, min(r.created_ts) AS oldest
            FROM message_recipients r JOIN agents a ON a.id = r.agent_id JOIN projects p ON p.id = a.project_id
-           WHERE p.human_key = ? AND r.read_ts IS NULL GROUP BY a.id`,
+           WHERE p.human_key = ? AND r.read_ts IS NULL ${live} GROUP BY a.id`,
         )
         .all(project)
         .map((row) => [row.name, { unread: row.unread, oldest: iso(row.oldest) }]),

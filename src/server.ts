@@ -158,11 +158,13 @@ export function createServer(
     retireIdleDays = 7,
     registry,
     t3Lifecycle,
+    mutationsEnabled = false,
   }: {
     wakePollMs?: number;
     retireIdleDays?: number;
     registry?: string;
     t3Lifecycle?: LifecycleConfig;
+    mutationsEnabled?: boolean;
   } = {},
 ) {
   mkdirSync(dirname(databasePath), { recursive: true });
@@ -185,7 +187,7 @@ export function createServer(
   };
   sweep();
   setInterval(sweep, 3_600_000).unref();
-  const tools = createTools(db, { databasePath, lifecycle, registry });
+  const tools = createTools(db, { databasePath, lifecycle, registry, mutationsEnabled });
   const waiters = createWaiters(db, wakePollMs, eligible);
 
   const callTool = (name: string, args: Record<string, unknown>) => {
@@ -305,9 +307,14 @@ export function main(args: string[]): void {
     throw new Error("usage: bun server.ts");
   }
   const env = (name: string) => process.env[`SWARMAIL_${name}`];
+  const enabled = env("ENABLE_MUTATIONS");
+  if (enabled !== undefined && enabled !== "0" && enabled !== "1") {
+    throw new Error("SWARMAIL_ENABLE_MUTATIONS must be 0 or 1");
+  }
   const database = databasePath();
   const { server } = createServer(database, Number(env("PORT") ?? DEFAULT_PORT), {
     retireIdleDays: Number(env("RETIRE_DAYS") ?? 7),
+    mutationsEnabled: enabled === "1",
     registry: registryDir(),
     ...(env("T3_LIFECYCLE") ? { t3Lifecycle: JSON.parse(env("T3_LIFECYCLE")!) } : {}),
   });

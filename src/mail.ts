@@ -83,7 +83,10 @@ function parse(args: string[]) {
       arg === "--limit" ||
       arg === "--timeout" ||
       arg === "--cursor" ||
-      arg === "--delivery-policy"
+      arg === "--delivery-policy" ||
+      arg === "--idempotency-key" ||
+      arg === "--expected-revision" ||
+      arg === "--recipients"
     ) {
       opts[arg.slice(2)] = args[++i] ?? "";
     } else if (arg.startsWith("--")) {
@@ -152,6 +155,9 @@ export async function mail(
     if (command === "ping") {
       return await ping(env, project, agent, positional[0], Number(opts.timeout ?? 10));
     }
+    if (command === "withdraw" || command === "importance") {
+      return await mutate(env, project, agent, { command, positional, opts });
+    }
     const [to, subject, body] = positional;
     if (!to || !subject) {
       console.error("usage: swarmail send <to[,to...]> <subject> [body] [--as NAME]");
@@ -178,6 +184,49 @@ export async function mail(
     console.error(`swarmail ${command}: ${e instanceof Error ? e.message : e}`);
     return 1;
   }
+}
+
+async function mutate(
+  env: NodeJS.ProcessEnv,
+  project: string,
+  agent: string,
+  input: { command: string; positional: string[]; opts: Record<string, string | true> },
+): Promise<number> {
+  const { command, positional, opts } = input;
+  const id = positional[0];
+  const key = opts["idempotency-key"];
+  const expected = opts["expected-revision"];
+  if (
+    !id ||
+    !/^[1-9]\d*$/.test(id) ||
+    typeof key !== "string" ||
+    !key ||
+    positional.length !== (command === "withdraw" ? 1 : 2) ||
+    (command === "importance" && (typeof expected !== "string" || !/^\d+$/.test(expected))) ||
+    (opts.recipients !== undefined &&
+      (command !== "withdraw" || typeof opts.recipients !== "string" || !opts.recipients))
+  ) {
+    throw new Error(
+      "usage: withdraw <id> --idempotency-key KEY [--recipients A,B]; importance <id> <level> --expected-revision N --idempotency-key KEY",
+    );
+  }
+  const result = await call(
+    env,
+    command === "withdraw" ? "withdraw_message" : "set_message_importance",
+    {
+      project_key: project,
+      sender_name: agent,
+      message_id: Number(id),
+      idempotency_key: key,
+      ...(command === "importance" && {
+        importance: positional[1],
+        expected_revision: Number(expected),
+      }),
+      ...(opts.recipients !== undefined && { recipients: String(opts.recipients).split(",") }),
+    },
+  );
+  console.log(JSON.stringify(result, null, opts.json ? undefined : 2));
+  return 0;
 }
 
 /** Drain exact session registrations without needing a repository or mailbox name. */

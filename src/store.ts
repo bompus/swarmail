@@ -1,3 +1,5 @@
+import { payload, inboxOut } from "./message-output.ts";
+import { mutateMessage } from "./message-mutations.ts";
 // The mail store behind the tools: argument checks, lookups and the write paths the tools share.
 import type { Database } from "bun:sqlite";
 import { existsSync, realpathSync } from "node:fs";
@@ -223,44 +225,6 @@ export const projectOut = (p: Project) => ({
   created_at: iso(p.created_at),
 });
 
-const payload = (m: Row, sender: string) => ({
-  id: m.id,
-  project_id: m.project_id,
-  sender_id: m.sender_id,
-  thread_id: m.thread_id,
-  topic: m.topic,
-  subject: m.subject,
-  body_md: m.body_md,
-  importance: m.importance,
-  ack_required: !!m.ack_required,
-  created_ts: iso(m.created_ts),
-  from: sender,
-  sender_location: m.sender_location ? JSON.parse(m.sender_location) : null,
-  to: [],
-  cc: [],
-  bcc: [],
-  ...JSON.parse(m.recipients_json),
-});
-
-const inboxOut = (m: Row, includeBody: boolean) => ({
-  id: m.id,
-  project_id: m.project_id,
-  sender_id: m.sender_id,
-  thread_id: m.thread_id,
-  topic: m.topic,
-  subject: m.subject,
-  importance: m.importance,
-  ack_required: !!m.ack_required,
-  from: m.from,
-  sender_location: m.sender_location ? JSON.parse(m.sender_location) : null,
-  created_ts: iso(m.created_ts),
-  // Omit unset read_ts and ack_ts.
-  ...(m.read_ts != null && { read_ts: iso(m.read_ts) }),
-  ...(m.ack_ts != null && { ack_ts: iso(m.ack_ts) }),
-  kind: m.kind,
-  ...(includeBody && { body_md: m.body_md }),
-});
-
 const queries = (db: Database) => ({
   projectByKey: db.query<Project, [string, string]>(
     "SELECT * FROM projects WHERE human_key = ? OR slug = ? ORDER BY id LIMIT 1",
@@ -291,7 +255,7 @@ const queries = (db: Database) => ({
     "SELECT * FROM messages WHERE id = ? AND project_id = ?",
   ),
   recipient: db.query<Row, [number, number]>(
-    "SELECT * FROM message_recipients WHERE message_id = ? AND agent_id = ?",
+    "SELECT * FROM message_recipients WHERE message_id = ? AND agent_id = ? AND withdrawn_ts IS NULL",
   ),
 });
 
@@ -303,7 +267,9 @@ export class MailStore {
 
   private readonly lifecycle?: Lifecycle;
   private readonly registry?: string;
-  constructor(db: Database, lifecycle?: Lifecycle, registry?: string) {
+  private readonly mutationsEnabled: boolean;
+  constructor(db: Database, lifecycle?: Lifecycle, registry?: string, mutationsEnabled = false) {
+    this.mutationsEnabled = mutationsEnabled;
     this.lifecycle = lifecycle;
     this.registry = registry;
     this.db = db;
@@ -694,10 +660,10 @@ export class MailStore {
     const now = nowUs();
     const rows = this.db
       .query<Row, any[]>(
-        `SELECT m.id, m.project_id, m.sender_id, m.thread_id, m.topic, m.subject, m.importance, m.ack_required,
+        `SELECT m.id, m.project_id, m.sender_id, m.thread_id, m.topic, m.subject, m.importance, m.revision, m.ack_required,
               s.name AS "from", m.sender_location, m.created_ts, r.read_ts, r.ack_ts, r.kind, m.body_md
        FROM message_recipients r JOIN messages m ON m.id = r.message_id JOIN agents s ON s.id = m.sender_id
-       WHERE r.agent_id = ?1 AND (?2 = 0 OR r.read_ts IS NULL) AND (?3 = 0 OR m.importance IN ('high', 'urgent'))
+       WHERE r.agent_id = ?1 AND r.withdrawn_ts IS NULL AND (?2 = 0 OR r.read_ts IS NULL) AND (?3 = 0 OR m.importance IN ('high', 'urgent'))
          AND r.created_ts > ?4 AND (?5 IS NULL OR m.topic = ?5)
          AND (?6 = 0 OR (m.ack_required = 1 AND r.ack_ts IS NULL AND m.created_ts < ?7))
        ORDER BY r.created_ts DESC, r.message_id DESC LIMIT ?8`,
@@ -714,7 +680,7 @@ export class MailStore {
       );
     if (markRead) {
       const mark = this.db.query(
-        "UPDATE message_recipients SET read_ts = ? WHERE message_id = ? AND agent_id = ? AND read_ts IS NULL",
+        "UPDATE message_recipients SET read_ts = ? WHERE message_id = ? AND agent_id = ? AND withdrawn_ts IS NULL AND read_ts IS NULL",
       );
       for (const r of rows.filter((row) => row.read_ts == null)) {
         mark.run(now, r.id, who.id);
@@ -740,7 +706,7 @@ export class MailStore {
     const now = nowUs();
     const rows = this.db
       .query<Row, any[]>(`
-      SELECT m.id, m.thread_id, m.subject, m.importance,
+      SELECT m.id, m.thread_id, m.subject, m.importance, m.revision,
              m.ack_required, m.created_ts, m.body_md, s.name AS "from",
              r.read_ts, r.ack_ts, a.id AS recipient_id, a.name AS agent_name,
              p.human_key AS project_key
@@ -749,12 +715,12 @@ export class MailStore {
       JOIN messages m ON m.id = r.message_id JOIN agents s ON s.id = m.sender_id
       WHERE ((?3 IS NOT NULL AND a.t3_thread IS NOT NULL AND a.t3_thread = ?3)
         OR ((?3 IS NULL OR a.t3_thread IS NULL) AND a.host = ?1 AND a.session_id = ?2))
-        AND (?4 = 0 OR r.read_ts IS NULL)
+        AND r.withdrawn_ts IS NULL AND (?4 = 0 OR r.read_ts IS NULL)
       ORDER BY r.created_ts DESC, r.message_id DESC, r.agent_id DESC LIMIT ?5
     `)
       .all(host, session, thread, (a.unread_only ?? true) ? 1 : 0, pageLimit(a.limit, "limit", 20));
     const mark = this.db.query(
-      "UPDATE message_recipients SET read_ts = ? WHERE message_id = ? AND agent_id = ? AND read_ts IS NULL",
+      "UPDATE message_recipients SET read_ts = ? WHERE message_id = ? AND agent_id = ? AND withdrawn_ts IS NULL AND read_ts IS NULL",
     );
     const touched = new Set<number>();
     for (const row of rows) {
@@ -775,6 +741,7 @@ export class MailStore {
       thread_id: row.thread_id,
       subject: row.subject,
       importance: row.importance,
+      revision: row.revision,
       ack_required: !!row.ack_required,
       from: row.from,
       created_ts: iso(row.created_ts),
@@ -811,27 +778,42 @@ export class MailStore {
   }
 
   markRead(messageId: number, who: Agent, readTs: number): void {
-    this.db.run("UPDATE message_recipients SET read_ts = ? WHERE message_id = ? AND agent_id = ?", [
-      readTs,
-      messageId,
-      who.id,
-    ]);
+    const result = this.db.run(
+      "UPDATE message_recipients SET read_ts = ? WHERE message_id = ? AND agent_id = ? AND withdrawn_ts IS NULL",
+      [readTs, messageId, who.id],
+    );
+    if (!result.changes) {
+      throw new ToolError("NOT_FOUND", "recipient delivery is absent or withdrawn");
+    }
     reconcileNotices(this.db);
   }
 
   acknowledge(messageId: number, who: Agent, ackTs: number, readTs: number): void {
-    this.db.run(
-      "UPDATE message_recipients SET ack_ts = ?, read_ts = ? WHERE message_id = ? AND agent_id = ?",
+    const result = this.db.run(
+      "UPDATE message_recipients SET ack_ts = ?, read_ts = ? WHERE message_id = ? AND agent_id = ? AND withdrawn_ts IS NULL",
       [ackTs, readTs, messageId, who.id],
     );
+    if (!result.changes) {
+      throw new ToolError("NOT_FOUND", "recipient delivery is absent or withdrawn");
+    }
     reconcileNotices(this.db);
+  }
+
+  mutate(p: Project, a: Args, kind: "withdraw_message" | "set_message_importance") {
+    return mutateMessage(
+      this,
+      { db: this.db, lifecycle: this.lifecycle, enabled: this.mutationsEnabled },
+      p,
+      a,
+      kind,
+    );
   }
 
   /** Each recipient of a message with its read and acknowledge times, by name. */
   receipts(messageId: number): Row[] {
     return this.db
       .query<Row, [number]>(
-        `SELECT a.name, r.kind, r.read_ts, r.ack_ts, r.admission_json FROM message_recipients r JOIN agents a ON a.id = r.agent_id
+        `SELECT a.name, r.kind, r.read_ts, r.ack_ts, r.withdrawn_ts, r.admission_json FROM message_recipients r JOIN agents a ON a.id = r.agent_id
          WHERE r.message_id = ? ORDER BY a.name`,
       )
       .all(messageId);
@@ -856,8 +838,9 @@ export class MailStore {
   ): Row[] {
     return this.db
       .query<Row, any[]>(
-        `SELECT m.id, m.subject, m.importance, m.ack_required, m.created_ts, m.thread_id, m.topic, s.name AS "from",
+        `SELECT m.id, m.subject, m.importance, m.revision, m.ack_required, m.created_ts, m.thread_id, m.topic, s.name AS "from",
                 m.body_md, m.recipients_json,
+                EXISTS (SELECT 1 FROM message_recipients r WHERE r.message_id = m.id AND r.withdrawn_ts IS NOT NULL) AS has_withdrawn_deliveries,
                 snippet(messages_fts, -1, ?10, ?11, ' … ', 32) AS excerpt
          FROM messages_fts f JOIN messages m ON m.id = f.rowid JOIN agents s ON s.id = m.sender_id
          WHERE messages_fts MATCH ?1 AND m.project_id = ?2 AND (?3 IS NULL OR s.name = ?3 COLLATE NOCASE)
@@ -974,7 +957,7 @@ export class MailStore {
   thread(p: Project, threadId: string) {
     return this.db
       .query<Row, [number, string, string]>(
-        `SELECT m.*, s.name AS sender FROM messages m JOIN agents s ON s.id = m.sender_id
+        `SELECT m.*, s.name AS sender, EXISTS (SELECT 1 FROM message_recipients r WHERE r.message_id = m.id AND r.withdrawn_ts IS NOT NULL) AS has_withdrawn_deliveries FROM messages m JOIN agents s ON s.id = m.sender_id
      WHERE m.project_id = ? AND (m.thread_id = ? OR CAST(m.id AS TEXT) = ?) ORDER BY m.created_ts, m.id`,
       )
       .all(p.id, threadId, threadId);

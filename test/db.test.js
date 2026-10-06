@@ -55,7 +55,7 @@ test("identity columns are backfilled from each tag, and every open repairs rows
     old.close();
 
     let db = openDatabase(path);
-    expect(db.query("PRAGMA user_version").get().user_version).toBe(5);
+    expect(db.query("PRAGMA user_version").get().user_version).toBe(6);
     expect(
       db.query("SELECT host, session_id, t3_thread, build, cwd FROM agents ORDER BY id").all(),
     ).toEqual([
@@ -86,7 +86,7 @@ test("identity columns are backfilled from each tag, and every open repairs rows
     `);
     db.close();
     db = openDatabase(path);
-    expect(db.query("PRAGMA user_version").get().user_version).toBe(5);
+    expect(db.query("PRAGMA user_version").get().user_version).toBe(6);
     expect(db.query("SELECT worktree FROM agents WHERE id = 1").get().worktree).toBe("/w/edit");
     expect(
       db
@@ -116,6 +116,9 @@ test("migrating a released database preserves messages without inventing sender 
       ALTER TABLE agents DROP COLUMN lifecycle_profile;
       ALTER TABLE agents DROP COLUMN lifecycle_thread;
       ALTER TABLE message_recipients DROP COLUMN admission_json;
+      ALTER TABLE message_recipients DROP COLUMN withdrawn_ts;
+      ALTER TABLE messages DROP COLUMN revision;
+      DROP TABLE message_mutations;
       PRAGMA user_version = 1;
       INSERT INTO wake_cursors(session, announced, offered) VALUES('previous-session',10,12);
       INSERT INTO projects VALUES (1,'repo','/r',1);
@@ -131,6 +134,123 @@ test("migrating a released database preserves messages without inventing sender 
       expect(db.query("SELECT * FROM wake_cursors WHERE session='previous-session'").get()).toEqual(
         { session: "previous-session", announced: 10, offered: 12 },
       );
+      db.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unsupported newer mailbox schema is refused without creating tables", () => {
+  const dir = mkdtempSync(join(tmpdir(), "db-future-"));
+  const path = join(dir, "mail.sqlite");
+  try {
+    const db = new Database(path, { create: true });
+    db.run("PRAGMA user_version=7");
+    db.close();
+    expect(() => openDatabase(path)).toThrow("Unsupported mailbox schema 7");
+    const inspect = new Database(path, { readonly: true });
+    expect(inspect.query("SELECT name FROM sqlite_master").all()).toEqual([]);
+    expect(inspect.query("PRAGMA user_version").get().user_version).toBe(7);
+    inspect.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("opening refuses a schema upgrade committed after its initial version read", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "db-future-race-"));
+  const path = join(dir, "mail.sqlite");
+  const writer = openDatabase(path);
+  let reader;
+  try {
+    writer.exec("BEGIN IMMEDIATE; PRAGMA user_version=7");
+    reader = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `
+      import { Database } from "bun:sqlite";
+      import { openDatabase } from "./src/db.ts";
+      const query = Database.prototype.query;
+      let observed = false;
+      Database.prototype.query = function(sql, ...args) {
+        const statement = query.call(this, sql, ...args);
+        if (sql === "PRAGMA user_version" && !observed) {
+          observed = true;
+          const row = statement.get();
+          console.log("observed " + row.user_version);
+          return { get: () => row };
+        }
+        return statement;
+      };
+      try { openDatabase(process.argv[1]).close(); console.log("accepted"); }
+      catch (error) { console.log(error.message); }
+      `,
+        path,
+      ],
+      { stdout: "pipe" },
+    );
+    const output = reader.stdout.getReader();
+    const first = new TextDecoder().decode((await output.read()).value);
+    expect(first).toContain("observed 6");
+    writer.run("COMMIT");
+    let result = first;
+    for (;;) {
+      const chunk = await output.read();
+      if (chunk.done) {
+        break;
+      }
+      result += new TextDecoder().decode(chunk.value);
+    }
+    expect(await reader.exited).toBe(0);
+    expect(result).toContain("Unsupported mailbox schema 7");
+    expect(result).not.toContain("accepted");
+    expect(writer.query("PRAGMA user_version").get().user_version).toBe(7);
+  } finally {
+    if (writer.inTransaction) {
+      writer.run("ROLLBACK");
+    }
+    writer.close();
+    if (reader) {
+      await reader.exited;
+    }
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("version-five upgrade retains mail, retry results and uncertain cursors", () => {
+  const dir = mkdtempSync(join(tmpdir(), "db-mutation-upgrade-"));
+  const path = join(dir, "mail.sqlite");
+  try {
+    let db = openDatabase(path);
+    db.exec(`INSERT INTO projects VALUES(1,'repo','/repo/upgrade',1);
+      INSERT INTO agents(id,project_id,name,program,model,inception_ts,last_active_ts) VALUES(1,1,'BlueLake','x','x',1,1);
+      INSERT INTO messages(id,project_id,sender_id,subject,body_md,created_ts) VALUES(1,1,1,'retained','history',1);
+      INSERT INTO message_recipients(message_id,agent_id,created_ts) VALUES(1,1,1);
+      INSERT INTO wake_cursors VALUES('uncertain',3,7);
+      INSERT INTO idempotency_keys VALUES('send_message',1,'old-key','fingerprint','{"id":1}',1);
+      ALTER TABLE messages DROP COLUMN revision;
+      ALTER TABLE message_recipients DROP COLUMN withdrawn_ts;
+      DROP TABLE message_mutations; PRAGMA user_version=5;`);
+    const cursors = db.query("SELECT * FROM wake_cursors").all();
+    const keys = db.query("SELECT * FROM idempotency_keys").all();
+    db.close();
+    for (let round = 0; round < 2; round++) {
+      db = openDatabase(path);
+      expect(db.query("SELECT subject,body_md,revision FROM messages").get()).toEqual({
+        subject: "retained",
+        body_md: "history",
+        revision: 0,
+      });
+      expect(db.query("SELECT withdrawn_ts,read_ts,ack_ts FROM message_recipients").get()).toEqual({
+        withdrawn_ts: null,
+        read_ts: null,
+        ack_ts: null,
+      });
+      expect(db.query("SELECT * FROM wake_cursors").all()).toEqual(cursors);
+      expect(db.query("SELECT * FROM idempotency_keys").all()).toEqual(keys);
+      expect(db.query("SELECT * FROM message_mutations").all()).toEqual([]);
       db.close();
     }
   } finally {
