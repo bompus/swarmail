@@ -55,7 +55,7 @@ test("identity columns are backfilled from each tag, and every open repairs rows
     old.close();
 
     let db = openDatabase(path);
-    expect(db.query("PRAGMA user_version").get().user_version).toBe(6);
+    expect(db.query("PRAGMA user_version").get().user_version).toBe(7);
     expect(
       db.query("SELECT host, session_id, t3_thread, build, cwd FROM agents ORDER BY id").all(),
     ).toEqual([
@@ -86,7 +86,7 @@ test("identity columns are backfilled from each tag, and every open repairs rows
     `);
     db.close();
     db = openDatabase(path);
-    expect(db.query("PRAGMA user_version").get().user_version).toBe(6);
+    expect(db.query("PRAGMA user_version").get().user_version).toBe(7);
     expect(db.query("SELECT worktree FROM agents WHERE id = 1").get().worktree).toBe("/w/edit");
     expect(
       db
@@ -117,6 +117,7 @@ test("migrating a released database preserves messages without inventing sender 
       ALTER TABLE agents DROP COLUMN lifecycle_thread;
       ALTER TABLE message_recipients DROP COLUMN admission_json;
       ALTER TABLE message_recipients DROP COLUMN withdrawn_ts;
+      ALTER TABLE messages DROP COLUMN notification_policy;
       ALTER TABLE messages DROP COLUMN revision;
       DROP TABLE message_mutations;
       PRAGMA user_version = 1;
@@ -146,12 +147,12 @@ test("unsupported newer mailbox schema is refused without creating tables", () =
   const path = join(dir, "mail.sqlite");
   try {
     const db = new Database(path, { create: true });
-    db.run("PRAGMA user_version=7");
+    db.run("PRAGMA user_version=8");
     db.close();
-    expect(() => openDatabase(path)).toThrow("Unsupported mailbox schema 7");
+    expect(() => openDatabase(path)).toThrow("Unsupported mailbox schema 8");
     const inspect = new Database(path, { readonly: true });
     expect(inspect.query("SELECT name FROM sqlite_master").all()).toEqual([]);
-    expect(inspect.query("PRAGMA user_version").get().user_version).toBe(7);
+    expect(inspect.query("PRAGMA user_version").get().user_version).toBe(8);
     inspect.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -164,7 +165,7 @@ test("opening refuses a schema upgrade committed after its initial version read"
   const writer = openDatabase(path);
   let reader;
   try {
-    writer.exec("BEGIN IMMEDIATE; PRAGMA user_version=7");
+    writer.exec("BEGIN IMMEDIATE; PRAGMA user_version=8");
     reader = Bun.spawn(
       [
         process.execPath,
@@ -193,7 +194,7 @@ test("opening refuses a schema upgrade committed after its initial version read"
     );
     const output = reader.stdout.getReader();
     const first = new TextDecoder().decode((await output.read()).value);
-    expect(first).toContain("observed 6");
+    expect(first).toContain("observed 7");
     writer.run("COMMIT");
     let result = first;
     for (;;) {
@@ -204,9 +205,9 @@ test("opening refuses a schema upgrade committed after its initial version read"
       result += new TextDecoder().decode(chunk.value);
     }
     expect(await reader.exited).toBe(0);
-    expect(result).toContain("Unsupported mailbox schema 7");
+    expect(result).toContain("Unsupported mailbox schema 8");
     expect(result).not.toContain("accepted");
-    expect(writer.query("PRAGMA user_version").get().user_version).toBe(7);
+    expect(writer.query("PRAGMA user_version").get().user_version).toBe(8);
   } finally {
     if (writer.inTransaction) {
       writer.run("ROLLBACK");
@@ -230,6 +231,7 @@ test("version-five upgrade retains mail, retry results and uncertain cursors", (
       INSERT INTO message_recipients(message_id,agent_id,created_ts) VALUES(1,1,1);
       INSERT INTO wake_cursors VALUES('uncertain',3,7);
       INSERT INTO idempotency_keys VALUES('send_message',1,'old-key','fingerprint','{"id":1}',1);
+      ALTER TABLE messages DROP COLUMN notification_policy;
       ALTER TABLE messages DROP COLUMN revision;
       ALTER TABLE message_recipients DROP COLUMN withdrawn_ts;
       DROP TABLE message_mutations; PRAGMA user_version=5;`);

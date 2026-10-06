@@ -602,6 +602,18 @@ export class MailStore {
   }
 
   deliver(p: Project, sender: Agent, a: Args, defaults: Row = {}) {
+    const policy = a.notification_policy === undefined ? "wake" : a.notification_policy;
+    const importance = a.importance ?? defaults.importance ?? "normal";
+    const ack = !!(a.ack_required ?? defaults.ack_required);
+    if (policy !== "wake" && policy !== "quiet") {
+      throw new ToolError("INVALID_ARGUMENT", "notification_policy must be wake or quiet");
+    }
+    if (policy === "quiet" && (ack || !["normal", "low"].includes(importance))) {
+      throw new ToolError(
+        "INVALID_ARGUMENT",
+        "quiet mail requires normal/low importance and no acknowledgement request",
+      );
+    }
     const {
       sender: currentSender,
       recipients,
@@ -617,8 +629,8 @@ export class MailStore {
     const m = this.db
       .query<Row, any[]>(
         `INSERT INTO messages (project_id, sender_id, thread_id, topic, subject, body_md, importance, ack_required,
-         created_ts, recipients_json, sender_location)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
+         created_ts, recipients_json, sender_location, notification_policy)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`,
       )
       .get(
         p.id,
@@ -627,11 +639,12 @@ export class MailStore {
         a.topic ?? defaults.topic ?? null,
         str(a.subject ?? defaults.subject, "subject"),
         str(a.body_md, "body_md"),
-        a.importance ?? defaults.importance ?? "normal",
-        (a.ack_required ?? defaults.ack_required) ? 1 : 0,
+        importance,
+        ack ? 1 : 0,
         nowUs(),
         JSON.stringify({ to: names("to"), cc: names("cc"), bcc: names("bcc") }),
         JSON.stringify(locations(p.human_key, [sender])[0]),
+        policy,
       )!;
     const add = this.db.query(
       "INSERT OR IGNORE INTO message_recipients (message_id, agent_id, kind, created_ts, admission_json) VALUES (?, ?, ?, ?, ?)",
@@ -660,7 +673,7 @@ export class MailStore {
     const now = nowUs();
     const rows = this.db
       .query<Row, any[]>(
-        `SELECT m.id, m.project_id, m.sender_id, m.thread_id, m.topic, m.subject, m.importance, m.revision, m.ack_required,
+        `SELECT m.id, m.project_id, m.sender_id, m.thread_id, m.topic, m.subject, m.importance, m.notification_policy, m.revision, m.ack_required,
               s.name AS "from", m.sender_location, m.created_ts, r.read_ts, r.ack_ts, r.kind, m.body_md
        FROM message_recipients r JOIN messages m ON m.id = r.message_id JOIN agents s ON s.id = m.sender_id
        WHERE r.agent_id = ?1 AND r.withdrawn_ts IS NULL AND (?2 = 0 OR r.read_ts IS NULL) AND (?3 = 0 OR m.importance IN ('high', 'urgent'))
@@ -706,7 +719,7 @@ export class MailStore {
     const now = nowUs();
     const rows = this.db
       .query<Row, any[]>(`
-      SELECT m.id, m.thread_id, m.subject, m.importance, m.revision,
+      SELECT m.id, m.thread_id, m.subject, m.importance, m.notification_policy, m.revision,
              m.ack_required, m.created_ts, m.body_md, s.name AS "from",
              r.read_ts, r.ack_ts, a.id AS recipient_id, a.name AS agent_name,
              p.human_key AS project_key
@@ -741,6 +754,7 @@ export class MailStore {
       thread_id: row.thread_id,
       subject: row.subject,
       importance: row.importance,
+      notification_policy: row.notification_policy,
       revision: row.revision,
       ack_required: !!row.ack_required,
       from: row.from,
@@ -838,7 +852,7 @@ export class MailStore {
   ): Row[] {
     return this.db
       .query<Row, any[]>(
-        `SELECT m.id, m.subject, m.importance, m.revision, m.ack_required, m.created_ts, m.thread_id, m.topic, s.name AS "from",
+        `SELECT m.id, m.subject, m.importance, m.notification_policy, m.revision, m.ack_required, m.created_ts, m.thread_id, m.topic, s.name AS "from",
                 m.body_md, m.recipients_json,
                 EXISTS (SELECT 1 FROM message_recipients r WHERE r.message_id = m.id AND r.withdrawn_ts IS NOT NULL) AS has_withdrawn_deliveries,
                 snippet(messages_fts, -1, ?10, ?11, ' … ', 32) AS excerpt

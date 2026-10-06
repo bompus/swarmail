@@ -127,12 +127,12 @@ function mailboxSnapshot(db: Database) {
     JOIN message_recipients r ON r.agent_id = a.id
     JOIN messages m ON m.id = r.message_id
     WHERE a.retired_at IS NULL AND ${lifecycleEligible("a")} AND (a.session_id = ?1 OR a.t3_thread = ?1)
-      AND r.read_ts IS NULL AND r.withdrawn_ts IS NULL AND m.subject <> ?2
+      AND r.read_ts IS NULL AND r.withdrawn_ts IS NULL AND m.notification_policy = 'wake' AND m.subject <> ?2
     GROUP BY a.id
     ORDER BY min(CASE WHEN m.importance IN ('urgent', 'high') THEN 0 ELSE 1 END), p.human_key, a.name
     LIMIT 1001`);
 
-  /** Current unread mailbox identities, including mail already offered. No cursor, ping or receipt writes. */
+  /** Current wake-eligible unread mailbox identities, including mail already offered. No cursor, ping or receipt writes. */
   return (session: string) => {
     const rows = mailboxes.all(session, PING_SUBJECT);
     if (rows.length > 1000) {
@@ -155,7 +155,7 @@ function pendingMail(db: Database, eligible: (session: string) => boolean) {
     JOIN agents s ON s.id = m.sender_id
     JOIN agents a ON a.id = r.agent_id
     JOIN projects p ON p.id = a.project_id
-    WHERE r.agent_id IN (SELECT value FROM json_each(?)) AND r.read_ts IS NULL AND r.withdrawn_ts IS NULL AND m.id > ?
+    WHERE r.agent_id IN (SELECT value FROM json_each(?)) AND r.read_ts IS NULL AND r.withdrawn_ts IS NULL AND m.notification_policy = 'wake' AND m.id > ?
     ORDER BY m.id`);
 
   const cursor = wakeCursor(db);

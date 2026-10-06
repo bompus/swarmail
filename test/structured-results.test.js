@@ -178,6 +178,7 @@ test("a pre-upgrade reply replay preserves omitted fields and its saved acknowle
   const historical = { ...first, ack_required: true };
   delete historical.delivery;
   delete historical.revision;
+  delete historical.notification_policy;
   db.run("UPDATE idempotency_keys SET result = ? WHERE key = ?", [
     JSON.stringify(historical),
     "old-reply",

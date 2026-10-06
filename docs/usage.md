@@ -84,6 +84,12 @@ needs no reply.
   bound source. Standalone lifecycle authority is not enabled, so both policies
   currently store unknown standalone mail with the same warnings.
   `swarmail send --json` prints the full result; ordinary output prints warnings.
+- `notification_policy` accepts `wake` (default) or `quiet`; the CLI uses
+  `--notification-policy`. Quiet normal/low informational mail stays in inbox
+  and search without automatic inbox hints. Quiet high/urgent mail or an
+  acknowledgement request is rejected. Keep actionable handoffs, requested
+  results and blockers on wake delivery. Replies default to wake independently
+  of the original policy. Priority edits cannot promote quiet mail to high/urgent.
 - A nonempty `idempotency_key` makes an identical retry return the original
   message. Reuse the same key, tool, calling agent and arguments. Changed
   arguments with that key return `IDEMPOTENCY_KEY_CONFLICT`.

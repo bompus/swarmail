@@ -64,6 +64,8 @@ test("send and inbox act as the session's agent in the current repository", asyn
           "GreenLake",
           "--delivery-policy",
           "durable",
+          "--notification-policy",
+          "quiet",
           "--json",
         ],
         async () => "",
@@ -71,6 +73,7 @@ test("send and inbox act as the session's agent in the current repository", asyn
         repo,
       ),
     ).toBe(0);
+    expect(JSON.parse(log.mock.calls.at(-1)[0]).notification_policy).toBe("quiet");
     expect(JSON.parse(log.mock.calls.at(-1)[0]).delivery).toMatchObject({
       persisted: true,
       historical: false,

@@ -34,6 +34,7 @@ const message = {
   subject: string,
   body_md: string,
   importance: string,
+  notification_policy: { enum: ["wake", "quiet"] },
   revision: integer,
   ack_required: boolean,
   created_ts: nullableString,
@@ -56,9 +57,9 @@ const message = {
 };
 // Pre-admission/pre-revision retry records keep their original fields on replay.
 const messageResult = (properties: Record<string, unknown>) => ({
-  ...object(properties, ["idempotent_replay", "delivery", "revision"]),
+  ...object(properties, ["idempotent_replay", "delivery", "revision", "notification_policy"]),
   anyOf: [
-    { required: ["delivery", "revision"] },
+    { required: ["delivery", "revision", "notification_policy"] },
     { properties: { idempotent_replay: { const: true } }, required: ["idempotent_replay"] },
   ],
 });

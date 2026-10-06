@@ -84,6 +84,7 @@ function parse(args: string[]) {
       arg === "--timeout" ||
       arg === "--cursor" ||
       arg === "--delivery-policy" ||
+      arg === "--notification-policy" ||
       arg === "--idempotency-key" ||
       arg === "--expected-revision" ||
       arg === "--recipients"
@@ -170,6 +171,9 @@ export async function mail(
       subject,
       body_md: body ?? (await stdin()),
       ...(opts["delivery-policy"] !== undefined && { delivery_policy: opts["delivery-policy"] }),
+      ...(opts["notification-policy"] !== undefined && {
+        notification_policy: opts["notification-policy"],
+      }),
     });
     if (opts.json) {
       console.log(JSON.stringify(sent));
