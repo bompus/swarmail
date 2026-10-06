@@ -252,6 +252,8 @@ test("identity discovery rejects inherited variables and conflicting thread regi
     selfSession({ HOME: root, XDG_STATE_HOME: dir, CODEX_THREAD_ID: "current" }, owner),
   ).toThrow("cannot identify");
   expect(() => selfSession({}, null)).toThrow("cannot identify");
+  localState(dir, "current", owner, { a: "[codex:current]" });
+  expect(() => selfSession({ HOME: root, XDG_STATE_HOME: dir }, owner)).toThrow("cannot identify");
 });
 
 test("session inbox rejects malformed identities and limits", async () => {

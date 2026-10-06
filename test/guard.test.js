@@ -112,6 +112,49 @@ test("finds its own names from the register hook's state for the host process", 
   rmSync(state, { recursive: true });
 });
 
+test("shared host processes never confer another session's reservation identity", () => {
+  const state = join(dir, "state", "swarmail-register");
+  mkdirSync(state, { recursive: true });
+  const owner = { name: "codex", pid: 42, start: "7" };
+  for (const [id, name, host] of [
+    ["current", "GreenLake", "codex"],
+    ["other", "BlueRiver", "codex"],
+    ["foreign", "GoldMoss", "claude"],
+  ]) {
+    writeFileSync(
+      join(state, `${id}.json`),
+      JSON.stringify({
+        name,
+        host: owner,
+        tags: { "/fixture": `[${host}:${id}]` },
+      }),
+    );
+  }
+  expect([...selfNames({ ...env, CODEX_THREAD_ID: "current" }, owner)]).toEqual(["GreenLake"]);
+  expect([...selfNames({ ...env, CODEX_THREAD_ID: "missing" }, owner)]).toEqual([]);
+  expect([...selfNames({ ...env, CODEX_THREAD_ID: "foreign" }, owner)]).toEqual([]);
+  expect([
+    ...selfNames({ ...env, CODEX_THREAD_ID: "current", CLAUDE_CODE_SESSION_ID: "other" }, owner),
+  ]).toEqual([]);
+  expect([...selfNames({ ...env, CLAUDE_CODE_SESSION_ID: "foreign" }, owner)]).toEqual([]);
+  expect([...selfNames(env, owner)]).toEqual([]);
+  expect([...selfNames(env, { pid: 42 })]).toEqual([]);
+  expect([...selfNames({ ...env, SWARMAIL_AGENT: "ChosenName" }, owner)]).toEqual(["ChosenName"]);
+  rmSync(join(state, "foreign.json"));
+  rmSync(join(state, "other.json"));
+  expect([...selfNames(env, owner)]).toEqual([]);
+  writeFileSync(
+    join(state, "foreign.json"),
+    JSON.stringify({ name: "GoldMoss", host: owner, tags: { "/fixture": "[claude:foreign]" } }),
+  );
+  rmSync(join(state, "current.json"));
+  expect([
+    ...selfNames({ ...env, CLAUDE_CODE_SESSION_ID: "foreign" }, { ...owner, name: "claude" }),
+  ]).toEqual(["GoldMoss"]);
+  expect([...selfNames(env, { ...owner, name: "opencode" })]).toEqual([]);
+  rmSync(state, { recursive: true });
+});
+
 test("the installed hook blocks a real commit and preserves the hook chain", () => {
   const hooks = join(repo, ".git", "hooks");
   for (const hook of ["pre-commit", "pre-push"]) {

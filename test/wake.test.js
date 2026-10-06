@@ -112,7 +112,7 @@ test("wakes a session for unread mail to its tagged agent only with one inbox in
   await send("GreenCastle"); // unread before the session's first wait: announced at once
   let res = await wait("s-1");
   expect(res.status).toBe(200);
-  expect(await res.text()).toBe("Swarmail: Fetch all unread mail with swarmail inbox --session.\n");
+  expect(await res.text()).toBe("Swarmail: run swarmail inbox --session.\n");
   await call("fetch_session_inbox", {
     host: "claude",
     session_id: "s-1",
@@ -126,7 +126,7 @@ test("wakes a session for unread mail to its tagged agent only with one inbox in
   await send("GreenCastle");
   res = await pending;
   expect(res.status).toBe(200);
-  expect(await res.text()).toBe("Swarmail: Fetch all unread mail with swarmail inbox --session.\n");
+  expect(await res.text()).toBe("Swarmail: run swarmail inbox --session.\n");
   // Already announced: the next wait holds until newer mail or its timeout.
   expect((await wait("s-1", 1)).status).toBe(204);
 });
@@ -135,9 +135,7 @@ test("a retried wait gets a lost hint again, and a restarted server does not re-
   await send("GreenCastle");
   expect((await wait("s-1")).status).toBe(200);
   const retried = await fetch(`${base}/wait?session=s-1&timeout=5&retry=1`);
-  expect(await retried.text()).toBe(
-    "Swarmail: Fetch all unread mail with swarmail inbox --session.\n",
-  );
+  expect(await retried.text()).toBe("Swarmail: run swarmail inbox --session.\n");
   expect((await wait("s-1", 1)).status).toBe(204);
 
   // A second server on the same database stands in for a restart.
@@ -155,9 +153,7 @@ test("a retried wait gets a lost hint again, and a restarted server does not re-
     const pending = waitOther(5);
     await Bun.sleep(100);
     await send("GreenCastle");
-    expect(await (await pending).text()).toBe(
-      "Swarmail: Fetch all unread mail with swarmail inbox --session.\n",
-    );
+    expect(await (await pending).text()).toBe("Swarmail: run swarmail inbox --session.\n");
   } finally {
     other.server.stop(true);
     other.db.close();
@@ -198,9 +194,7 @@ test("one instruction covers normal and urgent mail across repositories", async 
     body_md: "b",
     importance: "urgent",
   });
-  expect(await (await wait("s-1")).text()).toBe(
-    "Swarmail: Fetch all unread mail with swarmail inbox --session.\n",
-  );
+  expect(await (await wait("s-1")).text()).toBe("Swarmail: run swarmail inbox --session.\n");
   expect((await wait("s-1", 1)).status).toBe(204);
 });
 
@@ -279,9 +273,7 @@ test("the shell-free re-arm starts a wait only for a registered session with no 
   expect(parseInt(readFileSync(pidFile, "utf8"))).toBe(waits.pid);
   await send("GreenCastle");
   expect(await waits.exited).toBe(2);
-  expect(await new Response(waits.stderr).text()).toBe(
-    "Swarmail: Fetch all unread mail with swarmail inbox --session.\n",
-  );
+  expect(await new Response(waits.stderr).text()).toBe("Swarmail: run swarmail inbox --session.\n");
 }, 20000);
 
 for (const [name, hook] of Object.entries(HOOKS)) {
@@ -316,11 +308,11 @@ for (const [name, hook] of Object.entries(HOOKS)) {
       expect(await claude.exited).toBe(2);
       expect(existsSync(pidFile)).toBe(false);
       expect(await new Response(claude.stderr).text()).toContain(
-        "Swarmail: Fetch all unread mail with swarmail inbox --session.\n",
+        "Swarmail: run swarmail inbox --session.\n",
       );
       await cursor.exited;
       expect(JSON.parse(await new Response(cursor.stdout).text()).followup_message).toContain(
-        "Swarmail: Fetch all unread mail with swarmail inbox --session.",
+        "Swarmail: run swarmail inbox --session.",
       );
 
       // With no server, Claude gets no output and Cursor an empty decision.
@@ -422,7 +414,7 @@ for (const [name, hook] of Object.entries(HOOKS)) {
         await send("PinkFox");
         expect(await newer.exited).toBe(0);
         expect(JSON.parse(await new Response(newer.stdout).text()).followup_message).toContain(
-          "Swarmail: Fetch all unread mail with swarmail inbox --session.",
+          "Swarmail: run swarmail inbox --session.",
         );
       } finally {
         older.kill();
@@ -524,7 +516,7 @@ for (const [name, hook] of Object.entries(HOOKS)) {
         await send("PinkFox");
         expect(await waiting.exited).toBe(0);
         expect(JSON.parse(await new Response(waiting.stdout).text()).followup_message).toContain(
-          "Swarmail: Fetch all unread mail with swarmail inbox --session.",
+          "Swarmail: run swarmail inbox --session.",
         );
       } finally {
         waiting.kill();
@@ -540,7 +532,7 @@ test("a wait by T3 thread id wakes the thread's agent", async () => {
   await send("GreenCastle"); // tag t3:th-1
   const res = await wait("th-1", 1);
   expect(res.status).toBe(200);
-  expect(await res.text()).toBe("Swarmail: Fetch all unread mail with swarmail inbox --session.\n");
+  expect(await res.text()).toBe("Swarmail: run swarmail inbox --session.\n");
 });
 
 describe("read-only unread mailbox peek", () => {
@@ -656,9 +648,7 @@ describe("read-only unread mailbox peek", () => {
     expect(waiters.peek(id)).toEqual({ mailboxes: [] });
     await send("WhiteOwl");
     waiters.notify();
-    expect((await polling).hint).toBe(
-      "Swarmail: Fetch all unread mail with swarmail inbox --session.",
-    );
+    expect((await polling).hint).toBe("Swarmail: run swarmail inbox --session.");
     expect(waiters.peek(id).mailboxes).toEqual([{ recipient: "WhiteOwl", project: P }]);
   });
 

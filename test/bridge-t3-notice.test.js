@@ -327,9 +327,7 @@ test("successive mail steers the active run across restart and retains every mai
   expect(f.projection.runs.filter((run) => run.status === "running").map((run) => run.id)).toEqual([
     runId,
   ]);
-  expect(f.projection.messages.at(-1).text).toBe(
-    "Swarmail: Fetch all unread mail with swarmail inbox --session.",
-  );
+  expect(f.projection.messages.at(-1).text).toBe("Swarmail: run swarmail inbox --session.");
   expect(f.state.readContext().hints).toEqual([mailboxHint("repo-a"), mailboxHint("repo-b")]);
   expect(f.received.every((command) => command.deliveryIntent === "steer")).toBe(true);
   expect(f.state.acknowledged).toBe(2);
@@ -435,9 +433,7 @@ test("a queued notice starting during edit replans with a new id and preserves b
   f.race();
   await f.deliver(2, hint("repo-b"));
   expect(f.queued()).toHaveLength(0);
-  expect(f.projection.messages.at(-1).text).toBe(
-    "Swarmail: Fetch all unread mail with swarmail inbox --session.",
-  );
+  expect(f.projection.messages.at(-1).text).toBe("Swarmail: run swarmail inbox --session.");
   expect(f.state.readContext().hints).toEqual([mailboxHint("repo-a"), mailboxHint("repo-b")]);
   expect(f.received.at(-1).type).toBe("message.dispatch");
   expect(f.received.at(-1).commandId).not.toBe(f.received.at(-2).commandId);
@@ -464,7 +460,7 @@ test("legacy duplicate queues compact without changing user prompts or automatic
   await f.deliver(offer.eventId, offer.hint);
   expect(f.queued().map((message) => message.id)).toEqual(["user", "notification"]);
   expect(f.projection.messages.find((message) => message.id === "a").text).toBe(
-    "Swarmail: Fetch all unread mail with swarmail inbox --session.",
+    "Swarmail: run swarmail inbox --session.",
   );
   expect(f.state.readContext().hints).toEqual([mailboxHint("repo-a"), mailboxHint("repo-b")]);
   expect(f.state.acknowledged).toBe(1);
@@ -544,7 +540,7 @@ test("read mail disappears from a queued notice while other unread mail remains"
   expect(f.state.readContext().hints).toEqual([mailboxHint("repo-b")]);
   expect(
     f.projection.messages.find((message) => message.id === f.state.readContext().messageId).text,
-  ).toBe("Swarmail: Fetch all unread mail with swarmail inbox --session.");
+  ).toBe("Swarmail: run swarmail inbox --session.");
 });
 
 test("an empty current inbox cancels only queued mail notices", async () => {

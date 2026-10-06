@@ -144,7 +144,7 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
               );
               nextNotice = offer.eventId;
               assert(
-                offer.hint === "Swarmail: Fetch all unread mail with swarmail inbox --session.",
+                offer.hint === "Swarmail: run swarmail inbox --session.",
                 "each admitted offer directs the receiver to drain its session inbox",
               );
               assert(!offer.hint.includes("private"), "hint excludes message content");

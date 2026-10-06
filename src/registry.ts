@@ -408,18 +408,57 @@ export function openRegistry<S extends RegisterState = RegisterState>(
   };
 }
 
-/** Names this session registered under: SWARMAIL_AGENT, else the register hook's state for the agent host above this process. */
+function hostProvider(host: { name?: string } | null): string | undefined {
+  const name = host?.name
+    ?.match(/^(claude|codex|cursor-agent|opencode|devin|grok|agy|antigravity)/i)?.[1]
+    ?.toLowerCase();
+  return name === "cursor-agent" ? "cursor" : name === "antigravity" ? "agy" : name;
+}
+
+/** Names owned by this session; a shared host process alone never identifies one of its sessions. */
 export function selfNames(env: NodeJS.ProcessEnv = process.env, host = hostProcess()): Set<string> {
   if (env.SWARMAIL_AGENT) {
     return new Set([env.SWARMAIL_AGENT]);
   }
   const names = new Set<string>();
-  if (!host) {
+  if (host?.start === undefined) {
     return names;
   }
-  for (const state of openRegistry(registryDir(env)).all()) {
-    const owner = state.host;
-    if (owner?.pid === host.pid && owner.start === host.start && state.name) {
+  const variables = Object.entries(SESSION_ENV).filter(([, key]) => !!env[key]);
+  if (variables.length > 1) {
+    return names;
+  }
+  const explicit = variables[0];
+  const provider = hostProvider(host);
+  if (
+    (!explicit && provider && SESSION_ENV[provider]) ||
+    (explicit && provider && provider !== explicit[0])
+  ) {
+    return names;
+  }
+  const states = openRegistry(registryDir(env))
+    .all()
+    .filter(
+      (state) =>
+        state.host?.pid === host.pid &&
+        state.host.start === host.start &&
+        (!explicit || state.sessionId === env[explicit[1]]),
+    );
+  if (!explicit && states.length > 1) {
+    return names;
+  }
+  for (const state of states) {
+    const tags = Object.values(state.tags ?? {})
+      .map(parseTag)
+      .filter((tag): tag is Tag => !!tag);
+    if (
+      state.name &&
+      tags.every(
+        (tag) =>
+          (!provider || tag.host === provider) &&
+          (!explicit || (tag.host === explicit[0] && tag.sessionId === env[explicit[1]])),
+      )
+    ) {
       names.add(state.name);
     }
   }
@@ -456,12 +495,9 @@ export function selfSession(env: NodeJS.ProcessEnv = process.env, host = hostPro
     : identities.size === 1
       ? [...identities.values()][0]!.sessionId
       : null;
-  const ownerName = host?.name
-    .match(/^(claude|codex|cursor-agent|opencode|devin|grok|agy|antigravity)/i)?.[1]
-    ?.toLowerCase();
-  const ownerHost =
-    ownerName === "cursor-agent" ? "cursor" : ownerName === "antigravity" ? "agy" : ownerName;
+  const ownerHost = hostProvider(host);
   if (
+    (!explicit && ownerHost && SESSION_ENV[ownerHost]) ||
     !hostName ||
     !sessionId ||
     !SESSION_RE.test(sessionId) ||

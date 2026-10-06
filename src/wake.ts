@@ -39,7 +39,7 @@ interface Unread {
   thread_id: string | null;
 }
 
-export const INBOX_NOTICE = "Swarmail: Fetch all unread mail with swarmail inbox --session.";
+export const INBOX_NOTICE = "Swarmail: run swarmail inbox --session.";
 
 function receivingOwner(db: Database, session: string): string | null {
   const owners = noticeOwners(db, session);
