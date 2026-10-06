@@ -4,6 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Mail result validation uses direct checks without runtime package dependencies.
+  JSON Schema validation remains a development test reference.
+
 - Replies default to no acknowledgement request, even when the original message
   requested one. Set `ack_required: true` to request acknowledgement of a reply.
   Existing retry records retain their original result.

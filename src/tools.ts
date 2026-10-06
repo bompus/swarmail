@@ -1,6 +1,6 @@
 // Swarmail tools, one row each: the MCP definition, its flags and its handler. Shared lookups and writes live in
 // store.ts.
-import Ajv from "ajv";
+import { isMessageResult, isReplyResult, isReceiptResult } from "./message-validation.ts";
 import { MESSAGE_RESULT, REPLY_RESULT, RECEIPT_RESULT } from "./message-results.ts";
 import type { Lifecycle } from "./lifecycle.ts";
 import type { Database } from "bun:sqlite";
@@ -63,12 +63,11 @@ const RESERVATION_IDS = {
   description: "Only your reservations with these ids.",
 };
 
-interface Tool {
+interface ToolBase {
   name: string;
   description: string;
   properties: Record<string, Schema>;
   required: string[];
-  outputSchema?: Schema;
   /** Never writes, not even agent activity, so hosts may treat it as safe to run. */
   readOnly?: true;
   /** A repeat with the same arguments changes nothing more. */
@@ -79,6 +78,13 @@ interface Tool {
   wakes?: true;
   run: (s: MailStore, a: Args, info: { databasePath: string }) => unknown;
 }
+
+// A declared output contract always has a transaction-time check.
+type Tool = ToolBase &
+  (
+    | { outputSchema: Schema; validateResult: (value: unknown) => boolean }
+    | { outputSchema?: never; validateResult?: never }
+  );
 
 // FTS limits tokens, but a token or the punctuation between tokens can be arbitrarily long.
 function boundedExcerpt(value: string, startMarker: string, endMarker: string): string {
@@ -356,6 +362,7 @@ export const TOOLS: Tool[] = [
   {
     name: "send_message",
     outputSchema: MESSAGE_RESULT,
+    validateResult: isMessageResult,
     description:
       "Send a Markdown message to named agents in the same project. An unregistered, retired or closed " +
       "recipient fails the whole send with persisted:false and a reason. Bound source loss also rejects. " +
@@ -390,6 +397,7 @@ export const TOOLS: Tool[] = [
   {
     name: "reply_message",
     outputSchema: REPLY_RESULT,
+    validateResult: isReplyResult,
     description:
       "Reply in a message's thread, returning the stored message with reply_to. message_id " +
       "selects the original in this project. Omit to to address its sender; cc and bcc are added " +
@@ -607,6 +615,7 @@ export const TOOLS: Tool[] = [
   {
     name: "get_message_delivery_receipt",
     outputSchema: RECEIPT_RESULT,
+    validateResult: isReceiptResult,
     description:
       "Return a message's persisted_at and recipients with kind, read_at, acknowledged, " +
       "acknowledged_at and admission. Admission observations are historical; null admission means " +
@@ -823,11 +832,6 @@ export const TOOL_DEFINITIONS = TOOLS.map((t) => ({
       },
 }));
 
-const validator = new Ajv();
-const outputs = new Map(
-  TOOLS.filter((t) => t.outputSchema).map((t) => [t, validator.compile(t.outputSchema!)]),
-);
-
 /** Tools whose success can leave a waiting session with unread mail. */
 export const WAKES = new Set(TOOLS.filter((t) => t.wakes).map((t) => t.name));
 
@@ -849,10 +853,10 @@ export function createTools(
       (a: Args) =>
         s.atomic(() => {
           const value = t.run(s, a, info);
-          const validate = outputs.get(t);
+          const validate = t.validateResult;
           if (validate) {
             if (!validate(value)) {
-              console.error(`Invalid ${t.name} result`, validate.errors);
+              console.error(`Invalid ${t.name} result`);
               throw new ToolError("INTERNAL", "Tool result failed validation");
             }
             // Serialization is part of the transaction too; never report failure after storing mail.
