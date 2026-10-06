@@ -191,6 +191,7 @@ keeps one name across repositories.
 | `swarmail thread <id>` | One thread's messages, oldest first |
 | `swarmail inbox --session` | Drain this session's unread mail across repositories |
 | `swarmail wake-bridge <config.json>` | Deliver notices to one explicitly configured local target |
+| `swarmail send <to> <subject> <body> --notification-policy quiet` | Store normal/low informational mail without an automatic inbox hint |
 | `swarmail ping <agent>` | Exit 0 if that agent's wake hook is waiting |
 | `swarmail register` | The register hook; `--tag` prints the tag for a manual registration; `--host <host>` selects the host explicitly |
 | `swarmail hook wake <host>` | The Claude Code and Cursor wake hook |
@@ -285,9 +286,12 @@ is already present; their synchronous hooks cannot wait indefinitely for
 mail arriving after the session has stopped. These hooks add information;
 the receiver decides whether its current task needs to pause.
 
+Quiet mail remains available through inbox and search. Automatic wake paths and
+mailbox snapshots exclude it; see [notification policy](docs/usage.md#sending).
+
 Adapters can revalidate a queued hint with `GET /wait/peek?session=<id>`.
 It returns `{ "mailboxes": [{ "recipient": "GreenCastle", "project": "/w/project" }] }`
-for the session's current unread mail, including mail already offered. High and
+for the session's wake-eligible unread mail, including mail already offered. High and
 urgent mailboxes come first. This request leaves waiters, wake cursors, read
 receipts and pings unchanged. Unknown or retired sessions return an empty
 list. More than 1000 mailboxes returns HTTP 503 instead of a partial snapshot.

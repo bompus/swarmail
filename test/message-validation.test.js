@@ -22,6 +22,7 @@ const message = {
   subject: "Request",
   body_md: "Body",
   importance: "normal",
+  notification_policy: "wake",
   revision: 1,
   ack_required: false,
   created_ts: null,
@@ -106,7 +107,13 @@ for (const { name, schema, check, fixture } of [
 test("nested fields and historical replay preserve JSON Schema acceptance", () => {
   const reference = ajv.compile(MESSAGE_RESULT);
   const variants = [
-    { ...message, revision: undefined, delivery: undefined, idempotent_replay: true },
+    {
+      ...message,
+      notification_policy: undefined,
+      revision: undefined,
+      delivery: undefined,
+      idempotent_replay: true,
+    },
     { ...message, revision: undefined, idempotent_replay: false },
     { ...message, delivery: undefined },
     { ...message, sender_location: { repo: "repo", worktree: "tree", branch: null, title: null } },

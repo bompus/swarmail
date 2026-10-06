@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Sends and replies support quiet normal/low informational mail, retained in
+  inbox and search without automatic wakeups. Urgent mail and acknowledgement
+  requests require wake delivery. Existing callers keep wake delivery by default.
+
 - Opt-in approved update targets produce one pending hint at supported session
   context hooks. Loaded attestations are separate from mail acknowledgments;
   frozen contexts can hold updates. `swarmail updates --session` exposes pending

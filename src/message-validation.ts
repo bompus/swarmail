@@ -79,6 +79,7 @@ const messageFields = {
   subject: string,
   body_md: string,
   importance: string,
+  notification_policy: optional(oneOf(["wake", "quiet"])),
   revision: optional(integer),
   ack_required: boolean,
   created_ts: nullableString,
@@ -95,7 +96,8 @@ const messageResult = (fields: Record<string, Check>): Check => {
   return (value) =>
     check(value) &&
     (((value as Record<string, unknown>).delivery !== undefined &&
-      (value as Record<string, unknown>).revision !== undefined) ||
+      (value as Record<string, unknown>).revision !== undefined &&
+      (value as Record<string, unknown>).notification_policy !== undefined) ||
       (value as Record<string, unknown>).idempotent_replay === true);
 };
 export const isMessageResult = messageResult(messageFields);

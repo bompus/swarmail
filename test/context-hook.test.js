@@ -49,7 +49,13 @@ function fixture(host, key) {
         ...(host === "cursor" && stop && wakeAtStop ? ["2"] : stop ? ["stop"] : []),
       ],
       {
-        env: { ...process.env, SWARMAIL_WAKE_URL: wakeBase, XDG_STATE_HOME: dir, ...updates },
+        env: {
+          ...process.env,
+          SWARMAIL_UPDATE_TARGETS: "",
+          SWARMAIL_WAKE_URL: wakeBase,
+          XDG_STATE_HOME: dir,
+          ...updates,
+        },
         stdin: new Blob([JSON.stringify({ [key]: sid })]),
         stdout: "pipe",
         stderr: "pipe",

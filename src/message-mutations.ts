@@ -113,6 +113,9 @@ function importance(db: Database, m: Row, actor: Agent, a: Args) {
       },
     );
   }
+  if (m.notification_policy === "quiet" && ["high", "urgent"].includes(a.importance)) {
+    throw new ToolError("INVALID_ARGUMENT", "quiet mail cannot be promoted to high or urgent");
+  }
   const old = m.importance;
   if (old !== a.importance) {
     db.run("UPDATE messages SET importance = ?, revision = revision + 1 WHERE id = ?", [

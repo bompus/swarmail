@@ -55,7 +55,7 @@ export function newestUnread(
     .query<{ id: number | null }, [string, string, number]>(`
     SELECT max(m.id) AS id FROM agents a
     JOIN message_recipients r ON r.agent_id = a.id JOIN messages m ON m.id = r.message_id
-    WHERE ${OWNER_MATCH} AND r.read_ts IS NULL AND r.withdrawn_ts IS NULL AND m.subject <> ?2 AND m.id <= ?3
+    WHERE ${OWNER_MATCH} AND r.read_ts IS NULL AND r.withdrawn_ts IS NULL AND m.notification_policy = 'wake' AND m.subject <> ?2 AND m.id <= ?3
   `)
     .get(owner, PING_SUBJECT, through)!.id;
 }
@@ -74,7 +74,7 @@ export function reconcileNotices(db: Database): void {
            max(CASE WHEN m.id <= ?4 THEN m.id END) AS latest
     FROM agents a
     JOIN message_recipients r ON r.agent_id = a.id JOIN messages m ON m.id = r.message_id
-    WHERE ${OWNER_MATCH} AND r.read_ts IS NULL AND r.withdrawn_ts IS NULL AND m.subject <> ?2
+    WHERE ${OWNER_MATCH} AND r.read_ts IS NULL AND r.withdrawn_ts IS NULL AND m.notification_policy = 'wake' AND m.subject <> ?2
   `);
   for (const row of db
     .query<{ owner: string; covered_through: number }, []>(

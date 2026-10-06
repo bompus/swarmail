@@ -137,6 +137,11 @@ const MIGRATIONS: ((db: Database) => void)[] = [
       revision INTEGER NOT NULL, details_json TEXT NOT NULL
     )`);
   },
+  (db) => {
+    db.run(
+      "ALTER TABLE messages ADD COLUMN notification_policy TEXT NOT NULL DEFAULT 'wake' CHECK(notification_policy IN ('wake', 'quiet'))",
+    );
+  },
 ];
 
 const IDENTITY = ["host", "session_id", "t3_thread", "build", "cwd"] as const;

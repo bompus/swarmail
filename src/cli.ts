@@ -130,7 +130,7 @@ const COMMANDS: Record<string, Command> = {
     ),
     mail(
       "send",
-      "swarmail send <to[,to]> <subject> [body] [--delivery-policy checked|durable] [--json]  send with availability feedback; body from stdin when omitted (mail.ts)",
+      "swarmail send <to[,to]> <subject> [body] [--delivery-policy checked|durable] [--notification-policy wake|quiet] [--json]  send with availability feedback; body from stdin when omitted (mail.ts)",
     ),
     mail(
       "ping",

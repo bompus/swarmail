@@ -11,13 +11,14 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
       INSERT INTO agents(id,project_id,name,program,model,task_description,inception_ts,last_active_ts,t3_thread,session_id)
         VALUES(1,1,'GreenCastle','test','test','[t3:order-test codex:order-native]',1,1,'order-test','order-native');
     `);
-    const send = () =>
+    const send = (notification_policy = "wake") =>
       tools.send_message({
         project_key: "/test",
         sender_name: "GreenCastle",
         to: ["GreenCastle"],
         subject: "private subject",
         body_md: "private body",
+        notification_policy,
       }).id;
     const tools = createTools(db, { databasePath: ":memory:", mutationsEnabled: true });
     const first = send();
@@ -90,6 +91,7 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
         };
         try {
           if (event === "new mail") {
+            send("quiet");
             nextBatches = [...batches, send()];
           } else if (event === "withdraw" || event === "priority") {
             nextBatches = mutateBatch(event, batches, next.join("/"));
