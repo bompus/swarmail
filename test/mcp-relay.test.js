@@ -96,3 +96,144 @@ test("answers each request with an error when the server is down", async () => {
   expect(out[0].error.message).toContain("not reachable");
   expect(out[0].error.message).toContain("#install");
 });
+
+const initialize = (id, protocolVersion) => ({
+  jsonrpc: "2.0",
+  id,
+  method: "initialize",
+  params: { protocolVersion },
+});
+const toolCall = (id, name, args) => ({
+  jsonrpc: "2.0",
+  id,
+  method: "tools/call",
+  params: { name, arguments: args },
+});
+const toolValue = (answer) => JSON.parse(answer.result.content[0].text);
+
+test("three independent Node clients preserve modern, legacy and absent-version delivery across reconnect", async () => {
+  const url = `http://127.0.0.1:${server.port}/mcp/`;
+  const project_key = "/project/relay-contract";
+  const other = "/project/relay-other";
+  const register = (id, name, project = project_key) =>
+    toolCall(id, "register_agent", {
+      project_key: project,
+      name,
+      program: "fixture",
+      model: "fixture",
+    });
+  const [sender, receiver, observer] = await Promise.all([
+    relay(url, [
+      initialize(1, "2025-06-18"),
+      register(2, "RelaySender"),
+      register(3, "RelaySender", other),
+      { jsonrpc: "2.0", id: 4, method: "tools/list" },
+    ]),
+    relay(url, [
+      initialize(1, "2024-11-05"),
+      register(2, "RelayReceiver"),
+      { jsonrpc: "2.0", id: 3, method: "tools/list" },
+    ]),
+    relay(url, [register(1, "RelayObserver"), { jsonrpc: "2.0", id: 2, method: "tools/list" }]),
+  ]);
+  expect(
+    sender.at(-1).result.tools.find((t) => t.name === "send_message").outputSchema,
+  ).toBeDefined();
+  for (const client of [receiver, observer]) {
+    expect(client.at(-1).result.tools.every((t) => !t.outputSchema)).toBe(true);
+  }
+  const args = {
+    project_key,
+    sender_name: "RelaySender",
+    to: ["RelayReceiver"],
+    subject: "Handoff",
+    body_md: "Persist through reconnect",
+    ack_required: true,
+    idempotency_key: "relay-reconnect",
+  };
+  const sent = (
+    await relay(url, [initialize(1, "2025-11-25"), toolCall(2, "send_message", args)])
+  )[1];
+  const message_id = toolValue(sent).id;
+  expect(sent.result.structuredContent).toEqual(toolValue(sent));
+  const read = await relay(url, [
+    initialize(1, "2024-11-05"),
+    toolCall(2, "fetch_inbox", { project_key, agent_name: "RelayReceiver", include_bodies: true }),
+  ]);
+  expect(toolValue(read[1]).find((m) => m.id === message_id).body_md).toBe(
+    "Persist through reconnect",
+  );
+  expect(read[1].result.structuredContent).toBeUndefined();
+  const beforeAck = await relay(url, [
+    toolCall(1, "get_message_delivery_receipt", { project_key, message_id }),
+    toolCall(2, "get_message_delivery_receipt", { project_key: other, message_id }),
+  ]);
+  expect(toolValue(beforeAck[0]).recipients[0]).toMatchObject({
+    acknowledged: false,
+    acknowledged_at: null,
+  });
+  expect(toolValue(beforeAck[1]).error.type).toBe("NOT_FOUND");
+  const ack = await relay(url, [
+    initialize(1, "2024-11-05"),
+    toolCall(2, "acknowledge_message", { project_key, agent_name: "RelayReceiver", message_id }),
+  ]);
+  expect(toolValue(ack[1]).acknowledged).toBe(true);
+  const replay = await relay(url, [
+    initialize(1, "2025-06-18"),
+    toolCall(2, "send_message", args),
+    toolCall(3, "get_message_delivery_receipt", { project_key, message_id }),
+  ]);
+  expect(replay[1].result.structuredContent).toMatchObject({
+    id: message_id,
+    idempotent_replay: true,
+  });
+  expect(replay[2].result.structuredContent.recipients[0]).toMatchObject({ acknowledged: true });
+  expect(db.query("SELECT count(*) AS n FROM messages WHERE subject = 'Handoff'").get().n).toBe(1);
+});
+
+test("only a successful matching initialize changes the forwarded protocol", async () => {
+  const headers = [];
+  const fixture = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      headers.push(req.headers.get("MCP-Protocol-Version"));
+      const msg = await req.json();
+      if (msg.method !== "initialize") {
+        return Response.json({ jsonrpc: "2.0", id: msg.id, result: {} });
+      }
+      const requested = msg.params.protocolVersion;
+      if (requested === "error") {
+        return Response.json({
+          jsonrpc: "2.0",
+          id: msg.id,
+          error: { code: -32602, message: "rejected" },
+        });
+      }
+      if (requested === "wrong-id") {
+        return Response.json({ jsonrpc: "2.0", id: -1, result: { protocolVersion: "2024-11-05" } });
+      }
+      if (requested === "invalid") {
+        return Response.json({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: 42 } });
+      }
+      if (requested === "http-error") {
+        return Response.json(
+          { jsonrpc: "2.0", id: msg.id, result: { protocolVersion: "2024-11-05" } },
+          { status: 500 },
+        );
+      }
+      return Response.json({ jsonrpc: "2.0", id: msg.id, result: { protocolVersion: requested } });
+    },
+  });
+  try {
+    const messages = [initialize(1, "2025-06-18")];
+    let id = 1;
+    for (const event of ["error", "wrong-id", "invalid", "http-error", "2024-11-05"]) {
+      messages.push(initialize(++id, event), { jsonrpc: "2.0", id: ++id, method: "ping" });
+    }
+    await relay(`http://127.0.0.1:${fixture.port}/mcp/`, messages);
+    expect(headers).toEqual([null, ...Array(9).fill("2025-06-18"), "2024-11-05"]);
+  } finally {
+    fixture.stop(true);
+  }
+});

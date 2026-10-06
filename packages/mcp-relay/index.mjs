@@ -9,6 +9,7 @@ const url = process.env.SWARMAIL_URL || "http://127.0.0.1:18765/mcp/";
 const install = "https://github.com/bompus/swarmail#install";
 // Tool calls answer in milliseconds; nothing on /mcp/ long-polls.
 const TIMEOUT_MS = 30_000;
+let protocolVersion;
 
 const write = (message) => process.stdout.write(JSON.stringify(message) + "\n");
 const fail = (id, message) => write({ jsonrpc: "2.0", id, error: { code: -32000, message } });
@@ -26,7 +27,11 @@ async function relay(line) {
     // One deadline covers the headers and the body, so a stalled server cannot hold the queue.
     res = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        ...(protocolVersion && { "MCP-Protocol-Version": protocolVersion }),
+      },
       body: line,
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
@@ -53,7 +58,19 @@ async function relay(line) {
     return;
   }
   try {
-    write(JSON.parse(text));
+    const answer = JSON.parse(text);
+    if (
+      res.ok &&
+      msg?.method === "initialize" &&
+      answer.jsonrpc === "2.0" &&
+      answer.id === id &&
+      !answer.error &&
+      typeof answer.result?.protocolVersion === "string" &&
+      answer.result.protocolVersion.length > 0
+    ) {
+      protocolVersion = answer.result.protocolVersion;
+    }
+    write(answer);
   } catch {
     fail(id, `The Swarmail server at ${url} answered ${res.status}: ${text.slice(0, 200)}`);
   }

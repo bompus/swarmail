@@ -404,8 +404,9 @@ bun test
 bun run check   # format, lint and type check
 ```
 
-`bun scripts/build.ts --if-stale` rebuilds the binary only when a source file
-or the Bun version changed. Restart the unit to load a new build.
+`bun scripts/build.ts --if-stale` rebuilds the binary only when a source file,
+the dependency manifest or lockfile, or the Bun version changed. Restart the unit
+to load a new build.
 
 ## Sponsoring
 

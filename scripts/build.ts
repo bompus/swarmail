@@ -26,6 +26,13 @@ export function sourceHash(root = REPO_ROOT, bun = Bun.version): string {
       .update(readFileSync(join(dir, name)))
       .update("\0");
   }
+  // Compiled runtime dependencies change when the manifest or resolved versions change.
+  for (const name of ["package.json", "bun.lock"]) {
+    const path = join(root, name);
+    if (existsSync(path)) {
+      hash.update(`${name}\0`).update(readFileSync(path)).update("\0");
+    }
+  }
   return hash.digest("hex").slice(0, 16);
 }
 

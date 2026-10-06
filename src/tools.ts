@@ -1,5 +1,7 @@
 // Swarmail tools, one row each: the MCP definition, its flags and its handler. Shared lookups and writes live in
 // store.ts.
+import Ajv from "ajv";
+import { MESSAGE_RESULT, REPLY_RESULT, RECEIPT_RESULT } from "./message-results.ts";
 import type { Lifecycle } from "./lifecycle.ts";
 import type { Database } from "bun:sqlite";
 import { iso, nowUs } from "./db.ts";
@@ -66,6 +68,7 @@ interface Tool {
   description: string;
   properties: Record<string, Schema>;
   required: string[];
+  outputSchema?: Schema;
   /** Never writes, not even agent activity, so hosts may treat it as safe to run. */
   readOnly?: true;
   /** A repeat with the same arguments changes nothing more. */
@@ -352,6 +355,7 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "send_message",
+    outputSchema: MESSAGE_RESULT,
     description:
       "Send a Markdown message to named agents in the same project. An unregistered, retired or closed " +
       "recipient fails the whole send with persisted:false and a reason. Bound source loss also rejects. " +
@@ -385,11 +389,13 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "reply_message",
+    outputSchema: REPLY_RESULT,
     description:
       "Reply in a message's thread, returning the stored message with reply_to. message_id " +
       "selects the original in this project. Omit to to address its sender; cc and bcc are added " +
-      "only when supplied. The original's topic, importance and ack_required are inherited, with " +
-      "a 'Re:' subject; importance and ack_required can be overridden. For retries within 7 " +
+      "only when supplied. The original's topic and importance are inherited, with a 'Re:' " +
+      "subject; importance can be overridden. ack_required defaults to false; set it explicitly " +
+      "to request acknowledgement of this reply. For retries within 7 " +
       "days, reuse a nonempty idempotency_key with identical arguments. To start a new thread, " +
       "use send_message.",
     properties: {
@@ -427,7 +433,7 @@ export const TOOLS: Tool[] = [
             topic: original.topic,
             subject,
             importance: original.importance,
-            ack_required: !!original.ack_required,
+            ack_required: false,
           },
         );
         return { ...m, reply_to: original.id };
@@ -600,6 +606,7 @@ export const TOOLS: Tool[] = [
   },
   {
     name: "get_message_delivery_receipt",
+    outputSchema: RECEIPT_RESULT,
     description:
       "Return a message's persisted_at and recipients with kind, read_at, acknowledged, " +
       "acknowledged_at and admission. Admission observations are historical; null admission means " +
@@ -805,6 +812,7 @@ export const TOOL_DEFINITIONS = TOOLS.map((t) => ({
   name: t.name,
   description: t.description,
   inputSchema: { type: "object", properties: t.properties, required: t.required },
+  ...(t.outputSchema && { outputSchema: t.outputSchema }),
   annotations: t.readOnly
     ? { readOnlyHint: true, openWorldHint: false }
     : {
@@ -814,6 +822,11 @@ export const TOOL_DEFINITIONS = TOOLS.map((t) => ({
         openWorldHint: false,
       },
 }));
+
+const validator = new Ajv();
+const outputs = new Map(
+  TOOLS.filter((t) => t.outputSchema).map((t) => [t, validator.compile(t.outputSchema!)]),
+);
 
 /** Tools whose success can leave a waiting session with unread mail. */
 export const WAKES = new Set(TOOLS.filter((t) => t.wakes).map((t) => t.name));
@@ -831,6 +844,22 @@ export function createTools(
 ): Record<string, (a: Args) => unknown> {
   const s = new MailStore(db, info.lifecycle, info.registry, info.mutationsEnabled);
   return Object.fromEntries(
-    TOOLS.map((t) => [t.name, (a: Args) => s.atomic(() => t.run(s, a, info))]),
+    TOOLS.map((t) => [
+      t.name,
+      (a: Args) =>
+        s.atomic(() => {
+          const value = t.run(s, a, info);
+          const validate = outputs.get(t);
+          if (validate) {
+            if (!validate(value)) {
+              console.error(`Invalid ${t.name} result`, validate.errors);
+              throw new ToolError("INTERNAL", "Tool result failed validation");
+            }
+            // Serialization is part of the transaction too; never report failure after storing mail.
+            JSON.stringify(value);
+          }
+          return value;
+        }),
+    ]),
   );
 }
