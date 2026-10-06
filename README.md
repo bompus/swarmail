@@ -398,6 +398,9 @@ between rounds of the same server.
 
 ## Development
 
+[Validator research](docs/research/validators-2026-10-06.md) records the generated/runtime
+comparison, TypeBox compatibility findings and the limits of the measurements.
+
 ```bash
 bun install
 bun test
