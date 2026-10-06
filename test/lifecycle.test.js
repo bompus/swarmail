@@ -590,3 +590,73 @@ test("inactive long polls remain held without acknowledging until reopen or abor
   waiters.notify();
   expect((await reopened).eventId).toBe(first.eventId);
 });
+
+for (const state of ["settled", "archived", "deleted"]) {
+  test(`withdrawal from a ${state} recipient neither reopens it nor resurrects mail on verified resume`, () => {
+    const f = fixture();
+    const sent = f.send();
+    const tools = createTools(f.db, {
+      databasePath: f.prefix + "-mail.sqlite",
+      lifecycle: f.lifecycle,
+      mutationsEnabled: true,
+    });
+    f.transition(2, state);
+    const result = tools.withdraw_message({
+      project_key: "/repo/one",
+      sender_name: "BlueLake",
+      message_id: sent.id,
+      idempotency_key: "withdraw",
+    });
+    expect(result.recipients[0].status).toBe("withdrawn");
+    expect(f.roster()).not.toContain("GreenCastle");
+    expect(f.db.query("SELECT state FROM session_lifecycle").get().state).toBe(state);
+    f.transition(3, "active");
+    f.lifecycle.reconcile();
+    expect(f.roster()).toContain("GreenCastle");
+    expect(
+      f.tools.fetch_inbox({
+        project_key: "/repo/one",
+        agent_name: "GreenCastle",
+        unread_only: false,
+        mark_read: false,
+      }),
+    ).toEqual([]);
+  });
+}
+
+test("mutation replay precedes sender lifecycle closure; fresh mutations fail and source loss is held", () => {
+  const f = fixture();
+  const sent = f.send();
+  f.register("BlueLake");
+  const tools = createTools(f.db, {
+    databasePath: f.prefix + "-mail.sqlite",
+    lifecycle: f.lifecycle,
+    mutationsEnabled: true,
+  });
+  const args = {
+    project_key: "/repo/one",
+    sender_name: "BlueLake",
+    message_id: sent.id,
+    importance: "urgent",
+    expected_revision: 0,
+    idempotency_key: "edit",
+  };
+  const first = tools.set_message_importance(args);
+  f.transition(2, "settled");
+  f.lifecycle.reconcile();
+  expect(tools.set_message_importance(args)).toEqual({ ...first, idempotent_replay: true });
+  expect(() => tools.withdraw_message({ ...args, idempotency_key: "new" })).toThrow(
+    "lifecycle-inactive",
+  );
+  f.transition(3, "active");
+  f.lifecycle.reconcile();
+  f.source.exec("DROP TABLE orchestration_events");
+  expect(() => tools.withdraw_message({ ...args, idempotency_key: "unavailable" })).toThrow(
+    "source is unavailable",
+  );
+  expect(
+    f.db.query("SELECT withdrawn_ts FROM message_recipients WHERE message_id=?").get(sent.id)
+      .withdrawn_ts,
+  ).toBeNull();
+  expect(f.db.query("SELECT count(*) AS n FROM message_mutations").get().n).toBe(1);
+});

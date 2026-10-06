@@ -19,7 +19,7 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
         subject: "private subject",
         body_md: "private body",
       }).id;
-    const tools = createTools(db, { databasePath: ":memory:" });
+    const tools = createTools(db, { databasePath: ":memory:", mutationsEnabled: true });
     const first = send();
     const failures = [];
     let checked = 0;
@@ -33,7 +33,32 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
       "read page",
       "drain inbox",
       "linked wait",
+      "withdraw",
+      "priority",
     ];
+    const mutateBatch = (event, batches, key) => {
+      const target = batches.at(-1);
+      if (target === undefined) {
+        return batches;
+      }
+      const args = {
+        project_key: "/test",
+        sender_name: "GreenCastle",
+        message_id: target,
+        idempotency_key: key,
+      };
+      if (event === "withdraw") {
+        tools.withdraw_message(args);
+        return batches.filter((id) => id !== target);
+      }
+      const row = db.query("SELECT revision,importance FROM messages WHERE id=?").get(target);
+      tools.set_message_importance({
+        ...args,
+        expected_revision: row.revision,
+        importance: row.importance === "urgent" ? "normal" : "urgent",
+      });
+      return batches;
+    };
     /** @param {{ accepted: number, acknowledged: number, notice: number | null }} delivery */
     const walk = async (sequence, batches, delivery, waiters) => {
       const { accepted, acknowledged, notice } = delivery;
@@ -66,6 +91,9 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
         try {
           if (event === "new mail") {
             nextBatches = [...batches, send()];
+          } else if (event === "withdraw" || event === "priority") {
+            nextBatches = mutateBatch(event, batches, next.join("/"));
+            nextNotice = nextBatches.length ? notice : null;
           } else if (event === "restart") {
             // Discard process-local waiters; retain durable database state.
             nextWaiters = createWaiters(db);

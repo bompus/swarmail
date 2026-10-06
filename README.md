@@ -211,6 +211,7 @@ anywhere prints usage and runs nothing.
 | `SWARMAIL_URL` | `http://127.0.0.1:18765/mcp/` | MCP endpoint for the command, the register hook and the `swarmail-mcp` relay |
 | `SWARMAIL_WAKE_URL` | `http://127.0.0.1:18765` | Server base URL for the wake hook |
 | `SWARMAIL_SYNCHRONOUS` | `normal` | `full` syncs every commit, at about 3 ms per send instead of 0.5 ms |
+| `SWARMAIL_ENABLE_MUTATIONS` | `0` | Enable sender withdrawal/priority edits only after all readers are qualified; [rollout and rollback requirements](docs/usage.md#withdrawing-mail-and-editing-priority) |
 | `SWARMAIL_RETIRE_DAYS` | `7` | Retire idle agents and drop projects whose checkout is gone; `0` keeps both |
 | `SWARMAIL_GUARD` | `block` | `warn` only reports, `off` skips |
 | `SWARMAIL_AGENT` | from hook state | Name used by `inbox`, `send`, `ping`, `guard` and `who` |

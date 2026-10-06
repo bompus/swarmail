@@ -110,6 +110,61 @@ needs no reply.
   suspend a process with SIGSTOP, which keeps its connections and locks
   open. Anything beyond your own work needs your user.
 
+## Withdrawing mail and editing priority
+
+The server advertises `withdraw_message` and `set_message_importance`, but new
+mutations are disabled by default. Both require the original `sender_name`,
+`message_id`, `project_key` and a nonempty `idempotency_key`. Identical retries
+replay their stored results before activation, lifecycle or revision checks.
+Keep the same arguments when retrying; keys follow the usual seven-day cleanup.
+A new mutation requires an active sender and a verifiable bound lifecycle source.
+It does not reopen the sender or its recipients.
+
+`withdraw_message` cancels only recipient deliveries with no committed read or
+acknowledgement. Omit `recipients` for all recipients, or supply a nonempty subset.
+The result gives each target's `withdrawn`, `already_withdrawn` or `too_late`
+status and the message's current `revision`. Withdrawal increments revision once
+when any delivery changes. Inbox, session inbox, wake and roster unread paths
+exclude withdrawn deliveries, including inbox previews with `unread_only:false`.
+Sender receipts retain `withdrawn_at`; search and thread history retain content
+and a `has_withdrawn_deliveries` flag without exposing BCC target identities.
+
+Withdrawal is not recall. A `mark_read:false` preview or search can expose the
+body without claiming delivery. Injected model context cannot be removed.
+Treat history as retained information; claim eligible inbox delivery before
+acting on it as a pending instruction.
+
+`set_message_importance` changes only `importance` to `low`, `normal`, `high` or
+`urgent`. Pass `expected_revision` from inbox, history or the sender receipt,
+initially `0`. A stale revision returns `REVISION_CONFLICT`, including for a
+matching-value request. Inspect current metadata before making a fresh decision.
+A matching current value is a no-op. Changed priority increments revision and
+records old/new values. It creates no new generic notice, changes no inbox order
+and does not replay consumed instructions. Priority changes attention, not authority.
+
+The CLI uses the same transactional tools and this session's explicit identity:
+
+```sh
+swarmail withdraw 42 --idempotency-key withdraw-42 --recipients GreenLake
+swarmail importance 42 urgent --expected-revision 0 --idempotency-key priority-42
+```
+
+Use `--as NAME` when identity is ambiguous and `--json` for compact result output.
+Missing retry keys or revision flags fail rather than choosing defaults.
+
+Before an operator enables `SWARMAIL_ENABLE_MUTATIONS=1`, qualify every process
+and executable reading the same mailbox database, including Linux/Windows core,
+CLI and hooks. Update and verify all readers under their owners' authority; retain
+a database snapshot and exact build receipts. Do not enable when old-reader use
+is uncertain. `0` or an unset value keeps execution disabled; other values fail
+startup. Schema migration alone does not enable execution.
+
+Older released readers ignore withdrawal state and may redeliver cancelled mail.
+After actual mutations, reverting binaries against that database is unsafe. Use
+a forward fix preserving state, or explicitly reconcile later mail and audit
+before restoring a pre-mutation snapshot. This source feature does not establish
+mixed-version or rollback safety.
+
 ## Reading mail
 
 After a mail notice, run `swarmail inbox --session` inside the receiving

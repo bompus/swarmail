@@ -143,6 +143,7 @@ function searchMessages(s: MailStore, a: Args) {
     const { topic, from, ...rest } = m;
     return {
       ...rest,
+      has_withdrawn_deliveries: !!m.has_withdrawn_deliveries,
       created_ts: iso(m.created_ts),
       excerpt: boundedExcerpt(m.excerpt, startMarker, endMarker),
       ...(topic != null && { topic }),
@@ -434,6 +435,53 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "withdraw_message",
+    description:
+      "Withdraw your message from recipients whose delivery has not been read, acknowledged or withdrawn. Returns message_id, revision and per-recipient withdrawn/already_withdrawn/too_late results. Omit recipients for all deliveries; an explicit subset must be nonempty and valid. Retains content and audit history. Previews and injected context cannot be recalled. Requires explicit server activation after all readers are qualified. A nonempty idempotency_key is required; identical retries replay even when execution is disabled or the sender closes.",
+    properties: {
+      project_key: PROJECT,
+      sender_name: AGENT,
+      message_id: MESSAGE,
+      recipients: strings(
+        "Optional nonempty subset of this message's recipient names; omit for all.",
+      ),
+      idempotency_key: IDEMPOTENCY_KEY,
+    },
+    required: ["project_key", "sender_name", "message_id", "idempotency_key"],
+    destructive: true,
+    idempotent: true,
+    run: (s, a) => s.mutate(s.project(a.project_key), a, "withdraw_message"),
+  },
+  {
+    name: "set_message_importance",
+    description:
+      "Change only your message's low/normal/high/urgent priority. Requires current expected_revision from inbox, history or sender receipt and a nonempty idempotency_key. Returns message_id, revision, importance and changed. A stale revision fails before a matching-value no-op. Edits affect metadata only: no new inbox notice or repeated instruction, and priority does not grant authority. Requires explicit server activation; identical retries replay before activation, lifecycle or revision checks.",
+    properties: {
+      project_key: PROJECT,
+      sender_name: AGENT,
+      message_id: MESSAGE,
+      importance: { ...IMPORTANCE, enum: ["low", "normal", "high", "urgent"] },
+      expected_revision: {
+        type: "integer",
+        minimum: 0,
+        description:
+          "Current message revision, initially 0; inspect metadata again after a conflict.",
+      },
+      idempotency_key: IDEMPOTENCY_KEY,
+    },
+    required: [
+      "project_key",
+      "sender_name",
+      "message_id",
+      "importance",
+      "expected_revision",
+      "idempotency_key",
+    ],
+    destructive: true,
+    idempotent: true,
+    run: (s, a) => s.mutate(s.project(a.project_key), a, "set_message_importance"),
+  },
+  {
     name: "fetch_inbox",
     description:
       "Return an array of your latest received message metadata, newest first; include_bodies " +
@@ -572,12 +620,14 @@ export const TOOLS: Tool[] = [
         message_id: m.id,
         project_id: p.id,
         persisted_at: iso(m.created_ts),
+        revision: m.revision,
         recipients: rows.map((r) => ({
           recipient: r.name,
           kind: r.kind,
           read_at: iso(r.read_ts),
           acknowledged: r.ack_ts != null,
           acknowledged_at: iso(r.ack_ts),
+          withdrawn_at: iso(r.withdrawn_ts),
           admission: r.admission_json
             ? { ...JSON.parse(r.admission_json), historical: true }
             : null,
@@ -649,6 +699,8 @@ export const TOOLS: Tool[] = [
           from: m.sender,
           subject: m.subject,
           importance: m.importance,
+          revision: m.revision,
+          has_withdrawn_deliveries: !!m.has_withdrawn_deliveries,
           created_ts: iso(m.created_ts),
           body_md: m.body_md,
         })),
@@ -770,9 +822,14 @@ export const WAKES = new Set(TOOLS.filter((t) => t.wakes).map((t) => t.name));
 // writes nothing.
 export function createTools(
   db: Database,
-  info: { databasePath: string; lifecycle?: Lifecycle; registry?: string },
+  info: {
+    databasePath: string;
+    lifecycle?: Lifecycle;
+    registry?: string;
+    mutationsEnabled?: boolean;
+  },
 ): Record<string, (a: Args) => unknown> {
-  const s = new MailStore(db, info.lifecycle, info.registry);
+  const s = new MailStore(db, info.lifecycle, info.registry, info.mutationsEnabled);
   return Object.fromEntries(
     TOOLS.map((t) => [t.name, (a: Args) => s.atomic(() => t.run(s, a, info))]),
   );

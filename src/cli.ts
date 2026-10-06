@@ -123,6 +123,14 @@ const COMMANDS: Record<string, Command> = {
       "swarmail ping <agent> [--timeout S]              whether the agent's wake hook is waiting (mail.ts)",
     ),
     mail(
+      "withdraw",
+      "swarmail withdraw <id> --idempotency-key KEY [--recipients A,B] [--json]  withdraw unclaimed deliveries",
+    ),
+    mail(
+      "importance",
+      "swarmail importance <id> <level> --expected-revision N --idempotency-key KEY [--json]  edit message priority",
+    ),
+    mail(
       "search",
       "swarmail search <words> [--limit N] [--cursor CURSOR] [--json | --json-page]     past mail in the current repository, best match first (mail.ts)",
     ),

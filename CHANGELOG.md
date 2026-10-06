@@ -4,6 +4,12 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Original senders can withdraw unclaimed recipient deliveries and edit message
+  priority with revision checks and required retry keys. Live inbox/wake paths
+  exclude withdrawn deliveries while content, receipts and audit remain. Priority
+  edits create no new notice. Execution defaults off until all readers are
+  qualified and explicitly enabled.
+
 - Sends and replies refresh configured T3 lifecycle state before admission.
   Rejected recipients have explicit reasons and leave no partial message.
   Stored mail includes durable admission observations and warns when session

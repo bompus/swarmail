@@ -75,9 +75,11 @@ test("negotiates the client's protocol version and lists the available tools", a
     "retire_agent",
     "search_messages",
     "send_message",
+    "set_message_importance",
     "summarize_thread",
     "unretire_agent",
     "whois",
+    "withdraw_message",
   ]);
 });
 
