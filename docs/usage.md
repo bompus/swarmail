@@ -247,6 +247,8 @@ or branch is free.
 ## API notes
 
 - `send_message` and `reply_message` return the sent message with its `id`.
+  Replies default to `ack_required: false`; set it explicitly to request an
+  acknowledgement. Replying does not read or acknowledge the original message.
   An identical retry under [the retry-key rules](#sending) returns that
   message marked `idempotent_replay: true`.
 - Search results carry an `excerpt` of up to 512 characters with
@@ -254,4 +256,12 @@ or branch is free.
   body. A date-only `until` includes that whole UTC day.
 - A bracketed prefix without a colon, such as `[WIP]`, is task text, not a
   tag.
-- The server accepts MCP protocol versions 2024-11-05 through 2025-11-25.
+- Supported MCP versions are 2024-11-05, 2025-03-26, 2025-06-18 and 2025-11-25.
+  Send the negotiated version in `MCP-Protocol-Version` on subsequent HTTP
+  requests; the npm relay does this automatically. Unsupported explicit headers
+  fail with HTTP 400 before execution. An absent header defaults to 2025-03-26.
+- With 2025-06-18 or 2025-11-25, `send_message`, `reply_message` and
+  `get_message_delivery_receipt` advertise `outputSchema` and return the same
+  object in `structuredContent` and JSON text. Other tools, tool errors and
+  legacy requests keep their existing text results. Fresh message results include
+  revision and delivery observations; historical retry records may lack them.

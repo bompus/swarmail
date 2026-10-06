@@ -13,6 +13,12 @@ test("editing a server source changes the hash the binary is checked against", (
     const before = sourceHash(root, "1.0.0");
     writeFileSync(join(src, "cli.ts"), "export const changed = 1;\n");
     expect(sourceHash(root, "1.0.0")).not.toBe(before);
+    const beforeManifest = sourceHash(root, "1.0.0");
+    writeFileSync(join(root, "package.json"), '{"dependencies":{"validator":"1"}}');
+    expect(sourceHash(root, "1.0.0")).not.toBe(beforeManifest);
+    const withDependency = sourceHash(root, "1.0.0");
+    writeFileSync(join(root, "bun.lock"), "resolved validator 1");
+    expect(sourceHash(root, "1.0.0")).not.toBe(withDependency);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

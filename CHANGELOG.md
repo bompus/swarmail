@@ -2,6 +2,18 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- Replies default to no acknowledgement request, even when the original message
+  requested one. Set `ack_required: true` to request acknowledgement of a reply.
+  Existing retry records retain their original result.
+- Modern MCP requests receive closed output schemas and structured results for
+  sends, replies and delivery receipts alongside the existing JSON text. Result
+  validation runs before transaction commit. Legacy requests retain text results;
+  unsupported protocol headers fail before execution.
+- The npm relay forwards the successfully negotiated MCP protocol version on
+  subsequent requests. Relay and registry metadata are prepared for 0.1.1.
+
 ## 0.3.0 - 2026-10-06
 
 - Session name discovery uses the explicit provider session ID when several

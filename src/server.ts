@@ -25,11 +25,24 @@ const result = (id: unknown, value: unknown) =>
 const failure = (id: unknown, code: number, message: string) =>
   Response.json({ jsonrpc: "2.0", id, error: { code, message } });
 
+const toolSuccess = (name: string, value: unknown, structured: boolean) => ({
+  content: [{ type: "text", text: JSON.stringify(value) }],
+  ...(structured &&
+    TOOL_DEFINITIONS.some((t) => t.name === name && t.outputSchema) && {
+      structuredContent: value,
+    }),
+});
+
 /** Answers one MCP JSON-RPC POST; tools/call goes to callTool. */
 async function rpc(
   req: Request,
-  callTool: (name: string, args: Record<string, unknown>) => unknown,
+  callTool: (name: string, args: Record<string, unknown>, structured: boolean) => unknown,
 ): Promise<Response> {
+  const protocol = req.headers.get("MCP-Protocol-Version") ?? "2025-03-26";
+  if (!PROTOCOL_VERSIONS.includes(protocol)) {
+    return new Response("unsupported MCP protocol version", { status: 400 });
+  }
+  const structured = protocol === "2025-06-18" || protocol === "2025-11-25";
   let msg: any;
   try {
     msg = await req.json();
@@ -57,9 +70,16 @@ async function rpc(
     case "ping":
       return result(msg.id, {});
     case "tools/list":
-      return result(msg.id, { tools: TOOL_DEFINITIONS });
+      return result(msg.id, {
+        tools: structured
+          ? TOOL_DEFINITIONS
+          : TOOL_DEFINITIONS.map(({ outputSchema: _output, ...tool }) => tool),
+      });
     case "tools/call":
-      return result(msg.id, callTool(String(msg.params?.name), msg.params?.arguments ?? {}));
+      return result(
+        msg.id,
+        callTool(String(msg.params?.name), msg.params?.arguments ?? {}, structured),
+      );
     default:
       return failure(msg.id, -32601, `method not found: ${msg.method}`);
   }
@@ -190,17 +210,18 @@ export function createServer(
   const tools = createTools(db, { databasePath, lifecycle, registry, mutationsEnabled });
   const waiters = createWaiters(db, wakePollMs, eligible);
 
-  const callTool = (name: string, args: Record<string, unknown>) => {
+  const callTool = (name: string, args: Record<string, unknown>, structured: boolean) => {
     const fn = Object.hasOwn(tools, name) ? tools[name] : undefined;
     try {
       if (!fn) {
         throw new ToolError("NOT_FOUND", `Unknown tool '${name}'`);
       }
-      const text = JSON.stringify(fn(args));
+      const value = fn(args);
+      const answer = toolSuccess(name, value, structured);
       if (WAKES.has(name)) {
         waiters.notify();
       }
-      return { content: [{ type: "text", text }] };
+      return answer;
     } catch (e) {
       const err =
         e instanceof ToolError
