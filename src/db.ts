@@ -125,6 +125,9 @@ const MIGRATIONS: ((db: Database) => void)[] = [
       revision INTEGER NOT NULL, PRIMARY KEY(profile, thread_id)
     )`);
   },
+  (db) => {
+    db.run("ALTER TABLE message_recipients ADD COLUMN admission_json TEXT");
+  },
 ];
 
 const IDENTITY = ["host", "session_id", "t3_thread", "build", "cwd"] as const;

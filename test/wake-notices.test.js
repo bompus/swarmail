@@ -214,6 +214,7 @@ for (const admitted of [false, true]) {
       DROP TABLE lifecycle_sources; DROP TABLE session_lifecycle;
       ALTER TABLE agents DROP COLUMN lifecycle_profile;
       ALTER TABLE agents DROP COLUMN lifecycle_thread;
+      ALTER TABLE message_recipients DROP COLUMN admission_json;
       PRAGMA user_version = 2;`);
       f.db.close();
       f = fixture(path);
@@ -276,6 +277,7 @@ test("a released-v2 read notice does not suppress mail that arrived afterward", 
       DROP TABLE lifecycle_sources; DROP TABLE session_lifecycle;
       ALTER TABLE agents DROP COLUMN lifecycle_profile;
       ALTER TABLE agents DROP COLUMN lifecycle_thread;
+      ALTER TABLE message_recipients DROP COLUMN admission_json;
       PRAGMA user_version = 2;`);
     f.db.close();
     f = fixture(path);
@@ -391,7 +393,7 @@ test("reads and new mail written by a rolled-back binary do not retain a stale n
       INSERT INTO messages(project_id,sender_id,subject,body_md,created_ts) SELECT project_id,sender_id,'new mail','info',created_ts+2 FROM messages WHERE id=${first.id};
       INSERT INTO message_recipients(message_id,agent_id,created_ts) SELECT last_insert_rowid(),agent_id,created_ts+2 FROM message_recipients WHERE message_id=${first.id};`);
     const next = f.db.query("SELECT max(id) AS id FROM messages").get();
-    expect(f.db.query("PRAGMA user_version").get().user_version).toBe(4);
+    expect(f.db.query("PRAGMA user_version").get().user_version).toBe(5);
     f.db.close();
     f = fixture(path);
     const offer = await f.wait(first.id);

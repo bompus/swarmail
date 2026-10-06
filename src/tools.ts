@@ -48,6 +48,12 @@ const IDEMPOTENCY_KEY = prop(
   "Nonempty key for this tool and agent. Identical arguments replay with idempotent_replay:true; different arguments fail with IDEMPOTENCY_KEY_CONFLICT. Hourly cleanup removes keys older than 7 days. Retries can replay until removal; afterward a retry may perform the operation again.",
 );
 const IMPORTANCE = prop("string", "low, normal, high or urgent.");
+const DELIVERY_POLICY = {
+  type: "string",
+  enum: ["checked", "durable"],
+  description:
+    "checked (default) or durable. Both currently admit and store mail the same way. Neither bypasses closed T3 or unavailable bound sources. Unqualified standalone state remains unknown and is returned with warnings; storage does not transfer task ownership.",
+};
 const RESERVATION_PATHS = strings("Only your reservations with exactly these patterns.");
 const RESERVATION_IDS = {
   type: "array",
@@ -346,11 +352,13 @@ export const TOOLS: Tool[] = [
   {
     name: "send_message",
     description:
-      "Send a Markdown message to named agents in the same project. An unknown or retired " +
-      "recipient fails the whole send. Returns the stored message, including its id. To answer a " +
+      "Send a Markdown message to named agents in the same project. An unregistered, retired or closed " +
+      "recipient fails the whole send with persisted:false and a reason. Bound source loss also rejects. " +
+      "Returns the stored message and delivery observations/warnings; unknown standalone state is " +
+      "not proof of death. Storage is not task acceptance. To answer a " +
       "message, use reply_message, which keeps the thread and addresses the sender. Without " +
       "idempotency_key, a retry sends another message; reuse a nonempty key with identical " +
-      "arguments within 7 days to replay its stored result instead.",
+      "arguments within 7 days to replay its stored result instead; delivery observations on replay are historical.",
     properties: {
       project_key: PROJECT,
       sender_name: AGENT,
@@ -363,6 +371,7 @@ export const TOOLS: Tool[] = [
       ack_required: prop("boolean", "Ask recipients to call acknowledge_message."),
       topic: prop("string", "A label fetch_inbox can filter on."),
       thread_id: prop("string", "A thread to join. reply_message sets it for you."),
+      delivery_policy: DELIVERY_POLICY,
       idempotency_key: IDEMPOTENCY_KEY,
     },
     required: ["project_key", "sender_name", "to", "subject", "body_md"],
@@ -391,6 +400,7 @@ export const TOOLS: Tool[] = [
       cc: strings("Recipients copied, visible to everyone."),
       bcc: strings("Recipients the others do not see."),
       subject_prefix: prop("string", "Default 'Re:'; not added twice."),
+      delivery_policy: DELIVERY_POLICY,
       importance: IMPORTANCE,
       ack_required: prop("boolean", "Ask recipients to call acknowledge_message."),
       idempotency_key: IDEMPOTENCY_KEY,
@@ -543,8 +553,10 @@ export const TOOLS: Tool[] = [
   {
     name: "get_message_delivery_receipt",
     description:
-      "Return a message's persisted_at and recipients with kind, read_at, acknowledged and " +
-      "acknowledged_at. Null timestamps mean that recipient has not read or acknowledged it yet; " +
+      "Return a message's persisted_at and recipients with kind, read_at, acknowledged, " +
+      "acknowledged_at and admission. Admission observations are historical; null admission means " +
+      "no snapshot was recorded. Storage/read/acknowledgement do not establish task acceptance. " +
+      "Null timestamps mean that recipient has not read or acknowledged it yet; " +
       "they are not delivery errors. Use it as the sender to check an ack_required message; " +
       "recipients use fetch_inbox. message_id must exist in this project or the call fails with " +
       "NOT_FOUND.",
@@ -566,6 +578,9 @@ export const TOOLS: Tool[] = [
           read_at: iso(r.read_ts),
           acknowledged: r.ack_ts != null,
           acknowledged_at: iso(r.ack_ts),
+          admission: r.admission_json
+            ? { ...JSON.parse(r.admission_json), historical: true }
+            : null,
         })),
       };
     },
@@ -755,9 +770,9 @@ export const WAKES = new Set(TOOLS.filter((t) => t.wakes).map((t) => t.name));
 // writes nothing.
 export function createTools(
   db: Database,
-  info: { databasePath: string; lifecycle?: Lifecycle },
+  info: { databasePath: string; lifecycle?: Lifecycle; registry?: string },
 ): Record<string, (a: Args) => unknown> {
-  const s = new MailStore(db, info.lifecycle);
+  const s = new MailStore(db, info.lifecycle, info.registry);
   return Object.fromEntries(
     TOOLS.map((t) => [t.name, (a: Args) => s.atomic(() => t.run(s, a, info))]),
   );
