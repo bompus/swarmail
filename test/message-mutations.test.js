@@ -1,7 +1,7 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { openDatabase } from "../src/db.ts";
 import { createTools, WAKES } from "../src/tools.ts";
@@ -450,8 +450,9 @@ test("bounded public-operation orderings retain claim/withdraw/revision invarian
 });
 
 test("HTTP/CLI mutation routing keeps explicit sender and revision choices", async () => {
-  const base = join(scratch, `cli-${++serial}`);
-  mkdirSync(base);
+  const directory = join(scratch, `cli-${++serial}`);
+  mkdirSync(directory);
+  const base = realpathSync.native(directory);
   spawnSync("git", ["init", "-q"], { cwd: base });
   const { server, db } = createServer(join(base, "mail.sqlite"), 0, { mutationsEnabled: true });
   cleanups.push(() => {
@@ -476,23 +477,22 @@ test("HTTP/CLI mutation routing keeps explicit sender and revision choices", asy
   const log = spyOn(console, "log").mockImplementation(() => {});
   const error = spyOn(console, "error").mockImplementation(() => {});
   try {
-    expect(
-      await mail(
-        [
-          "importance",
-          String(m.id),
-          "high",
-          "--expected-revision",
-          "0",
-          "--idempotency-key",
-          "cli-p",
-          "--json",
-        ],
-        async () => "",
-        env,
-        base,
-      ),
-    ).toBe(0);
+    const status = await mail(
+      [
+        "importance",
+        String(m.id),
+        "high",
+        "--expected-revision",
+        "0",
+        "--idempotency-key",
+        "cli-p",
+        "--json",
+      ],
+      async () => "",
+      env,
+      base,
+    );
+    expect({ status, errors: error.mock.calls }).toEqual({ status: 0, errors: [] });
     expect(JSON.parse(log.mock.calls.at(-1)[0])).toMatchObject({ importance: "high", revision: 1 });
     expect(
       await mail(
