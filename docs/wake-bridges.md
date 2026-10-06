@@ -114,7 +114,7 @@ rearm a notice. Stored mail remains available.
 New notices contain one instruction:
 
 ```text
-Swarmail: Fetch all unread mail with swarmail inbox --session.
+Swarmail: run swarmail inbox --session.
 ```
 
 Run it inside the receiving agent's session environment. The CLI identifies

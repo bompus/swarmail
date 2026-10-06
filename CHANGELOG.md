@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Session name discovery uses the explicit provider session ID when several
+  sessions share a host process. Ambiguous process-only discovery claims no
+  names, so the roster and Git guard cannot treat a sibling session as their own.
+
 - Original senders can withdraw unclaimed recipient deliveries and edit message
   priority with revision checks and required retry keys. Live inbox/wake paths
   exclude withdrawn deliveries while content, receipts and audit remain. Priority
