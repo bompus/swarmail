@@ -1,8 +1,9 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../src/server.ts";
+import { sessionUpdates } from "../src/updates.ts";
 
 const cleanups = [];
 afterEach(() => {
@@ -31,18 +32,24 @@ function fixture(host, key) {
     });
     return JSON.parse((await response.json()).result.content[0].text);
   };
-  const run = async (sid = "native-session", stop = false, wakeBase = base) => {
+  const run = async (
+    sid = "native-session",
+    stop = false,
+    wakeBase = base,
+    updates = {},
+    wakeAtStop = true,
+  ) => {
     const child = Bun.spawn(
       [
         process.execPath,
         join(import.meta.dir, "../src/cli.ts"),
         "hook",
-        host === "cursor" && stop ? "wake" : "context",
+        host === "cursor" && stop && wakeAtStop ? "wake" : "context",
         host,
-        ...(host === "cursor" && stop ? ["2"] : stop ? ["stop"] : []),
+        ...(host === "cursor" && stop && wakeAtStop ? ["2"] : stop ? ["stop"] : []),
       ],
       {
-        env: { ...process.env, SWARMAIL_WAKE_URL: wakeBase, XDG_STATE_HOME: dir },
+        env: { ...process.env, SWARMAIL_WAKE_URL: wakeBase, XDG_STATE_HOME: dir, ...updates },
         stdin: new Blob([JSON.stringify({ [key]: sid })]),
         stdout: "pipe",
         stderr: "pipe",
@@ -53,6 +60,42 @@ function fixture(host, key) {
     return JSON.parse(out);
   };
   return { dir, db, base, call, run };
+}
+
+for (const [host, key] of [
+  ["cursor", "conversation_id"],
+  ["devin", "session_id"],
+]) {
+  test(`${host} gives one update hint at active context even with mail offline, never at Stop`, async () => {
+    const f = fixture(host, key);
+    const manifest = join(f.dir, "targets.json");
+    writeFileSync(
+      manifest,
+      JSON.stringify({
+        version: 1,
+        targets: {
+          guidance: { revision: "A", instruction: "Reread guidance", context: true },
+        },
+      }),
+    );
+    const env = { SWARMAIL_UPDATE_TARGETS: manifest, XDG_STATE_HOME: f.dir };
+    const unavailable = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () => new Response(null, { status: 503 }),
+    });
+    cleanups.push(() => unavailable.stop(true));
+    const offline = `http://127.0.0.1:${unavailable.port}`;
+    expect(await f.run("native-session", true, offline, env, false)).toEqual({});
+    const output = await f.run("native-session", false, offline, env);
+    const hint =
+      host === "cursor" ? output.additional_context : output.hookSpecificOutput.additionalContext;
+    expect(hint).toBe("Updates available: run swarmail updates --session.");
+    expect(output).not.toHaveProperty("decision");
+    expect(await f.run("native-session", false, offline, env)).toEqual({});
+    expect(sessionUpdates("native-session", { env, host }).targets[0].loaded).toBeNull();
+    expect(f.db.query("SELECT count(*) AS n FROM messages").get().n).toBe(0);
+  });
 }
 
 for (const [host, key] of [

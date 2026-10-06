@@ -5,6 +5,7 @@ import { databasePath, DEFAULT_PORT, homeDir, serverRecordPath, within } from ".
 import type { Database } from "bun:sqlite";
 import { dirname } from "node:path";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { processIdentity } from "./proc.ts";
 import { nowUs, openDatabase } from "./db.ts";
 import { buildSource } from "./build.ts";
@@ -19,6 +20,34 @@ import { createWaiters, SESSION_RE } from "./wake.ts";
 import { openRegistry, registryDir } from "./registry.ts";
 
 const PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
+
+const definitions = (protocol: string) =>
+  protocol === "2025-06-18" || protocol === "2025-11-25"
+    ? TOOL_DEFINITIONS
+    : TOOL_DEFINITIONS.map(({ outputSchema: _output, ...tool }) => tool);
+const toolRevisions = new Map(
+  PROTOCOL_VERSIONS.map((protocol) => [
+    protocol,
+    createHash("sha256")
+      .update(JSON.stringify(definitions(protocol)))
+      .digest("hex"),
+  ]),
+);
+
+function versionsResponse(req: Request, url: URL): Response {
+  if (req.method !== "GET") {
+    return new Response(null, { status: 405, headers: { allow: "GET" } });
+  }
+  const protocol = url.searchParams.get("protocolVersion") ?? "2025-11-25";
+  if (!PROTOCOL_VERSIONS.includes(protocol)) {
+    return new Response("unsupported MCP protocol version", { status: 400 });
+  }
+  return Response.json({
+    server_build: buildSource,
+    tools_revision: toolRevisions.get(protocol),
+    protocol_version: protocol,
+  });
+}
 
 const result = (id: unknown, value: unknown) =>
   Response.json({ jsonrpc: "2.0", id, result: value });
@@ -71,9 +100,7 @@ async function rpc(
       return result(msg.id, {});
     case "tools/list":
       return result(msg.id, {
-        tools: structured
-          ? TOOL_DEFINITIONS
-          : TOOL_DEFINITIONS.map(({ outputSchema: _output, ...tool }) => tool),
+        tools: definitions(protocol),
       });
     case "tools/call":
       return result(
@@ -250,6 +277,9 @@ export function createServer(
       const origin = req.headers.get("origin");
       if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) {
         return new Response("forbidden origin", { status: 403 });
+      }
+      if (path === "/versions") {
+        return versionsResponse(req, url);
       }
       if (path === "/lifecycle/reconcile" || path === "/wait/status") {
         return lifecycleResponse(req, url, lifecycle, eligible, waiters.notify);
