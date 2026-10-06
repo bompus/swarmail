@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.3.0 - 2026-10-06
 
 - Session name discovery uses the explicit provider session ID when several
   sessions share a host process. Ambiguous process-only discovery claims no
