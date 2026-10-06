@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { openDatabase } from "../src/db.ts";
+import { createTools } from "../src/tools.ts";
 import { parseTag } from "../src/tag.ts";
 import { resolveProject, whoRows } from "../src/who.ts";
 
@@ -58,7 +60,7 @@ test("ranks running sessions first and links untagged rows through the hook's st
         "lost",
         {
           thread_id: "lost",
-          title: "Never registered",
+          title: "Absent from visible roster",
           cwd: "/w/lost",
           status: "running",
           last_seen_at: "2026-09-27T03:00:00Z",
@@ -104,7 +106,10 @@ test("ranks running sessions first and links untagged rows through the hook's st
       lastActive: "2026-09-26T05:47:00Z",
     });
     expect(rows.find((row) => row.name === "WildDeer").hostAlive).toBeNull();
-    expect(rows[1]).toMatchObject({ t3: "lost", task: "not registered: mail cannot reach it" });
+    expect(rows[1]).toMatchObject({
+      t3: "lost",
+      task: "not in visible roster; registration and delivery unknown",
+    });
     expect(rows.find((row) => row.name === "WildDeer").sameSessionAs).toEqual(["WindyOriole"]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -300,6 +305,59 @@ test("who resolves native and hook-state titles while preserving T3 precedence",
         process.env[key] = value;
       }
     }
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("capped and retired registrations remain unknown when absent from the visible roster", () => {
+  const dir = mkdtempSync(join(tmpdir(), "who-visible-"));
+  const db = openDatabase(join(dir, "mail.sqlite"));
+  try {
+    const tools = createTools(db, { databasePath: join(dir, "mail.sqlite") });
+    const entries = [
+      ["HiddenOwl", "limited"],
+      ["RetiredBear", "retired"],
+      ["VisibleFox", "visible"],
+    ];
+    for (const [name, thread] of entries) {
+      tools.register_agent({
+        project_key: "/repo",
+        name,
+        program: "codex",
+        model: "test",
+        task_description: `[t3:${thread} codex:native-${thread}] task`,
+      });
+    }
+    tools.retire_agent({ project_key: "/repo", agent_name: "RetiredBear" });
+    const roster = tools.list_agents({ project_key: "/repo", limit: 1 });
+    expect(roster.map((agent) => agent.name)).toEqual(["VisibleFox"]);
+    const rows = whoRows({
+      project: "/repo",
+      roster,
+      stateDir: join(dir, "state"),
+      room: null,
+      checkout: () => "/repo",
+      threads: new Map(
+        entries.map(([, thread]) => [
+          thread,
+          {
+            thread_id: thread,
+            title: thread,
+            cwd: "/repo",
+            status: "running",
+            last_seen_at: "2026-10-05T00:00:00Z",
+          },
+        ]),
+      ),
+    });
+    for (const thread of ["limited", "retired"]) {
+      expect(rows.find((row) => row.t3 === thread)).toMatchObject({
+        name: null,
+        task: "not in visible roster; registration and delivery unknown",
+      });
+    }
+  } finally {
+    db.close();
     rmSync(dir, { recursive: true, force: true });
   }
 });
