@@ -4,11 +4,9 @@
   "workspaces": {
     "": {
       "name": "swarmail",
-      "dependencies": {
-        "ajv": "8.20.0",
-      },
       "devDependencies": {
         "@types/bun": "1.4.2",
+        "ajv": "8.20.0",
         "oxfmt": "0.70.0",
         "oxlint": "1.85.0",
         "oxlint-tsgolint": "7.0.2003",

@@ -1,8 +1,9 @@
 # Validator research, 2026-10-06
 
 Research snapshot for Swarmail's three structured mail result schemas at
-`dda19b36fb7a3127a981be1153d71c57f62d5fe5`. No validator migration,
-release or installation change is established by these experiments.
+`dda19b36fb7a3127a981be1153d71c57f62d5fe5`. The experiments below informed the direct-check implementation in
+`src/message-validation.ts`. Ajv remains a development/test reference; production
+validation uses JavaScript checks. No release or host deployment is implied.
 
 ## What was tested
 
@@ -24,14 +25,14 @@ records the findings, not a checked-in benchmark reproduction.
 
 | Option | Finding | Remaining cost or limit |
 | --- | --- | --- |
-| Current Ajv | Reference behavior; compiles schemas at startup | Runtime package and compilation remain |
+| Ajv reference | Independent advertised-schema checks in development/tests | Development dependency |
 | Ajv standalone | 348 acceptance/rejection cases pass; original 310 cases preserve detailed errors | Generate modules and check regeneration; product integration still needed |
 | TypeBox runtime | 357 cases pass with explicit fresh-message branch fields | Runtime package; detailed errors differ from Ajv |
 | TypeBox generated | Same 357 cases pass on Bun and Node, with no external runtime imports | Initialize captured values, bundle and check regeneration |
 | Zod and Zod Mini | Explicit schema definitions pass the broad screen | Direct JSON Schema conversion failed 28 cases; conversion/refinements need maintenance |
 | Valibot | Explicit schema definitions pass the broad screen | Different schema API and diagnostics; no confirmed throughput advantage |
 | Typia | Transformer execution was not qualified | Compiler integration and contract parity remain untested |
-| Dependency-free checks | Not implemented or qualified | Can suit small contracts; must preserve the actual rules without becoming a general validator engine |
+| Direct checks | 375 synthetic cases agree with Ajv, including inherited fields and sparse arrays | Duplicate contract definitions need independent schema-parity tests |
 
 ### TypeBox needs an explicit branch definition
 
@@ -85,8 +86,7 @@ measured, so these figures do not establish relative engine efficiency.
 TypeBox's detailed error arrays differed from Ajv on all 306 rejected cases.
 The generic client error and transaction rollback must remain unchanged.
 The selected design preference is boolean-only production checks, with
-richer diagnostics available in development and tests. Implementation is
-still unselected.
+richer diagnostics available in development and tests. Production uses boolean-only direct checks; no generated artifact is needed.
 
 ## Dependencies and performance claims
 
@@ -121,36 +121,39 @@ This does not qualify Elysia route generation, Workers deployment, an ODM,
 input transformations or another application's contracts. Those need their
 own fixtures and integration checks.
 
-## Dependency-free checks remain an option
+## Direct checks for the current contracts
 
-Simple contracts may need only direct checks using JavaScript and the runtime,
-without an external validator package or a generator. Swarmail is a candidate
-for evaluating that approach; its suitability has not been tested here.
+The direct-check prototype agreed with Ajv on 357 contract cases plus 18
+JavaScript object/array cases on Bun and Node, without changing the inputs.
+The extra cases covered inherited required fields, inherited extra fields,
+nonenumerable fields, null-prototype objects and sparse arrays. Node also ran
+the original contract corpus without runtime packages or string code generation.
 
-Compare the actual checks and their maintenance cost with the library and
-build wiring they replace. A few type, range and required-field checks can be
-simpler than introducing a schema engine. Reimplementing a general JSON Schema
-validator would be a different, larger undertaking.
+The production checks keep the advertised JSON Schemas separate. Tests compile
+those schemas with Ajv and compare acceptance against the production checks.
+Every tool with an output schema must also declare its result check; the tool
+union enforces that pairing. Validation and serialization stay inside the
+existing transaction, and clients retain the generic validation failure.
 
-For Swarmail, qualification must preserve closed objects, nested fields,
-historical replay and the tested undefined and numeric behavior. Keep the
-advertised MCP schema and runtime acceptance rules aligned. The existing
-contract corpus can check that alignment without requiring a production
-validator dependency. Evaluating direct checks remains unselected.
+Direct checks suit these small, closed output contracts. They duplicate field
+rules, so schema changes require updating both definitions and their parity
+coverage. They do not implement arbitrary JSON Schema, transforms, refinements
+or detailed runtime diagnostics. A larger contract surface could favor a
+maintained compiler or schema library instead.
 
-## Recommendation
+## Recommendation and dependency lesson
 
-For TypeBox consistency and development-only validator tooling, the supported
-boolean-only TypeBox generator is a qualified implementation candidate.
-For minimum contract migration risk, Ajv standalone remains the stronger
-candidate. Runtime TypeBox avoids generated-artifact maintenance when a
-runtime package is acceptable. Size is secondary for this server, and speed
-remains unknown.
+For Swarmail's current contracts, direct checks avoid a runtime validator
+package and generated-artifact wiring. Keep Ajv as an independent development
+reference. This is a maintenance choice; no measured speed advantage is claimed.
+TypeBox's supported generator remains a qualified alternative when schema
+features or reuse justify it. Typia remains unqualified here.
 
-A migration must exercise the real structured-result tests, atomic rollback,
-historical retry and CLI/MCP parity, followed by build and installation
-checks. Keep Ajv as an independent development contract reference if TypeBox
-is chosen. This research does not authorize a migration or publication.
+Before adding a validator, compare the required behavior with direct logic and
+maintained alternatives. Separate runtime packages from development tooling,
+and compare feature coverage, upkeep, size and measured performance where it
+matters. Mark missing measurements explicitly. Dependency count alone does not
+justify weakening validation or hand-writing a general validation engine.
 
 ## Primary sources
 
