@@ -43,6 +43,7 @@ export function nativeAdapter<T extends string>(
     command: Record<string, unknown>,
     markAttempted: () => void,
     signal: AbortSignal,
+    guard?: () => Promise<void>,
   ) => Promise<void>,
   checkSocket: (socket: string) => void = () => {},
 ): TargetAdapter<NativeTarget<T>> {
@@ -70,8 +71,8 @@ export function nativeAdapter<T extends string>(
       phase: "prepared",
       delivery: "steer",
     }),
-    deliver: async (target, command, attempted, signal) => {
-      await deliver(target, command, attempted, signal);
+    deliver: async (target, command, attempted, signal, guard) => {
+      await deliver(target, command, attempted, signal, guard);
       if (signal.aborted) {
         // A native delivery returns on abort without confirming admission.
         throw new BridgeError("stopped", true);

@@ -142,3 +142,73 @@ Keep existing journals when adopting these modules. If the destination binding
 changes, the bridge refuses to reuse the journal. Inspect and reconcile pending
 delivery before changing its destination or removing state. A refused bridge
 has not established whether its saved command reached the target.
+
+
+## Local T3 lifecycle
+
+The server can bind its T3 registrations to one explicitly configured local
+Orchestrator V2 profile. Set `SWARMAIL_T3_LIFECYCLE` to a JSON object:
+
+```json
+{
+  "profile": "local-t3",
+  "databasePath": "ABSOLUTE_PATH_TO_STATEV2_SQLITE",
+  "eventTable": "orchestration_events"
+}
+```
+
+The equivalent programmatic option is `createServer(..., { t3Lifecycle })`.
+This is optional; standalone agents do not require T3. Configure it only when
+all unbound T3 registrations in that mail database belong to the chosen profile.
+The first reconciliation binds those registrations. New T3 registrations use
+that binding too, regardless of provider or whether the thread is a child.
+Registrations in other projects with the same exact native host/session share
+that lifecycle binding. The binding remains after provider replacement.
+Use separate mail databases for separate profiles.
+
+Verify the installed source before activation. The reader supports
+`thread-projections` metadata schema 2 and a configured event table with
+stable `sequence` and `event_id` columns. Choose `orchestration_events` or
+`orchestration_v2_events` according to the running app's actual event history.
+A copied, empty event table cannot establish continuity. Projection updates
+and their metadata watermark must commit in the same source transaction.
+
+Startup requires a readable initial snapshot. Later reconciliation reads
+lifecycle flags, the applied watermark and the prior history anchor in one
+read-only source transaction. Source cursor and changed identities commit
+together in Swarmail. Unrelated app events update only the cursor.
+
+An existing supervisor can call `POST /lifecycle/reconcile` with an empty body
+at its scan boundary. The response is `{ "status": "ready", "changed": 0 }`
+or `{ "status": "unavailable", "changed": 0 }`; `changed` counts identities,
+not project registrations. The caller cannot supply lifecycle state or paths.
+This interface adds no automatic enrollment, timer or service.
+
+Settlement, archive and deletion suppress wakes and reject new mail and
+reservations. Existing messages, read/ack state, names and delivery journals
+remain. Inbox reads and maintenance releases still work. A newer verified
+reopen restores the same identity. Process exit, provider replacement and
+idle status do not establish app closure. T3 reservations retain their
+existing expiry because they lack activation provenance.
+
+A new registration whose thread projection is missing or invalid stays
+ineligible without holding healthy identities. It becomes eligible after the
+source supplies a valid active projection. The reader holds its last verified
+state when a previously verified row or an anchor disappears,
+the schema is unknown, or source history regresses or changes. Renaming the
+profile or replacing its path cannot silently rebind that history. Repair the
+source history before resuming; rebinding retained data requires a separate,
+explicit migration and is not exposed by this interface. Omitting configuration
+also holds wakes for previously bound identities.
+
+Wake clients check `GET /wait/status?session=...` before waiting and at the
+final delivery boundary. Only `{ "eligible": true }` permits a prompt. Missing,
+malformed and unavailable status responses hold mail without acknowledging
+it. Upgrade the core before these clients; older cores lack this endpoint.
+Held Claude hints and prepared native/T3 journals remain available after reopen.
+
+Observation and provider admission are separate transactions. A thread can
+still settle after the final check and before T3 admits the command. An atomic
+T3 admission guard is required to close that gap. Standalone SessionEnd hooks
+keep their current behavior; automatic retirement needs verified activation
+and end-event ordering before it can be enabled.

@@ -249,6 +249,9 @@ async function fixture(legacy = true) {
     hostname: "127.0.0.1",
     port: 0,
     fetch(req) {
+      if (new URL(req.url).pathname === "/wait/status") {
+        return Response.json({ eligible: true });
+      }
       const after = new URL(req.url).searchParams.get("after");
       offers.push(Number(after));
       if (after === "0") {

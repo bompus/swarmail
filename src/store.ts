@@ -7,6 +7,7 @@ import { overlaps } from "./glob.ts";
 import { locations } from "./location.ts";
 import { identity, leadingTag, parseTag, sameSessionRow, tagOf, type Identity } from "./tag.ts";
 import { InvalidTimestamp, iso, nowUs, parseIso } from "./db.ts";
+import { lifecycleEligible, type Lifecycle } from "./lifecycle.ts";
 import { SESSION_RE } from "./wake.ts";
 import { reconcileNotices, linkNotice, PING_SUBJECT } from "./wake-notices.ts";
 
@@ -71,6 +72,8 @@ export interface Agent extends Identity {
   inception_ts: number;
   last_active_ts: number;
   retired_at: number | null;
+  lifecycle_profile: string | null;
+  lifecycle_thread: string | null;
 }
 
 const ADJECTIVES = [
@@ -268,14 +271,17 @@ const queries = (db: Database) => ({
     "SELECT * FROM agents WHERE project_id = ? AND name = ? COLLATE NOCASE",
   ),
   agentById: db.query<Agent, [number]>("SELECT * FROM agents WHERE id = ?"),
-  liveAgentsInSession: db.query<Agent, [number, string | null, string | null]>(
-    "SELECT * FROM agents WHERE project_id = ?1 AND retired_at IS NULL AND (t3_thread = ?2 OR session_id = ?3) ORDER BY last_active_ts DESC, id DESC",
+  agentsInSession: db.query<Agent, [number, string | null, string | null]>(
+    "SELECT * FROM agents WHERE project_id = ?1 AND (retired_at IS NULL OR lifecycle_profile IS NOT NULL) AND (t3_thread = ?2 OR session_id = ?3) ORDER BY last_active_ts DESC, id DESC",
   ),
-  agentProjects: db.query<{ human_key: string; retired_at: number | null }, [string, number]>(
-    "SELECT p.human_key, a.retired_at FROM agents a JOIN projects p ON p.id = a.project_id WHERE a.name = ? COLLATE NOCASE AND a.project_id != ? ORDER BY a.last_active_ts DESC",
+  agentProjects: db.query<
+    { human_key: string; retired_at: number | null; lifecycle_active: number },
+    [string, number]
+  >(
+    `SELECT p.human_key, a.retired_at, ${lifecycleEligible("a")} AS lifecycle_active FROM agents a JOIN projects p ON p.id = a.project_id WHERE a.name = ? COLLATE NOCASE AND a.project_id != ? ORDER BY a.last_active_ts DESC`,
   ),
   agentNames: db.query<{ name: string }, [number]>(
-    "SELECT name FROM agents WHERE project_id = ? AND retired_at IS NULL ORDER BY last_active_ts DESC, id DESC",
+    `SELECT name FROM agents WHERE project_id = ? AND retired_at IS NULL AND ${lifecycleEligible("agents")} ORDER BY last_active_ts DESC, id DESC`,
   ),
   touch: db.query<unknown, [number, number]>(
     "UPDATE agents SET last_active_ts = ?, retired_at = NULL WHERE id = ?",
@@ -294,7 +300,9 @@ export class MailStore {
   private readonly q: ReturnType<typeof queries>;
   private readonly tx: (run: () => unknown) => unknown;
 
-  constructor(db: Database) {
+  private readonly lifecycle?: Lifecycle;
+  constructor(db: Database, lifecycle?: Lifecycle) {
+    this.lifecycle = lifecycle;
     this.db = db;
     this.q = queries(db);
     this.tx = db.transaction((run: () => unknown) => run());
@@ -358,7 +366,7 @@ export class MailStore {
 
   recipient(p: Project, name: string): Agent {
     const a = this.agent(p, name, "to");
-    if (a.retired_at != null) {
+    if (a.retired_at != null || !this.lifecycleAllows(a)) {
       throw new ToolError(
         "NOT_FOUND",
         `Agent '${a.name}' is retired and does not accept new messages.`,
@@ -366,6 +374,22 @@ export class MailStore {
       );
     }
     return a;
+  }
+
+  private lifecycleAllows(who: Agent): boolean {
+    return (
+      this.db
+        .query(`SELECT 1 FROM agents a WHERE a.id = ? AND ${lifecycleEligible("a")}`)
+        .get(who.id) !== null
+    );
+  }
+
+  requireLifecycle(who: Agent): void {
+    if (!this.lifecycleAllows(who)) {
+      throw new ToolError("NOT_FOUND", `Agent '${who.name}' is lifecycle-inactive.`, {
+        agent_name: who.name,
+      });
+    }
   }
 
   agent(p: Project, name: unknown, field = "agent_name"): Agent {
@@ -381,7 +405,7 @@ export class MailStore {
       const matches = this.q.agentProjects.all(n, p.id);
       const elsewhere = matches.map((r) => r.human_key);
       const usable = matches
-        .filter((r) => field !== "to" || r.retired_at == null)
+        .filter((r) => field !== "to" || (r.retired_at == null && r.lifecycle_active === 1))
         .map((r) => `'${r.human_key}'`);
       const several = usable.length > 1;
       const advice = usable.length
@@ -389,7 +413,7 @@ export class MailStore {
             several ? "one of those project_keys" : "that project_key"
           }${field === "to" ? ", registering there first if you are not" : ""}.`
         : elsewhere.length
-          ? `'${n}' is retired in ${elsewhere.length > 1 ? "projects" : "project"} ${elsewhere.map((k) => `'${k}'`).join(", ")} and accepts no messages until it registers again.`
+          ? `'${n}' is retired in ${elsewhere.length > 1 ? "projects" : "project"} ${elsewhere.map((k) => `'${k}'`).join(", ")} and currently accepts no messages.`
           : field === "to"
             ? "Check the recipient's spelling; list_agents shows every agent."
             : "Find your name with `swarmail who`, or call register_agent without a name to get one.";
@@ -427,7 +451,7 @@ export class MailStore {
   liveAgents(p: Project, activeSince: number, limit: number): Agent[] {
     return this.db
       .query<Agent, [number, number, number]>(
-        `SELECT * FROM agents WHERE project_id = ? AND retired_at IS NULL AND last_active_ts >= ?
+        `SELECT * FROM agents WHERE project_id = ? AND retired_at IS NULL AND ${lifecycleEligible("agents")} AND last_active_ts >= ?
          ORDER BY last_active_ts DESC, id DESC LIMIT ?`,
       )
       .all(p.id, activeSince, limit);
@@ -438,6 +462,7 @@ export class MailStore {
   }
 
   unretire(who: Agent, now: number): void {
+    this.requireLifecycle(who);
     this.db.run("UPDATE agents SET retired_at = NULL, last_active_ts = ? WHERE id = ?", [
       now,
       who.id,
@@ -457,7 +482,7 @@ export class MailStore {
   }
 
   /**
-   * The live agent whose leading tag names the same session as `task`'s, most recently active
+   * The agent whose leading tag names the same session as `task`'s, most recently active
    * first, so a session that registers again without its name keeps it instead of getting a second.
    */
   private agentForTag(projectId: number, task: unknown): Agent | null {
@@ -465,7 +490,7 @@ export class MailStore {
     if (!tag?.t3 && !tag?.sessionId) {
       return null;
     }
-    const rows = this.q.liveAgentsInSession.all(projectId, tag.t3, tag.sessionId);
+    const rows = this.q.agentsInSession.all(projectId, tag.t3, tag.sessionId);
     return sameSessionRow(rows, tag, tagOf);
   }
 
@@ -502,6 +527,19 @@ export class MailStore {
       const task = String(a.task_description ?? "");
       const description = tag && !leadingTag(task) ? `${tag} ${task}`.trim() : task;
       const id = identity(description);
+      if (
+        existing.lifecycle_profile &&
+        (existing.t3_thread
+          ? existing.lifecycle_thread !== id.t3_thread
+          : id.t3_thread
+            ? existing.lifecycle_thread !== id.t3_thread
+            : existing.host !== id.host || existing.session_id !== id.session_id)
+      ) {
+        throw new ToolError(
+          "INVALID_ARGUMENT",
+          "Registration cannot replace a bound lifecycle identity.",
+        );
+      }
       this.db.run(
         `UPDATE agents SET program = ?, model = ?, task_description = ?, last_active_ts = ?, retired_at = NULL,
         host = ?, session_id = ?, t3_thread = ?, build = ?, cwd = ?, worktree = ? WHERE id = ?`,
@@ -519,6 +557,7 @@ export class MailStore {
           existing.id,
         ],
       );
+      this.lifecycle?.reconcile();
       linkNotice(this.db, id);
       reconcileNotices(this.db);
       return this.q.agentById.get(existing.id)!;
@@ -546,6 +585,7 @@ export class MailStore {
         id.cwd,
         worktree,
       )!;
+    this.lifecycle?.reconcile();
     linkNotice(this.db, id);
     return registered;
   }
@@ -600,6 +640,7 @@ export class MailStore {
   }
 
   deliver(p: Project, sender: Agent, a: Args, defaults: Row = {}) {
+    this.requireLifecycle(sender);
     // No broadcast: every message names its recipients.
     if (a.broadcast) {
       throw new ToolError("INVALID_ARGUMENT", "broadcast is not supported; name the recipients", {
@@ -857,6 +898,7 @@ export class MailStore {
   }
 
   reserve(p: Project, who: Agent, a: Args, ttlField = "ttl_seconds") {
+    this.requireLifecycle(who);
     const paths = [...new Set(list(a.paths))];
     if (paths.length === 0) {
       throw new ToolError("INVALID_ARGUMENT", "paths is required", { field: "paths" });

@@ -42,6 +42,9 @@ function fixture(swarmailUrl) {
       port: 0,
       fetch(req) {
         const url = new URL(req.url);
+        if (url.pathname === "/wait/status") {
+          return Response.json({ eligible: true });
+        }
         if (url.pathname !== "/wait/peek" || url.searchParams.get("session") !== id) {
           return new Response(null, { status: 404 });
         }

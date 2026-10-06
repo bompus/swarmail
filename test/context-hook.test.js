@@ -322,8 +322,11 @@ for (const mixed of [false, true]) {
       hostname: "127.0.0.1",
       port: 0,
       async fetch(req) {
-        requests++;
         const url = new URL(req.url);
+        if (url.pathname === "/wait/status") {
+          return fetch(f.base + url.pathname + url.search);
+        }
+        requests++;
         const response = await fetch(f.base + url.pathname + url.search);
         if (requests === 1) {
           entered();

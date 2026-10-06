@@ -38,6 +38,7 @@ export interface TargetAdapter<T extends { type: string; id: string }> {
     command: Record<string, unknown>,
     attempted: () => void,
     signal: AbortSignal,
+    guard?: () => Promise<void>,
   ): Promise<void>;
 }
 
@@ -181,7 +182,11 @@ export async function checkT3Target(target: WakeTarget): Promise<void> {
   await inspectT3Thread(target);
 }
 
-async function dispatchV2(target: WakeTarget, command: Record<string, unknown>): Promise<any> {
+async function dispatchV2(
+  target: WakeTarget,
+  command: Record<string, unknown>,
+  guard?: () => Promise<void>,
+): Promise<any> {
   const ticket = await request(target, "/api/auth/websocket-ticket", {});
   if (typeof ticket?.ticket !== "string") {
     throw new BridgeError("target did not issue a websocket ticket");
@@ -202,16 +207,29 @@ async function dispatchV2(target: WakeTarget, command: Record<string, unknown>):
       error ? reject(error) : resolve(value);
     };
     const timer = setTimeout(() => done(new BridgeError("T3 RPC timed out", true)), 15_000);
-    socket.onopen = () =>
-      socket.send(
-        JSON.stringify({
-          _tag: "Request",
-          id: "1",
-          tag: "orchestration.dispatchCommand",
-          payload: command,
-          headers: [],
-        }),
-      );
+    socket.onopen = async () => {
+      try {
+        await guard?.();
+        if (socket.readyState !== WebSocket.OPEN) {
+          return;
+        }
+        socket.send(
+          JSON.stringify({
+            _tag: "Request",
+            id: "1",
+            tag: "orchestration.dispatchCommand",
+            payload: command,
+            headers: [],
+          }),
+        );
+      } catch (error) {
+        done(
+          error instanceof BridgeError
+            ? error
+            : new BridgeError("lifecycle check unavailable", true),
+        );
+      }
+    };
     socket.onerror = () => done(new BridgeError("T3 websocket failed", true));
     socket.onclose = () => done(new BridgeError("T3 websocket closed before admission", true));
     socket.onmessage = (event) => {
@@ -452,8 +470,12 @@ export function t3SteeringRun(projection: T3ControlProjection) {
   return run;
 }
 
-export async function sendT3Command(target: WakeTarget, command: Record<string, unknown>) {
-  admitted(await dispatchV2(target, command));
+export async function sendT3Command(
+  target: WakeTarget,
+  command: Record<string, unknown>,
+  guard?: () => Promise<void>,
+) {
+  admitted(await dispatchV2(target, command, guard));
 }
 
 function parseHttp<T extends WakeTarget["type"]>(type: T) {
@@ -499,8 +521,9 @@ export const t3V1Adapter: TargetAdapter<WakeTarget> = {
       createdAt: new Date().toISOString(),
     };
   },
-  deliver: async (target, command) => {
+  deliver: async (target, command, _attempted, _signal, guard) => {
     ensureT3Unsettled(await inspectT3Thread(target));
+    await guard?.();
     admitted(await request(target, "/api/orchestration/dispatch", command));
   },
 };
@@ -524,7 +547,8 @@ export const t3V2Adapter: TargetAdapter<WakeTarget> = {
       dispatchMode: { type: "start_immediately" },
     };
   },
-  deliver: async (target, command) => admitted(await dispatchV2(target, command)),
+  deliver: async (target, command, _attempted, _signal, guard) =>
+    admitted(await dispatchV2(target, command, guard)),
 };
 
 /** OpenCode 2: add a prompt to the active conversation with steering delivery. */
@@ -536,7 +560,8 @@ export const openCodeAdapter: TargetAdapter<WakeTarget> = {
     text,
     delivery: "steer",
   }),
-  deliver: async (target, command) => {
+  deliver: async (target, command, _attempted, _signal, guard) => {
+    await guard?.();
     const result = await request(
       target,
       `/api/session/${encodeURIComponent(target.id)}/prompt`,

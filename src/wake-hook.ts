@@ -8,6 +8,7 @@
 //   cursor: stop hook in hooks.json; a {"followup_message": ...} reply starts a turn, {} otherwise.
 // `swarmail hook rearm` is the PostToolUse re-arm for hosts with no POSIX shell (Windows): the checks the Linux
 // installer writes as shell, then the Claude wait.
+import { ensureWakeEligible } from "./wake-lifecycle.ts";
 import { openHookDelivery } from "./hook-delivery.ts";
 import { SESSION_RE } from "./wake.ts";
 import { stateHome, wakeUrl } from "./paths.ts";
@@ -167,6 +168,22 @@ function quietWake(host: string | undefined): number {
   return 0;
 }
 
+async function receiveHint(
+  response: Response,
+  base: string,
+  sid: string,
+  signal: AbortSignal,
+  delivery?: ReturnType<typeof openHookDelivery>,
+): Promise<string> {
+  const guard = () => ensureWakeEligible(base, sid, signal);
+  if (delivery) {
+    return delivery.receive(response, guard);
+  }
+  const hint = (await response.text()).trim();
+  await guard();
+  return hint;
+}
+
 export async function wakeHook(
   host: string | undefined,
   seconds?: number,
@@ -246,7 +263,7 @@ export async function wakeHook(
         // 200 carries the hint, and an HTTP error (409: a newer wait replaced this one) ends the hook too.
         // 204 ends one wait; the loop waits again until the hook's own time is up.
         if (res.status === 200) {
-          hint = delivery ? await delivery.receive(res) : (await res.text()).trim();
+          hint = await receiveHint(res, base, sid, request.signal, delivery);
         }
         if (res.status !== 204) {
           break;
@@ -327,7 +344,9 @@ async function nativeContextHint(sid: string, env: NodeJS.ProcessEnv): Promise<s
     const url = new URL("/wait", wakeUrl(env));
     url.search = new URLSearchParams({ session: sid, timeout: "0" }).toString() + delivery.query();
     const response = await fetch(url, { signal: AbortSignal.timeout(1500), redirect: "error" });
-    return response.status === 200 ? await delivery.receive(response) : "";
+    return response.status === 200
+      ? await delivery.receive(response, () => ensureWakeEligible(wakeUrl(env), sid))
+      : "";
   } finally {
     delivery.close();
   }

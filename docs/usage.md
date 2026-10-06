@@ -149,6 +149,12 @@ session that edits without sending mail looks idle. A growing unread count
 means mail has not been read. Check whether the host supports wake delivery,
 the session is paused or offline, or delivery has failed.
 
+When the server has [local T3 lifecycle reconciliation](wake-bridges.md#local-t3-lifecycle)
+configured, settled, archived and deleted threads leave the active roster.
+New mail and reservations fail, even at urgent priority. Registration and
+inbox reads preserve the identity without reopening it. A verified newer
+active projection restores delivery; history and unread mail remain.
+
 ## File reservations
 
 Before editing files in a checkout other sessions share, reserve the paths

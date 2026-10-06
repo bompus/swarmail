@@ -54,7 +54,24 @@ function delivered() {
   held = null;
 }
 
+async function eligible($, sid) {
+  const base = (await $.env.get("SWARMAIL_WAKE_URL")) || "http://127.0.0.1:18765";
+  try {
+    const res = await $.http.fetch(`${base}/wait/status?session=${encodeURIComponent(sid)}`);
+    return res.status === 200 && JSON.parse(res.text).eligible === true;
+  } catch {
+    return false;
+  }
+}
+
 async function submit($) {
+  const pending = held;
+  const allowed = await eligible($, pending.sid);
+  const sid = await $.session.id();
+  const live = await registered($, pending.sid);
+  if (!allowed || !live || sid !== pending.sid || held !== pending || pending.submitting) {
+    return;
+  }
   held.submitting = true;
   try {
     // Resolves once the turn starts, or once the prompt is queued behind a turn that started meanwhile.
@@ -166,6 +183,13 @@ export function register(on) {
       !busy ||
       typeof result?.deny === "string"
     ) {
+      return result;
+    }
+    const pending = held;
+    const allowed = await eligible($, sid);
+    const current = await $.session.id();
+    const live = await registered($, sid);
+    if (!allowed || !live || current !== sid || held !== pending || pending.submitting) {
       return result;
     }
     const { hint } = held;

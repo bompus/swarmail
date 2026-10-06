@@ -40,6 +40,8 @@ function fixture() {
     offers = [];
   const behavior = {
     drop: false,
+    lifecycle: true,
+    holdLifecycleAfterRead: false,
     hold: false,
     persistAdmission: false,
     mismatch: false,
@@ -108,6 +110,9 @@ function fixture() {
         } else if (request.method === "initialized") {
           return;
         } else if (request.method === "thread/read") {
+          if (behavior.holdLifecycleAfterRead) {
+            behavior.lifecycle = false;
+          }
           expect(request.params).toEqual({ threadId: "native-codex", includeTurns: false });
           ws.send(
             JSON.stringify({
@@ -184,6 +189,9 @@ function fixture() {
     hostname: "127.0.0.1",
     port: 0,
     fetch(req) {
+      if (new URL(req.url).pathname === "/wait/status") {
+        return Response.json({ eligible: behavior.lifecycle });
+      }
       const after = Number(new URL(req.url).searchParams.get("after"));
       offers.push(after);
       if (after === 0) {
@@ -598,4 +606,24 @@ test("a prepared legacy Codex command retains its original queue API during roll
     input: [{ type: "text", text: command.text }],
   });
   expect(f.responses).toEqual([]);
+});
+
+test("lifecycle closure after Codex inspection holds the prepared journal before any native write", async () => {
+  const f = fixture();
+  f.behavior.holdLifecycleAfterRead = true;
+  const run = f.start();
+  await until(() => f.requests.some((r) => r.method === "thread/queue/list"));
+  await until(() => f.state()?.pending !== null);
+  run.kill();
+  await run.exited;
+  expect(f.adds()).toEqual([]);
+  expect(f.state().acknowledged).toBe(0);
+  expect(JSON.parse(f.state().pending).command.phase).toBe("prepared");
+  f.behavior.holdLifecycleAfterRead = false;
+  f.behavior.lifecycle = true;
+  const resumed = f.start();
+  await until(() => f.offers.includes(9));
+  resumed.kill();
+  await resumed.exited;
+  expect(f.adds()).toHaveLength(1);
 });

@@ -113,6 +113,18 @@ const MIGRATIONS: ((db: Database) => void)[] = [
       session TEXT PRIMARY KEY, owner TEXT NOT NULL, event_id INTEGER NOT NULL
     )`);
   },
+  (db) => {
+    db.run("ALTER TABLE agents ADD COLUMN lifecycle_profile TEXT");
+    db.run("ALTER TABLE agents ADD COLUMN lifecycle_thread TEXT");
+    db.run(`CREATE TABLE lifecycle_sources (
+      profile TEXT PRIMARY KEY, database_path TEXT NOT NULL, event_table TEXT NOT NULL,
+      sequence INTEGER NOT NULL, event_id TEXT NOT NULL
+    )`);
+    db.run(`CREATE TABLE session_lifecycle (
+      profile TEXT NOT NULL, thread_id TEXT NOT NULL, state TEXT NOT NULL,
+      revision INTEGER NOT NULL, PRIMARY KEY(profile, thread_id)
+    )`);
+  },
 ];
 
 const IDENTITY = ["host", "session_id", "t3_thread", "build", "cwd"] as const;

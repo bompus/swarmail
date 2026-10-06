@@ -88,10 +88,19 @@ class CodexClient {
     this.pending = undefined;
   }
 
-  async request(method: string, params: unknown): Promise<any> {
+  private currentFailure() {
+    return this.failure;
+  }
+
+  async request(method: string, params: unknown, beforeSend?: () => Promise<void>): Promise<any> {
     await this.ready;
     if (this.failure) {
       throw this.failure;
+    }
+    await beforeSend?.();
+    const failure = this.currentFailure();
+    if (failure) {
+      throw failure;
     }
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
@@ -164,7 +173,7 @@ async function steerCodex(
   thread: any,
   threadId: string,
   { promptId, text }: { promptId: string; text: string },
-  markAttempted: () => void,
+  beforeSend: () => Promise<void>,
 ) {
   if (
     thread.canAcceptDirectInput !== true ||
@@ -174,13 +183,16 @@ async function steerCodex(
   ) {
     throw new BridgeError("Codex cannot accept steering now; holding mail", true);
   }
-  markAttempted();
   // Codex resolves start or steer atomically; no read-to-expected-turn-id race.
-  const started = await client.request("turn/start", {
-    threadId,
-    clientUserMessageId: promptId,
-    input: [{ type: "text", text }],
-  });
+  const started = await client.request(
+    "turn/start",
+    {
+      threadId,
+      clientUserMessageId: promptId,
+      input: [{ type: "text", text }],
+    },
+    beforeSend,
+  );
   if (
     typeof started?.turn?.id !== "string" ||
     !started.turn.id ||
@@ -196,8 +208,16 @@ export async function deliverCodex(
   command: Record<string, unknown>,
   markAttempted: () => void,
   signal: AbortSignal,
+  guard?: () => Promise<void>,
 ): Promise<void> {
   const { promptId, text } = savedNative(command, "Codex");
+  const beforeSend = async () => {
+    await guard?.();
+    if (signal.aborted) {
+      throw new BridgeError("stopped", true);
+    }
+    markAttempted();
+  };
   let client: CodexClient | undefined;
   const matches = (id: unknown, input: unknown) => {
     if (id !== promptId) {
@@ -244,15 +264,18 @@ export async function deliverCodex(
       return;
     }
     if (command.delivery === "steer") {
-      await steerCodex(client, result.thread, target.id, { promptId, text }, markAttempted);
+      await steerCodex(client, result.thread, target.id, { promptId, text }, beforeSend);
       return;
     }
-    markAttempted(); // Durable before send, including the crash-before-write window.
-    const added = await client.request("thread/queue/add", {
-      threadId: target.id,
-      clientUserMessageId: promptId,
-      input: [{ type: "text", text }],
-    });
+    const added = await client.request(
+      "thread/queue/add",
+      {
+        threadId: target.id,
+        clientUserMessageId: promptId,
+        input: [{ type: "text", text }],
+      },
+      beforeSend,
+    );
     const receipt = added?.queuedSubmission;
     if (
       typeof receipt?.id !== "string" ||
