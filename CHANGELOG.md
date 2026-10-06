@@ -4,6 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Session inbox drains stop after an underfull page, avoiding an extra empty
+  fetch. MCP and usage guidance use the same capped page-size rule.
+
 - Generic inbox notices are suppressed after admission until the receiving
   session drains its unread mail. Partial reads and previews keep the notice
   outstanding; lost offers retry their original event across restart.

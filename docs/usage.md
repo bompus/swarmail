@@ -104,23 +104,29 @@ requires one matching provider and native ID; V1 uses recorded registration
 tags. If discovery fails,
 use the explicit mailbox interface below. Keep registration tags current.
 
-`--limit N` sets the page size, not a total limit. `--json` prints one JSON
-array per line, including the final empty array. `--peek` returns one page
+`--limit N` sets the page size, capped at 1000, not a total limit. The drain
+stops on a page smaller than that effective limit. `--json` prints one JSON
+array per fetched page; a final empty array appears only when no mail remains
+after a full page or the inbox starts empty. `--peek` returns one page
 without marking it read. `--all` returns one page including previously read
 mail and marks returned unread entries read. Neither preview drains the inbox.
 The session mode cannot be combined with `--as`, `--cursor` or positional
 arguments.
 
 For MCP, use `fetch_session_inbox` with the current tag's `host` and `session_id`,
-and `t3_thread` when known. Pass `include_bodies: true`; repeat until an empty
-page. Its defaults are `limit: 20`, `unread_only: true`, `mark_read: true` and
+and `t3_thread` when known. Pass `include_bodies: true`; stop when a page has
+fewer messages than the effective limit, repeating only after a full page.
+Its defaults are `limit: 20`, `unread_only: true`, `mark_read: true` and
 `include_bodies: false`. Results carry `project_key` and `agent_name` for replies
 and acknowledgments. Session matching selects mail; it is not authentication
 on this trusted local server.
 
 For one explicit mailbox, call `fetch_inbox` with `project_key`, `agent_name`,
 `unread_only: true`, `include_bodies: true` and `mark_read: true`. Read each
-returned body and repeat until an empty page. Marking each page read lets the
+returned body. Stop when a page has fewer messages than the effective limit
+(default 20, capped at 1000); repeat only after a full page. An underfull page
+exhausts matching unread mail at that fetch; later arrivals remain unread for
+the next notice or inbox check. Marking each page read lets the
 next call reach older unread mail. Its defaults omit bodies and mark returned
 messages read; stored messages remain available with `unread_only: false`.
 For a metadata preview, pass `mark_read: false`.

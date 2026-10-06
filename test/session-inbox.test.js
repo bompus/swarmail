@@ -142,39 +142,51 @@ test("preview revives returned retired identities and read marking covers only r
   expect(await f.inbox()).toEqual([]);
 });
 
-test("session CLI discovers identity outside a repository, drains pages, and ignores name overrides", async () => {
-  const f = fixture();
-  await f.register("/fixture/a", "BlueLake", "[codex:current]");
-  await f.register("/fixture/b", "GreenHill", "[codex:current]");
-  await f.send("/fixture/a", ["BlueLake"]);
-  await f.send("/fixture/b", ["GreenHill"]);
-  const log = spyOn(console, "log").mockImplementation(() => {});
-  try {
-    expect(
-      await mail(
-        ["inbox", "--session", "--limit", "1", "--json"],
-        async () => "",
-        {
-          ...f.env,
-          CODEX_THREAD_ID: "current",
-          SWARMAIL_AGENT: "Unrelated",
-        },
-        root,
-      ),
-    ).toBe(0);
-    const pages = log.mock.calls.map(([text]) => JSON.parse(text));
-    expect(pages.map((page) => page.length)).toEqual([1, 1, 0]);
-    expect(
-      pages
-        .slice(0, -1)
-        .flat()
-        .map((row) => row.agent_name),
-    ).toEqual(["GreenHill", "BlueLake"]);
-    expect(await f.inbox()).toEqual([]);
-  } finally {
-    log.mockRestore();
-  }
-});
+for (const [count, limit, sizes] of [
+  [0, undefined, [0]],
+  [2, undefined, [2]],
+  [2, 1, [1, 1, 0]],
+  [3, 2, [2, 1]],
+  [1001, 10000, [1000, 1]],
+]) {
+  test(`session CLI drains ${count} receipts with limit ${limit ?? "default"} and ignores name overrides`, async () => {
+    const f = fixture();
+    await f.register("/fixture/a", "BlueLake", "[codex:current]");
+    await f.register("/fixture/b", "GreenHill", "[codex:current]");
+    const recipients = [];
+    for (let index = 0; index < count; index++) {
+      const name = index % 2 ? "GreenHill" : "BlueLake";
+      await f.send(index % 2 ? "/fixture/b" : "/fixture/a", [name]);
+      recipients.unshift(name);
+    }
+    const log = spyOn(console, "log").mockImplementation(() => {});
+    try {
+      expect(
+        await mail(
+          [
+            "inbox",
+            "--session",
+            "--json",
+            ...(limit === undefined ? [] : ["--limit", String(limit)]),
+          ],
+          async () => "",
+          {
+            ...f.env,
+            CODEX_THREAD_ID: "current",
+            SWARMAIL_AGENT: "Unrelated",
+          },
+          root,
+        ),
+      ).toBe(0);
+      const pages = log.mock.calls.map(([text]) => JSON.parse(text));
+      expect(pages.map((page) => page.length)).toEqual(sizes);
+      expect(pages.flat().map((row) => row.agent_name)).toEqual(recipients);
+      expect(await f.inbox()).toEqual([]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+}
 
 for (const flag of ["--peek", "--all"]) {
   test(`session CLI ${flag} returns a bounded preview rather than looping`, async () => {
@@ -185,7 +197,7 @@ for (const flag of ["--peek", "--all"]) {
     try {
       expect(
         await mail(
-          ["inbox", "--session", flag, "--json"],
+          ["inbox", "--session", flag, "--limit", "1", "--json"],
           async () => "",
           { ...f.env, CODEX_THREAD_ID: "current" },
           root,
