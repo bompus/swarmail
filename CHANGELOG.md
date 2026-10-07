@@ -4,6 +4,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Add optional T3 credential, backend identity and polling modules for reader consumers.
+  Clean owned credentials retry measured connection refusal, reset and request timeout
+  within one five-minute grace. Rejection and unfinished ownership stay outside that
+  retry path. Source availability does not install or restart a reader.
+
 - Remove unused installer fields and an unused generic V2 command builder; retain notice and legacy journal delivery. Process readers now explicitly support only Linux and Windows.
 - Add validated resource release/cancellation notices with generated readable text and derived quiet or actionable delivery, available through MCP send_message and CLI JSON stdin.
 - Keep resource coordination and receiver summaries relevant, with readable sender prose.
