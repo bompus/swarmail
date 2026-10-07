@@ -84,8 +84,9 @@ Readable CLI inbox, thread and search output adds a sender title, repository
 or checkout when available. Inbox snapshots describe the sender at send time;
 views without a snapshot use current roster metadata, which can differ.
 Missing or unavailable metadata leaves the name unchanged. JSON output and
-stored bodies keep their original names and text. CLI self labels use local
-session registration, ignoring `--as` and `SWARMAIL_AGENT` overrides.
+stored bodies keep their original names and text. The identity-checked session
+inbox labels its receiver as `this session`. Sender names remain visible because
+mail location snapshots do not establish historical sender-session identity.
 
 ## Sending
 

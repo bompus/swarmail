@@ -28,12 +28,8 @@ interface Message {
 
 /** Prefer send-time labels; older views can use the current roster without changing stored mail. */
 function senderLabels(env: NodeJS.ProcessEnv) {
-  const own = selfNames({ ...env, SWARMAIL_AGENT: undefined });
   const rosters = new Map<string, Map<string, Location | null>>();
   return async (project: string, message: Pick<Message, "from" | "sender_location">) => {
-    if (own.has(message.from)) {
-      return "this session";
-    }
     let location = message.sender_location;
     if (!location) {
       if (!rosters.has(project)) {
