@@ -4,6 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Preserve hook configuration files when only JSON object key order or formatting differs; report and repair changed values as before.
+
 - Retry-key guidance documents cleanup at server startup as well as hourly.
 
 - Sending guidance distinguishes informational messages from requested work,

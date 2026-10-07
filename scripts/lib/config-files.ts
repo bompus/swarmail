@@ -12,6 +12,7 @@ import {
 import { basename, dirname, join } from "node:path";
 import { renameOver } from "../../src/files.ts";
 import { within } from "../../src/paths.ts";
+import { isDeepStrictEqual } from "node:util";
 import type { Stats } from "node:fs";
 
 export function present(path: string): Stats | null {
@@ -122,8 +123,11 @@ export function planJson(
   update: (config: Record<string, unknown>) => Record<string, unknown>,
 ): { path: string; original: string; next: string } {
   const original = readConfig(path, home);
+  const config = original.trim() ? object(JSON.parse(original), path) : {};
+  const updated = update(config);
   const next =
-    JSON.stringify(update(original.trim() ? object(JSON.parse(original), path) : {}), null, 2) +
-    "\n";
+    original.trim() && isDeepStrictEqual(config, updated)
+      ? original
+      : JSON.stringify(updated, null, 2) + "\n";
   return { path, original, next };
 }
