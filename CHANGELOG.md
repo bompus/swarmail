@@ -4,6 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Validator research is preserved through a pinned historical link in the
+  README instead of a report in the current source tree.
+
 - Sends and replies support quiet normal/low informational mail, retained in
   inbox and search without automatic wakeups. Urgent mail and acknowledgement
   requests require wake delivery. Existing callers keep wake delivery by default.

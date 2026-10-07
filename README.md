@@ -405,8 +405,9 @@ between rounds of the same server.
 
 ## Development
 
-[Validator research](docs/research/validators-2026-10-06.md) records the generated/runtime
-comparison, TypeBox compatibility findings and the limits of the measurements.
+[Archived validator research](https://github.com/bompus/swarmail/blob/d55186b117c66bc522f4d2b4b041cd949eb0dc73/docs/research/validators-2026-10-06.md)
+records the generated/runtime comparison, TypeBox compatibility findings and the
+limits of the measurements for the tested mail contracts.
 
 ```bash
 bun install
