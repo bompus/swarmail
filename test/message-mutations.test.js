@@ -43,6 +43,7 @@ function fixture(path = ":memory:") {
       to: ["GreenCastle"],
       subject: "history",
       body_md: "retained content",
+      notification_policy: "wake",
       ...extra,
     });
   const change = (id, extra = {}) =>

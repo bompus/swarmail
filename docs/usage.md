@@ -181,12 +181,18 @@ mail location snapshots do not establish historical sender-session identity.
   bound source. Standalone lifecycle authority is not enabled, so both policies
   currently store unknown standalone mail with the same warnings.
   `swarmail send --json` prints the full result; ordinary output prints warnings.
-- `notification_policy` accepts `wake` (default) or `quiet`; the CLI uses
-  `--notification-policy`. Quiet normal/low informational mail stays in inbox
-  and search without automatic inbox hints. Quiet high/urgent mail or an
-  acknowledgement request is rejected. Keep actionable handoffs, requested
-  results and blockers on wake delivery. Replies default to wake independently
-  of the original policy. Priority edits cannot promote quiet mail to high/urgent.
+- `notification_policy` accepts `wake` or `quiet`; the CLI uses
+  `--notification-policy`. When omitted, normal/low mail without an acknowledgement
+  request defaults to quiet only when every recipient in to, cc and bcc has a
+  valid registered T3 thread ID. Mixed, standalone and unidentified recipients
+  default to wake. A program name alone does not identify a T3 session.
+  Quiet mail stays in inbox and search without automatic inbox hints.
+  Explicit quiet high/urgent mail or an acknowledgement request is rejected.
+  Set wake explicitly for actionable handoffs, requested results and blockers.
+  Replies apply the same default using their recipients and effective importance
+  and acknowledgement settings; they do not inherit the original policy.
+  Ping probes keep their wake default. Priority edits cannot promote quiet mail
+  to high/urgent.
 - A nonempty `idempotency_key` makes an identical retry return the original
   message. Reuse the same key, tool, calling agent and arguments. Changed
   arguments with that key return `IDEMPOTENCY_KEY_CONFLICT`.

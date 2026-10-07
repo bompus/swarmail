@@ -383,6 +383,7 @@ test("coalescing wake offers leaves all Swarmail messages unread in the durable 
       to: ["BlueLake"],
       subject: `mail-${i}`,
       body_md: `body-${i}`,
+      notification_policy: "wake",
     });
     ids.push(sent.id);
     const response = await fetch(

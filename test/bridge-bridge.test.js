@@ -156,6 +156,7 @@ async function fixture(type = "opencode-v2-queue", behavior = {}) {
       to: ["GreenCastle"],
       subject: "private subject",
       body_md: "private body",
+      notification_policy: "wake",
     });
   const state = () => {
     const root = join(dir, "state/swarmail-bridge");

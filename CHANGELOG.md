@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Default ordinary normal/low, acknowledgement-free mail to quiet when every
+  recipient has a valid registered T3 thread ID. Explicit policies, urgent mail
+  and mixed or unidentified recipients retain their existing behavior.
+
 - Add optional T3 credential, backend identity and polling modules for reader consumers.
   Clean owned credentials retry measured connection refusal, reset and request timeout
   within one five-minute grace. Rejection and unfinished ownership stay outside that

@@ -75,6 +75,7 @@ function fixture() {
       to: ["GreenCastle"],
       subject: "retained",
       body_md: "history",
+      notification_policy: "wake",
       ...extra,
     });
   const roster = () => tools.list_agents({ project_key: "/repo/one" }).map((row) => row.name);
@@ -518,6 +519,7 @@ test("project-specific manual retirement does not suppress another active mailbo
     to: ["GreenCastle"],
     subject: "active",
     body_md: "mail",
+    notification_policy: "wake",
   });
   expect(sessionEligible(f.db, "native-one")).toBe(true);
   const waiters = createWaiters(f.db, 10);

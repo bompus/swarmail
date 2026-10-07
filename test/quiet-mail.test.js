@@ -33,6 +33,7 @@ function fixture(path = ":memory:") {
         to: ["GreenCastle"],
         subject: "informational",
         body_md: "retained evidence",
+        notification_policy: "wake",
         ...extra,
       }),
     inbox: (extra = {}) =>

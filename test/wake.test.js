@@ -88,6 +88,7 @@ const send = (to) =>
     to: [to],
     subject: "secret subject",
     body_md: "secret body",
+    notification_policy: "wake",
   });
 /**
  * The PID in the Claude hook's PID file for session s-1 once it names `pid` (or any PID), or 0 after 5 s. On Windows
@@ -626,6 +627,7 @@ describe("read-only unread mailbox peek", () => {
       to: ["SilverLake"],
       subject: "new",
       body_md: "new",
+      notification_policy: "wake",
     });
     await call("retire_agent", { project_key: projects[0], agent_name: "SilverLake" });
     expect(await (await peek()).json()).toEqual({ mailboxes: [] });
