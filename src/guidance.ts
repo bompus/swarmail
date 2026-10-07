@@ -2,6 +2,7 @@
 export const SENDING_GUIDANCE =
   "Send only when the recipient needs to act or know: a handoff, requested result, blocker or shared-resource change. " +
   "Lead with the action, decision or changed result; keep necessary scope and constraints inline and link detailed evidence. " +
+  "When referring to another agent, include its verified session title or repository beside its name; use this session for the current receiver only after matching session identity. " +
   "For relayed authorization, preserve the source, exact selected action and target owner; a bare option code is ambiguous. " +
   "Contact only still-dependent resource owners, sending release or cancellation before dropping waiting recipients. " +
   "Use one supported transport per recipient and purpose; uncertain delivery is not a reason to resend by another route. " +

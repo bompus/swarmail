@@ -272,3 +272,105 @@ test("thread prints a thread's messages oldest first without a sender name", asy
     log.mockRestore();
   }
 });
+
+test("human sender labels use snapshots or one roster lookup and leave JSON and bodies intact", async () => {
+  const snapshot = { title: "API cleanup", repo: "api", worktree: "api-work", branch: null };
+  const messages = [
+    {
+      id: 901,
+      from: "GoldMoss",
+      subject: "Ready",
+      created_ts: "2026-01-01",
+      importance: "normal",
+      ack_required: false,
+      thread_id: "labels",
+      body_md: "BlueLake is waiting",
+      sender_location: snapshot,
+    },
+    {
+      id: 902,
+      from: "BlueLake",
+      subject: "Waiting",
+      created_ts: "2026-01-01",
+      importance: "normal",
+      ack_required: false,
+      thread_id: "labels",
+      body_md: "GoldMoss is ready",
+    },
+    {
+      id: 903,
+      from: "RedHill",
+      subject: "Unknown",
+      created_ts: "2026-01-01",
+      importance: "normal",
+      ack_required: false,
+      thread_id: "labels",
+    },
+  ];
+  let rosterCalls = 0;
+  let rosterDown = false;
+  const fixture = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const { params } = await request.json();
+      let value;
+      if (params.name === "list_agents") {
+        rosterCalls++;
+        if (rosterDown) {
+          return new Response("unavailable", { status: 503 });
+        }
+        value = [
+          {
+            name: "BlueLake",
+            location: { title: null, repo: "worker", worktree: "worker-work", branch: null },
+          },
+        ];
+      } else if (params.name === "summarize_thread") {
+        value = {
+          summary: { participants: ["GoldMoss", "BlueLake", "RedHill"], total_messages: 3 },
+          messages,
+        };
+      } else {
+        value = messages;
+      }
+      return Response.json({
+        jsonrpc: "2.0",
+        id: 1,
+        result: { content: [{ type: "text", text: JSON.stringify(value) }] },
+      });
+    },
+  });
+  const log = spyOn(console, "log").mockImplementation(() => {});
+  const localEnv = {
+    ...env,
+    SWARMAIL_URL: `http://127.0.0.1:${fixture.port}`,
+    SWARMAIL_AGENT: "GoldMoss",
+  };
+  try {
+    expect(
+      await mail(["inbox", "--peek", "--as", "GoldMoss"], async () => "", localEnv, repo),
+    ).toBe(0);
+    const text = log.mock.calls.flat().join("\n");
+    expect(text).toContain("from GoldMoss (API cleanup): Ready");
+    expect(text).toContain("from BlueLake (worker): Waiting");
+    expect(text).toContain("from RedHill: Unknown");
+    expect(text).toContain("    BlueLake is waiting");
+    expect(text).not.toContain("this session");
+    expect(rosterCalls).toBe(1);
+    log.mockClear();
+    expect(await mail(["inbox", "--peek", "--json"], async () => "", localEnv, repo)).toBe(0);
+    expect(JSON.parse(log.mock.calls[0][0])).toEqual(messages);
+    expect(rosterCalls).toBe(1);
+    log.mockClear();
+    expect(await mail(["thread", "labels"], async () => "", localEnv, repo)).toBe(0);
+    expect(rosterCalls).toBe(2);
+    expect(log.mock.calls.flat().join("\n")).toContain("from GoldMoss (API cleanup): Ready");
+    rosterDown = true;
+    log.mockClear();
+    expect(await mail(["inbox", "--peek"], async () => "", localEnv, repo)).toBe(0);
+    expect(log.mock.calls.flat().join("\n")).toContain("from BlueLake: Waiting");
+  } finally {
+    log.mockRestore();
+    fixture.stop(true);
+  }
+});

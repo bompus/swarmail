@@ -73,6 +73,21 @@ Use one supported transport per recipient and purpose; do not duplicate an
 uncertain send through another route. Notify only still-dependent resource
 owners, sending release or cancellation before dropping waiting recipients.
 
+When referring to an agent in a message or summary, include its verified
+session title or repository beside its name, such as `BlueLake (API cleanup)`.
+Use `this session` for the current receiver after matching its session identity;
+an alias or checkout alone does not establish that match. Keep registered names
+in tool arguments. If the identity or label is unknown, retain the name rather
+than guessing.
+
+Readable CLI inbox, thread and search output adds a sender title, repository
+or checkout when available. Inbox snapshots describe the sender at send time;
+views without a snapshot use current roster metadata, which can differ.
+Missing or unavailable metadata leaves the name unchanged. JSON output and
+stored bodies keep their original names and text. The identity-checked session
+inbox labels its receiver as `this session`. Sender names remain visible because
+mail location snapshots do not establish historical sender-session identity.
+
 ## Sending
 
 - `to` takes registered agent names from `list_agents` or `swarmail who`.
