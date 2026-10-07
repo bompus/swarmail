@@ -66,9 +66,15 @@ Write only to sessions that must act or whose work you could affect:
 Keep routine progress in your own conversation. An informational message
 needs no reply.
 
+Make clear to the human and receiver whether the message informs or requests
+work. For requests, name the action, repository and owner; distinguish
+implementing source, installing an update and adding guidance. Use plain verbs in the existing
+message, without a separate notice or template.
+
 Lead with the action, decision or changed result. Keep the scope and constraints
-needed to act inline; link detailed evidence. Relayed selections need the
-source, exact selected action and target owner, not just an option code.
+needed to act inline; link detailed evidence in the same message. Relayed
+selections need the source, exact selected action and target owner, not just an
+option code.
 Use one supported transport per recipient and purpose; do not duplicate an
 uncertain send through another route. Notify only still-dependent resource
 owners, sending release or cancellation before dropping waiting recipients.

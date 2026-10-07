@@ -4,6 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Sending guidance distinguishes informational messages from requested work,
+  and source implementation from update installation or guidance additions.
+
 - Readable mail output labels senders with session titles or repository names
   when available. The identity-checked session inbox calls its receiver "this
   session"; sender names, JSON and stored message bodies are preserved. Product
