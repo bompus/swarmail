@@ -7,6 +7,7 @@
 //   swarmail thread <id> [--limit N] [--json]                   a thread's messages, oldest first; needs no sender name
 // The sender is --as, else SWARMAIL_AGENT, else the name the register hook recorded for the agent host above this shell.
 import { swarmailUrl } from "./paths.ts";
+import { compileResourceNotice } from "./resource-notice.ts";
 import { pageLimit } from "./store.ts";
 import { primaryCheckout } from "./checkout.ts";
 import { selfNames, selfSession } from "./registry.ts";
@@ -161,6 +162,9 @@ export async function mail(
   const [command, ...rest] = args;
   const { opts, rest: positional } = parse(rest);
   try {
+    if (opts["resource-notice"] !== undefined && command !== "send") {
+      throw new Error("--resource-notice requires send");
+    }
     if (opts.session) {
       if (
         command !== "inbox" ||
@@ -192,21 +196,48 @@ export async function mail(
       return await mutate(env, project, agent, { command, positional, opts });
     }
     const [to, subject, body] = positional;
-    if (!to || !subject) {
+    let resourceArgs: Record<string, unknown> | undefined;
+    if (opts["resource-notice"] !== undefined) {
+      if (
+        positional.length !== 1 ||
+        Object.keys(opts).some(
+          (key) => !["resource-notice", "idempotency-key", "as", "json"].includes(key),
+        ) ||
+        typeof opts["idempotency-key"] !== "string" ||
+        opts["idempotency-key"].startsWith("--")
+      ) {
+        throw new Error(
+          "resource notices require one recipient, JSON stdin and --idempotency-key; text and delivery options cannot be combined",
+        );
+      }
+      resourceArgs = {
+        project_key: project,
+        sender_name: agent,
+        to: to!.split(","),
+        idempotency_key: opts["idempotency-key"],
+        resource_notice: JSON.parse(await stdin()),
+      };
+      compileResourceNotice(resourceArgs);
+    }
+    if (!resourceArgs && (!to || !subject)) {
       console.error("usage: swarmail send <to[,to...]> <subject> [body] [--as NAME]");
       return 64;
     }
-    const sent = await call(env, "send_message", {
-      project_key: project,
-      sender_name: agent,
-      to: to.split(","),
-      subject,
-      body_md: body ?? (await stdin()),
-      ...(opts["delivery-policy"] !== undefined && { delivery_policy: opts["delivery-policy"] }),
-      ...(opts["notification-policy"] !== undefined && {
-        notification_policy: opts["notification-policy"],
-      }),
-    });
+    const sent = await call(
+      env,
+      "send_message",
+      resourceArgs ?? {
+        project_key: project,
+        sender_name: agent,
+        to: to!.split(","),
+        subject,
+        body_md: body ?? (await stdin()),
+        ...(opts["delivery-policy"] !== undefined && { delivery_policy: opts["delivery-policy"] }),
+        ...(opts["notification-policy"] !== undefined && {
+          notification_policy: opts["notification-policy"],
+        }),
+      },
+    );
     if (opts.json) {
       console.log(JSON.stringify(sent));
       return 0;
