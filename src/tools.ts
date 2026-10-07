@@ -48,7 +48,7 @@ const TASK = prop(
 );
 const IDEMPOTENCY_KEY = prop(
   "string",
-  "Nonempty key for this tool and agent. Identical arguments replay with idempotent_replay:true; different arguments fail with IDEMPOTENCY_KEY_CONFLICT. Hourly cleanup removes keys older than 7 days. Retries can replay until removal; afterward a retry may perform the operation again.",
+  "Nonempty key for this tool and agent. Identical arguments replay with idempotent_replay:true; different arguments fail with IDEMPOTENCY_KEY_CONFLICT. Cleanup runs at server startup and hourly, removing keys older than 7 days. Retries can replay until removal; afterward a retry may perform the operation again.",
 );
 const IMPORTANCE = prop("string", "low, normal, high or urgent.");
 const DELIVERY_POLICY = {

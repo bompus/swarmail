@@ -129,8 +129,9 @@ mail location snapshots do not establish historical sender-session identity.
   message. Reuse the same key, tool, calling agent and arguments. Changed
   arguments with that key return `IDEMPOTENCY_KEY_CONFLICT`.
   Missing or empty keys do not deduplicate.
-  Hourly cleanup removes keys older than seven days. Retries replay until
-  removal; after removal, the same key can send another message.
+  Cleanup runs at server startup and hourly, removing keys older than seven
+  days. Retries replay until removal; after removal, the same key can send
+  another message.
 - Replayed delivery observations have `historical:true`. They describe the
   original admission, not current session availability. Delivery receipts keep
   that snapshot alongside read and acknowledgement timestamps. Older messages
