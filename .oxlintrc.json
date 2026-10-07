@@ -101,9 +101,6 @@
       }
     ]
   },
-  "ignorePatterns": [
-    "docs/experiments/**"
-  ],
   "plugins": [
     "eslint",
     "typescript",

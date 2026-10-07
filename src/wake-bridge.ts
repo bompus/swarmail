@@ -16,7 +16,7 @@ import { t3NoticeAdapter } from "./wake-t3-notice.ts";
 
 type Target = WakeTarget | GrokTarget | CodexTarget;
 
-/** Every wake target type. A new one adds a row here and nothing else in the bridge. */
+/** Wake target adapters; T3 V2 preparation uses the notice adapter in runBridge. */
 // The HTTP types share WakeTarget, whose `type` is itself a union.
 type TargetOf<K> = K extends WakeTarget["type"] ? WakeTarget : Extract<Target, { type: K }>;
 const ADAPTERS: { [K in Target["type"]]: TargetAdapter<TargetOf<K>> } = {

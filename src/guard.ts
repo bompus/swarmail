@@ -1,5 +1,5 @@
 // `swarmail guard <pre-commit|pre-push>`: refuses a commit or push that touches a path another agent holds
-// an exclusive Swarmail reservation on. Installed into a repository's hook chain by install-swarmail-guard.ts.
+// an exclusive Swarmail reservation on. Installed into a repository's hook chain by scripts/install-guard.ts.
 // SWARMAIL_GUARD=warn reports without blocking, SWARMAIL_GUARD=off skips the check; `--no-verify` skips every hook.
 import { databasePath } from "./paths.ts";
 import { Database } from "bun:sqlite";

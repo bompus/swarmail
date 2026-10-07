@@ -5,12 +5,24 @@ import { Database } from "bun:sqlite";
 import { createServer as createTcpServer } from "node:net";
 import { createServer } from "../src/server.ts";
 import { openWakeState, wakeStatePath } from "../src/wake-state.ts";
-import { t3V1Adapter } from "../src/wake-target.ts";
+import { BridgeError, t3V1Adapter, t3V2Adapter } from "../src/wake-target.ts";
 import { bridgeBinding } from "../src/wake-bridge.ts";
 import { testScratch } from "./fixtures/test-scratch.js";
 
 const scratch = testScratch();
 const cleanups = [];
+test("V2 bridge preparation refuses the generic command path", async () => {
+  let failure;
+  try {
+    await t3V2Adapter.prepare({}, "Swarmail: pending mail");
+  } catch (error) {
+    failure = error;
+  }
+  expect(failure).toBeInstanceOf(BridgeError);
+  expect(failure.message).toBe("T3 V2 notices require the notice adapter");
+  expect(failure.retryable).toBe(false);
+});
+
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) {
     await cleanup();

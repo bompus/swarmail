@@ -532,20 +532,8 @@ export const t3V1Adapter: TargetAdapter<WakeTarget> = {
 export const t3V2Adapter: TargetAdapter<WakeTarget> = {
   parse: parseHttp("t3-v2-queue"),
   binding: () => ({}),
-  prepare: async (target, text) => {
-    await inspectT3Thread(target);
-    return {
-      type: "message.dispatch",
-      commandId: crypto.randomUUID(),
-      threadId: target.id,
-      messageId: crypto.randomUUID(),
-      text,
-      attachments: [],
-      createdBy: "agent",
-      creationSource: "server",
-      deliveryIntent: "steer",
-      dispatchMode: { type: "start_immediately" },
-    };
+  prepare: () => {
+    throw new BridgeError("T3 V2 notices require the notice adapter");
   },
   deliver: async (target, command, _attempted, _signal, guard) =>
     admitted(await dispatchV2(target, command, guard)),

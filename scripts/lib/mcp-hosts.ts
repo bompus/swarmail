@@ -1,5 +1,4 @@
-// The MCP host config table and plan/commit loop shared by
-// configure-swarmail-mcp.ts, configure-browser-mcp.ts and check-mcp-daemons.ts.
+// The MCP host config table and plan/commit loop for scripts/configure-mcp.ts.
 import { mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -18,11 +17,6 @@ const HOSTS: Array<[client: string, rel: string, format: McpFormat]> = [
   ["opencode", ".config/opencode/opencode.json", "opencode"],
 ];
 const WINDOWS_DEVIN_REL = "AppData/Roaming/devin/mcp_config.json";
-
-/** Every host config path relative to home; opencode is listed as both .jsonc and .json. */
-export const MCP_HOST_CONFIG_RELS = HOSTS.flatMap(([, rel]) =>
-  rel.endsWith("opencode.json") ? [rel + "c", rel] : [rel],
-);
 
 /** The config file each host reads under home; opencode uses whichever of .jsonc/.json exists. */
 export function mcpHosts(
@@ -97,14 +91,12 @@ export interface McpPlan {
   original: string;
   next: string;
   status: string;
-  removed?: string[];
 }
 
 export interface McpResult {
   client: string;
   path: string;
   status: string;
-  removed?: string[];
   backup?: string | null;
 }
 
@@ -118,19 +110,18 @@ export function commitMcpPlans(plans: McpPlan[], home: string, dryRun: boolean):
       throw new Error("Configuration changed during setup: " + plan.path);
     }
   }
-  return plans.map(({ client, path, original, next, status, removed }) => {
-    const extra = removed?.length ? { removed } : {};
+  return plans.map(({ client, path, original, next, status }) => {
     if (original === next || dryRun) {
       const reported =
         original === next ? status : status === "added" ? "would-add" : "would-update";
-      return { client, path, status: reported, ...extra };
+      return { client, path, status: reported };
     }
     mkdirSync(dirname(path), { recursive: true });
     if (readConfig(path, home) !== original) {
       throw new Error("Configuration changed during setup: " + path);
     }
     const backup = writeChanged(path, original, next, "mcp-backup");
-    return { client, path, status, backup, ...extra };
+    return { client, path, status, backup };
   });
 }
 

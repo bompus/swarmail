@@ -4,6 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Remove unused installer fields and an unused generic V2 command builder; retain notice and legacy journal delivery. Process readers now explicitly support only Linux and Windows.
+
 - Preserve hook configuration files when only JSON object key order or formatting differs; report and repair changed values as before.
 
 - Product guidance clarifies roster/ping evidence, acknowledgment timing and
