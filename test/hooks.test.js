@@ -463,3 +463,14 @@ test("JSON plans preserve object formatting while retaining array order", () => 
   expect(reordered.next).not.toBe(original);
   expect(JSON.parse(reordered.next).commands).toEqual(["wake", "register"]);
 });
+
+test("JSON plans retain edits made in place by the update callback", () => {
+  const dir = home();
+  const path = join(dir, "config.json");
+  writeFileSync(path, '{"timeout":15}');
+  const planned = planJson(path, dir, (config) => {
+    config.timeout = 30;
+    return config;
+  });
+  expect(JSON.parse(planned.next).timeout).toBe(30);
+});

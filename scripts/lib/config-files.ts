@@ -126,7 +126,7 @@ export function planJson(
   const config = original.trim() ? object(JSON.parse(original), path) : {};
   const updated = update(config);
   const next =
-    original.trim() && isDeepStrictEqual(config, updated)
+    original.trim() && isDeepStrictEqual(JSON.parse(original), updated)
       ? original
       : JSON.stringify(updated, null, 2) + "\n";
   return { path, original, next };
