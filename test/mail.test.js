@@ -225,7 +225,11 @@ test("--help prints usage and sends nothing; an unreachable server names the rem
       const r = cli(...args);
       expect(r.status).toBe(0);
       expect(r.stdout).toContain(`swarmail ${args[0]}`);
-      expect(r.stdout.trim().split("\n")).toHaveLength(args[0] === "send" ? 3 : 1);
+      expect(r.stdout.trim().split("\n")).toHaveLength(args[0] === "send" ? 4 : 1);
+      if (args[0] === "send") {
+        expect(r.stdout).toContain("--resource-notice --idempotency-key KEY");
+        expect(r.stdout).toContain("JSON stdin: resource_id, phase_id, state");
+      }
     }
     expect(cli("--help").stdout).toContain("swarmail version");
     expect(requests).toEqual([]);
