@@ -1,5 +1,8 @@
 # Session updates
 
+The MCP connection briefing and `swarmail --help` point to
+`swarmail updates --help` for the caller workflow below.
+
 An optional local manifest names approved installed or deployed targets.
 Swarmail checks it at supported context hooks without sending mail, starting
 idle turns, installing software or restarting a provider. New upstream commits

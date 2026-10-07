@@ -4,6 +4,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Product guidance clarifies roster/ping evidence, acknowledgment timing and
+  metadata-only session inboxes; CLI help explains the optional update lifecycle.
+- Maintenance documentation distinguishes idle-agent retirement from startup
+  and hourly retry-key cleanup.
+
 - Retry-key guidance documents cleanup at server startup as well as hourly.
 
 - Sending guidance distinguishes informational messages from requested work,
