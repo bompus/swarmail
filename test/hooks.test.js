@@ -10,6 +10,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
+import { planJson } from "../scripts/lib/config-files.ts";
 import {
   claudeModPlugin,
   configureSwarmailHooks,
@@ -422,4 +423,54 @@ test("standalone Devin installs native hooks without T3 and preserves user setti
   }
   expect(existsSync(join(dir, ".t3"))).toBe(false);
   expect(configureSwarmailHooks(dir).changed).toEqual([]);
+});
+
+test("hook drift ignores object key order but catches changed commands and timeouts", () => {
+  const dir = home();
+  try {
+    mkdirSync(join(dir, ".claude"));
+    configureSwarmailHooks(dir);
+    const path = join(dir, ".claude", "settings.json");
+    const settings = JSON.parse(readFileSync(path, "utf8"));
+    const hook = settings.hooks.Stop[0].hooks[0];
+    settings.hooks.Stop[0].hooks[0] = Object.fromEntries(Object.entries(hook).reverse());
+    const reordered = JSON.stringify(settings);
+    writeFileSync(path, reordered);
+    expect(configureSwarmailHooks(dir, { dryRun: true }).changed).toEqual([]);
+    expect(configureSwarmailHooks(dir).changed).toEqual([]);
+    expect(readFileSync(path, "utf8")).toBe(reordered);
+    expect(readdirSync(join(dir, ".claude"))).toEqual(["settings.json"]);
+    for (const field of ["command", "timeout"]) {
+      settings.hooks.Stop[0].hooks[0][field] =
+        field === "command" ? hook.command + " --wrong" : hook.timeout + 1;
+      writeFileSync(path, JSON.stringify(settings));
+      expect(configureSwarmailHooks(dir, { dryRun: true }).changed).toContain(path);
+      settings.hooks.Stop[0].hooks[0][field] = hook[field];
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("JSON plans preserve object formatting while retaining array order", () => {
+  const dir = home();
+  const path = join(dir, "config.json");
+  const original = '{"commands":["register","wake"],"timeout":15}';
+  writeFileSync(path, original);
+  const same = planJson(path, dir, () => ({ timeout: 15, commands: ["register", "wake"] }));
+  expect(same.next).toBe(original);
+  const reordered = planJson(path, dir, () => ({ timeout: 15, commands: ["wake", "register"] }));
+  expect(reordered.next).not.toBe(original);
+  expect(JSON.parse(reordered.next).commands).toEqual(["wake", "register"]);
+});
+
+test("JSON plans retain edits made in place by the update callback", () => {
+  const dir = home();
+  const path = join(dir, "config.json");
+  writeFileSync(path, '{"timeout":15}');
+  const planned = planJson(path, dir, (config) => {
+    config.timeout = 30;
+    return config;
+  });
+  expect(JSON.parse(planned.next).timeout).toBe(30);
 });

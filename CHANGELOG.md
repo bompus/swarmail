@@ -4,6 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Preserve hook configuration files when only JSON object key order or formatting differs; report and repair changed values as before.
+
 - Product guidance clarifies roster/ping evidence, acknowledgment timing and
   metadata-only session inboxes; CLI help explains the optional update lifecycle.
 - Maintenance documentation distinguishes idle-agent retirement from startup
