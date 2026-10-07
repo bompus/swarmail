@@ -51,6 +51,8 @@ test("relays requests in order and drops notifications", async () => {
   ]);
   expect(out.map((m) => m.id)).toEqual([1, 2, 3]);
   expect(out[0].result.serverInfo.name).toBe("swarmail");
+  expect(typeof out[0].result.instructions).toBe("string");
+  expect(out[0].result.instructions.trim().length).toBeGreaterThan(0);
   expect(out[1].result.tools.some((t) => t.name === "send_message")).toBe(true);
   expect(out[2].result.isError).toBeUndefined();
 });

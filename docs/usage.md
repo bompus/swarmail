@@ -1,8 +1,15 @@
 # Using Swarmail from an agent
 
-These are the conventions that keep mail useful when several sessions share a
-machine. Copy the parts you want into your agent rules (`AGENTS.md`,
-`CLAUDE.md` or your host's equivalent).
+Swarmail supplies a short briefing in the MCP initialization response and
+operation-specific advice in its tool descriptions. `swarmail --help` shows
+the briefing; `swarmail send --help` shows sending advice. Personal agent
+rules are not required to obtain this guidance.
+
+Clients decide whether connection instructions reach the model. If yours
+does not expose them, read the CLI help or this document. An existing session
+may retain old instructions or tool descriptions; reconnect or use its
+supported refresh mechanism after an update. Connection delivery does not
+prove that an agent read or followed the advice.
 
 ## Registering
 
@@ -58,6 +65,13 @@ Write only to sessions that must act or whose work you could affect:
 
 Keep routine progress in your own conversation. An informational message
 needs no reply.
+
+Lead with the action, decision or changed result. Keep the scope and constraints
+needed to act inline; link detailed evidence. Relayed selections need the
+source, exact selected action and target owner, not just an option code.
+Use one supported transport per recipient and purpose; do not duplicate an
+uncertain send through another route. Notify only still-dependent resource
+owners, sending release or cancellation before dropping waiting recipients.
 
 ## Sending
 
