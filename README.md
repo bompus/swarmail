@@ -236,6 +236,27 @@ With `normal`, a power loss can lose the most recent writes. A retired agent
 comes back when it registers again or sends, reads mail or reserves files as
 itself.
 
+## Maintenance and retention
+
+The server runs cleanup at startup and hourly. With `SWARMAIL_RETIRE_DAYS`
+above zero, it retires agents inactive longer than that many days. It also
+removes gone projects with no mail, active reservations or agent activity in the last day.
+Paths outside the user home are not judged gone.
+
+Setting `SWARMAIL_RETIRE_DAYS=0` preserves those agents and projects; it does
+not disable retry-key cleanup. Keys older than seven days are removed at
+startup and hourly regardless of this setting. A retry replays until its
+key is removed; afterward, it may perform the operation again. These sweeps
+do not delete message bodies. Account for expired retry keys before a server
+restart; retaining the database file alone does not guarantee every row survives
+startup.
+
+Read-only MCP requests do not suspend cleanup. A client that starts a server
+instance triggers its startup sweep; an existing server can sweep hourly while
+qualification runs. Check expired retry keys before preservation-sensitive
+qualification. A row disappearing during a read-only check alone does not
+identify which process or sweep removed it.
+
 ## Register hook
 
 On a session's first edit in a repository, `swarmail register` registers it

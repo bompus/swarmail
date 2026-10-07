@@ -11,6 +11,9 @@ may retain old instructions or tool descriptions; reconnect or use its
 supported refresh mechanism after an update. Connection delivery does not
 prove that an agent read or followed the advice.
 
+For approved guidance/tool updates or a context reset, read
+`swarmail updates --help` and [Session updates](updates.md).
+
 ## Registering
 
 Each repository is one project, keyed by its primary checkout, for example
@@ -19,11 +22,12 @@ checkout, unless a project already exists under that exact path.
 
 - Register before your first edit, pull request or message in a repository.
   `macro_start_session` creates the project, registers you and returns your
-  inbox in one call. It takes the repository path as `human_key`; the other
+  latest inbox metadata in one call, without bodies or marking mail read.
+  Fetch bodies and drain unread mail with `fetch_inbox` or `swarmail inbox --session`.
+  It takes the repository path as `human_key`; the other
   tools take it as `project_key`. The `swarmail register` hook registers you
   (it does not read your inbox) at session start in Claude Code and Cursor,
-  and on the first edit for the other hosts that have it. Read your inbox with
-  `macro_start_session` or `fetch_inbox`. When the hook has told you your name,
+  and on the first edit for the other hosts that have it. When the hook has told you your name,
   reuse it: pass it as `agent_name` to `macro_start_session` or as `name` to
   `register_agent`, or start either tool's `task_description` with the
   session tag the hook gave you.
@@ -49,6 +53,17 @@ checkout, unless a project already exists under that exact path.
 - New messages include `sender_location`, saved when sent. A sender moving
   later does not change old inbox entries. Messages predating this field have
   a null location.
+
+## Status evidence
+
+`list_agents` and `whois` return recorded metadata and activity timestamps.
+They do not prove that the session or model is currently running. Read and
+acknowledgment timestamps are observations, not proof that a model accepted work.
+
+`swarmail ping` observes a pong generated while the recipient wake hook waits.
+Success establishes that response at that time, not a model reply or future
+delivery. A timeout does not prove the session ended. Confirm session state
+with the owning host before retiring an agent.
 
 ## When to send mail
 

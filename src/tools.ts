@@ -283,6 +283,7 @@ export const TOOLS: Tool[] = [
     description:
       "Return one agent's profile: program, model, task description, and first and last " +
       "activity times. An unknown name fails with NOT_FOUND, naming recently active agents. " +
+      "Profile metadata and activity do not prove the session or model is currently running. " +
       "To see every agent in a project, use list_agents.",
     properties: { project_key: PROJECT, agent_name: prop("string", "The agent to look up.") },
     required: ["project_key", "agent_name"],
@@ -295,6 +296,7 @@ export const TOOLS: Tool[] = [
       "Return an array of non-retired agents in a project, most recently active first, with " +
       "program, model, task and session details. Use it to find who to message; whois returns " +
       "one agent. active_within_days filters recent activity, not whether a session is running. " +
+      "Metadata and activity do not prove current session or model liveness. " +
       "limit caps this single result; there is no continuation cursor, so a full result may omit " +
       "agents.",
     properties: {
@@ -601,8 +603,9 @@ export const TOOLS: Tool[] = [
     description:
       "Acknowledge one received message and mark it read, returning message_id, acknowledged, " +
       "acknowledged_at and read_at. Repeated calls preserve first read and acknowledgement " +
-      "timestamps but refresh your agent's activity time. Use it for ack_required messages so " +
-      "the sender sees the acknowledgement in get_message_delivery_receipt and ack_overdue_only " +
+      "timestamps but refresh your agent's activity time. Acknowledge ack_required mail after " +
+      "acting on it; if you cannot or will not act, reply with the reason. Acknowledging lets " +
+      "the sender see the acknowledgement in get_message_delivery_receipt and ack_overdue_only " +
       "stops listing it. To mark read without acknowledging, use mark_message_read. Fails with " +
       "NOT_FOUND unless you are a recipient.",
     properties: { project_key: PROJECT, agent_name: AGENT, message_id: MESSAGE },
