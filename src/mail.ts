@@ -11,6 +11,7 @@ import { pageLimit } from "./store.ts";
 import { primaryCheckout } from "./checkout.ts";
 import { selfNames, selfSession } from "./registry.ts";
 import { PING_SUBJECT, PONG_SUBJECT } from "./wake.ts";
+import type { Location } from "./location.ts";
 
 interface Message {
   id: number;
@@ -22,6 +23,41 @@ interface Message {
   thread_id: string | null;
   body_md?: string;
   excerpt?: string;
+  sender_location?: Location | null;
+}
+
+/** Prefer send-time labels; older views can use the current roster without changing stored mail. */
+function senderLabels(env: NodeJS.ProcessEnv) {
+  const own = selfNames({ ...env, SWARMAIL_AGENT: undefined });
+  const rosters = new Map<string, Map<string, Location | null>>();
+  return async (project: string, message: Pick<Message, "from" | "sender_location">) => {
+    if (own.has(message.from)) {
+      return "this session";
+    }
+    let location = message.sender_location;
+    if (!location) {
+      if (!rosters.has(project)) {
+        try {
+          const rows: Array<{ name: string; location: Location | null }> = await call(
+            env,
+            "list_agents",
+            {
+              project_key: project,
+            },
+          );
+          rosters.set(project, new Map(rows.map((row) => [row.name, row.location])));
+        } catch {
+          // A display lookup must not prevent reading mail already fetched.
+          rosters.set(project, new Map());
+        }
+      }
+      location = rosters.get(project)!.get(message.from);
+    }
+    const label = [location?.title, location?.repo, location?.worktree]
+      .map((value) => value?.replace(/\s+/g, " ").trim())
+      .find(Boolean);
+    return label ? `${message.from} (${label})` : message.from;
+  };
 }
 
 export async function call(
@@ -242,6 +278,7 @@ async function sessionInbox(
   const preview = !!(opts.peek || opts.all);
   const limit = pageLimit(Number(opts.limit ?? 20), "limit", 20);
   let shown = false;
+  const label = senderLabels(env);
   for (;;) {
     const messages: Array<Message & { project_key: string; agent_name: string }> = await call(
       env,
@@ -258,8 +295,8 @@ async function sessionInbox(
       console.log(JSON.stringify(messages));
     } else {
       for (const message of messages.reverse()) {
-        console.log(`${message.agent_name} in ${JSON.stringify(message.project_key)}`);
-        printMessage(message);
+        console.log(`this session in ${JSON.stringify(message.project_key)}`);
+        printMessage(message, await label(message.project_key, message));
       }
     }
     if (messages.length < limit || preview) {
@@ -272,11 +309,11 @@ async function sessionInbox(
   }
 }
 
-function printMessage(m: Message): void {
+function printMessage(m: Message, sender: string): void {
   const flags = [m.importance !== "normal" && m.importance, m.ack_required && "ack required"]
     .filter(Boolean)
     .join(", ");
-  console.log(`#${m.id} ${m.created_ts} from ${m.from}${flags ? ` (${flags})` : ""}: ${m.subject}`);
+  console.log(`#${m.id} ${m.created_ts} from ${sender}${flags ? ` (${flags})` : ""}: ${m.subject}`);
   if (m.body_md) {
     console.log(m.body_md.replace(/^/gm, "    "));
   }
@@ -303,8 +340,9 @@ async function inbox(
   if (messages.length === 0) {
     console.log(`${agent}: no ${opts.all ? "" : "unread "}messages`);
   }
+  const label = senderLabels(env);
   for (const m of messages.reverse()) {
-    printMessage(m);
+    printMessage(m, await label(project, m));
   }
   return 0;
 }
@@ -339,9 +377,14 @@ async function thread(
   }
   const shown = result.messages.length < total ? `, newest ${result.messages.length} shown` : "";
   const count = `${total} message${total === 1 ? "" : "s"}`;
-  console.log(`thread ${id}: ${count}${shown} · ${participants.join(", ")}`);
+  const label = senderLabels(env);
+  const names = [];
+  for (const from of participants) {
+    names.push(await label(project, { from }));
+  }
+  console.log(`thread ${id}: ${count}${shown} · ${names.join(", ")}`);
   for (const m of result.messages) {
-    console.log(`#${m.id} ${m.created_ts} from ${m.from}: ${m.subject}`);
+    console.log(`#${m.id} ${m.created_ts} from ${await label(project, m)}: ${m.subject}`);
     if (m.body_md) {
       console.log(m.body_md.replace(/^/gm, "    "));
     }
@@ -380,8 +423,11 @@ async function search(
   if (result.length === 0) {
     console.log(`no mail matches "${query}"`);
   }
+  const label = senderLabels(env);
   for (const m of result) {
-    console.log(`#${m.id} ${m.created_ts} ${m.from} -> ${m.to.join(", ")}: ${m.subject}`);
+    console.log(
+      `#${m.id} ${m.created_ts} ${await label(project, m)} -> ${m.to.join(", ")}: ${m.subject}`,
+    );
     if (m.excerpt) {
       console.log(m.excerpt.replace(/^/gm, "    "));
     }

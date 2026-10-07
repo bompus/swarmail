@@ -4,6 +4,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Readable mail output labels senders with session titles or repository names
+  when available. Verified local self references use "this session"; JSON and
+  stored message bodies are unchanged. Product guidance asks agents to label
+  session references in their own summaries.
+
 - MCP connections and CLI help provide Swarmail's agent briefing, with concise
   sending guidance beside send and reply tools. Personal agent rules are no
   longer required to obtain product guidance; client exposure and refresh vary.
