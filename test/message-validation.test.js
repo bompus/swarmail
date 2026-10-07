@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import Ajv from "ajv";
+import Schema from "typebox/schema";
 import { MESSAGE_RESULT, REPLY_RESULT, RECEIPT_RESULT } from "../src/message-results.ts";
 import { isMessageResult, isReplyResult, isReceiptResult } from "../src/message-validation.ts";
 
@@ -56,7 +56,6 @@ const receipt = {
     },
   ],
 };
-const ajv = new Ajv();
 for (const { name, schema, check, fixture } of [
   { name: "message", schema: MESSAGE_RESULT, check: isMessageResult, fixture: message },
   {
@@ -67,78 +66,106 @@ for (const { name, schema, check, fixture } of [
   },
   { name: "receipt", schema: RECEIPT_RESULT, check: isReceiptResult, fixture: receipt },
 ]) {
-  const reference = ajv.compile(schema);
-  test(`${name} direct checks match the advertised closed contract`, () => {
+  const reference = Schema.Compile(schema);
+  test(`${name} direct checks preserve JSON and JavaScript contracts`, () => {
+    // TypeBox checks JSON values. Explicit expectations keep JavaScript-only
+    // cases independent of validator differences in undefined, keys and holes.
+    /** @type {Array<[unknown, boolean?]>} */
     const cases = [
-      null,
-      [],
-      fixture,
-      Object.create(fixture),
-      Object.assign(Object.create(null), structuredClone(fixture)),
-      Object.assign(Object.create({ private_field: true }), fixture),
-      Object.defineProperty(structuredClone(fixture), "private_field", { value: true }),
+      [null],
+      [[]],
+      [fixture],
+      [Object.create(fixture), true],
+      [Object.assign(Object.create(null), structuredClone(fixture)), true],
+      [Object.assign(Object.create({ private_field: true }), fixture), false],
+      [Object.defineProperty(structuredClone(fixture), "private_field", { value: true }), true],
     ];
     for (const key of Object.keys(fixture)) {
       for (const value of [undefined, null, false, "wrong", [], {}, NaN, Infinity, 0.5]) {
-        cases.push({ ...structuredClone(fixture), [key]: value });
+        // Every fixture field is required for a fresh result. Nonfinite numbers
+        // are invalid for these fields and have no JSON representation.
+        cases.push([
+          { ...structuredClone(fixture), [key]: value },
+          value === undefined || (typeof value === "number" && !Number.isFinite(value))
+            ? false
+            : undefined,
+        ]);
       }
       const missing = structuredClone(fixture);
       delete missing[key];
-      cases.push(missing);
+      cases.push([missing]);
     }
     const arrayKey = name === "receipt" ? "recipients" : "to";
-    cases.push({ ...fixture, [arrayKey]: new Array(1) });
-    cases.push({
-      ...fixture,
-      [arrayKey]: Object.assign([42], {
-        [Symbol.iterator]: function* () {},
-      }),
-    });
+    cases.push([{ ...fixture, [arrayKey]: new Array(1) }, false]);
+    cases.push([
+      {
+        ...fixture,
+        [arrayKey]: Object.assign([42], {
+          [Symbol.iterator]: function* () {},
+        }),
+      },
+      false,
+    ]);
     const integerKey = name === "receipt" ? "message_id" : "id";
-    cases.push({ ...fixture, [integerKey]: -1 }, { ...fixture, [integerKey]: 2 ** 60 });
-    for (const value of cases) {
+    cases.push([{ ...fixture, [integerKey]: -1 }], [{ ...fixture, [integerKey]: 2 ** 60 }]);
+    for (const [value, javascriptExpected] of cases) {
       const before = structuredClone(value);
-      expect(check(value)).toBe(reference(value));
+      expect(check(value)).toBe(javascriptExpected ?? reference.Check(value));
       expect(structuredClone(value)).toEqual(before);
     }
   });
 }
 
-test("nested fields and historical replay preserve JSON Schema acceptance", () => {
-  const reference = ajv.compile(MESSAGE_RESULT);
+test("nested fields and historical replay preserve JSON and JavaScript acceptance", () => {
+  const reference = Schema.Compile(MESSAGE_RESULT);
+  /** @type {Array<[unknown, boolean?]>} */
   const variants = [
-    {
-      ...message,
-      notification_policy: undefined,
-      revision: undefined,
-      delivery: undefined,
-      idempotent_replay: true,
-    },
-    { ...message, revision: undefined, idempotent_replay: false },
-    { ...message, delivery: undefined },
-    { ...message, sender_location: { repo: "repo", worktree: "tree", branch: null, title: null } },
+    [
+      {
+        ...message,
+        notification_policy: undefined,
+        revision: undefined,
+        delivery: undefined,
+        idempotent_replay: true,
+      },
+      true,
+    ],
+    [{ ...message, revision: undefined, idempotent_replay: false }, false],
+    [{ ...message, delivery: undefined }, false],
+    [
+      {
+        ...message,
+        sender_location: { repo: "repo", worktree: "tree", branch: null, title: null },
+      },
+    ],
   ];
   for (const key of Object.keys(admission)) {
-    variants.push({
-      ...message,
-      delivery: { ...message.delivery, recipients: [{ ...admission, [key]: "invalid-enum" }] },
-    });
+    variants.push([
+      {
+        ...message,
+        delivery: { ...message.delivery, recipients: [{ ...admission, [key]: "invalid-enum" }] },
+      },
+    ]);
   }
-  for (const extra of [
-    { private_field: true },
-    { historical: undefined, reported_end_at: undefined },
-    { historical: true, reported_end_at: "then" },
-    { reported_end_at: null },
+  for (const [extra, javascriptExpected] of [
+    [{ private_field: true }],
+    // Optional fields may be undefined without changing admission acceptance.
+    [{ historical: undefined, reported_end_at: undefined }, true],
+    [{ historical: true, reported_end_at: "then" }],
+    [{ reported_end_at: null }],
   ]) {
-    variants.push({
-      ...message,
-      delivery: { ...message.delivery, recipients: [{ ...admission, ...extra }] },
-    });
+    variants.push([
+      {
+        ...message,
+        delivery: { ...message.delivery, recipients: [{ ...admission, ...extra }] },
+      },
+      javascriptExpected,
+    ]);
   }
-  for (const value of variants) {
-    expect(isMessageResult(value)).toBe(reference(value));
+  for (const [value, javascriptExpected] of variants) {
+    expect(isMessageResult(value)).toBe(javascriptExpected ?? reference.Check(value));
   }
-  const receiptReference = ajv.compile(RECEIPT_RESULT);
+  const receiptReference = Schema.Compile(RECEIPT_RESULT);
   for (const extra of [
     { admission: null },
     { kind: "bcc" },
@@ -146,6 +173,6 @@ test("nested fields and historical replay preserve JSON Schema acceptance", () =
     { private_field: true },
   ]) {
     const value = { ...receipt, recipients: [{ ...receipt.recipients[0], ...extra }] };
-    expect(isReceiptResult(value)).toBe(receiptReference(value));
+    expect(isReceiptResult(value)).toBe(receiptReference.Check(value));
   }
 });
