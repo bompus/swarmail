@@ -602,7 +602,7 @@ export class MailStore {
   }
 
   deliver(p: Project, sender: Agent, a: Args, defaults: Row = {}) {
-    const policy = a.notification_policy === undefined ? "wake" : a.notification_policy;
+    let policy = a.notification_policy === undefined ? "wake" : a.notification_policy;
     const importance = a.importance ?? defaults.importance ?? "normal";
     const ack = !!(a.ack_required ?? defaults.ack_required);
     if (policy !== "wake" && policy !== "quiet") {
@@ -623,6 +623,15 @@ export class MailStore {
       lifecycle: this.lifecycle,
       registry: this.registry,
     });
+    if (
+      a.notification_policy === undefined &&
+      (a.subject ?? defaults.subject) !== PING_SUBJECT &&
+      !ack &&
+      ["normal", "low"].includes(importance) &&
+      recipients.every(({ agent }) => !!agent.t3_thread && SESSION_RE.test(agent.t3_thread))
+    ) {
+      policy = "quiet";
+    }
     sender = currentSender;
     const names = (kind: string) =>
       recipients.filter((r) => r.kind === kind).map((r) => r.agent.name);

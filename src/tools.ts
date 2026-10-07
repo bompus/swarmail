@@ -66,7 +66,7 @@ const NOTIFICATION_POLICY = {
   type: "string",
   enum: ["wake", "quiet"],
   description:
-    "wake (default) permits automatic inbox hints. quiet stores normal/low informational mail for inbox/search without waking the recipient; high/urgent importance or ack_required:true rejects. Omitted on a reply, defaults to wake rather than inheriting the original policy. Keep actionable handoffs, results and blockers on wake delivery.",
+    "wake permits automatic inbox hints. quiet stores normal/low mail for inbox/search without waking the recipient; high/urgent importance or ack_required:true rejects. Omitted policy defaults to quiet only for normal/low, acknowledgement-free mail when every recipient has a valid registered T3 thread ID; otherwise wake. Ping probes keep wake by default. Replies use this same rule, not the original policy. Set wake explicitly for actionable handoffs, requested results and blockers.",
 };
 const RESERVATION_PATHS = strings("Only your reservations with exactly these patterns.");
 const RESERVATION_IDS = {
