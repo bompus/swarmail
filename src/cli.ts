@@ -3,6 +3,7 @@
 // It runs on Linux and Windows. Another entry can import main() and pass it
 // commands of its own.
 // Modules load on demand, so a waiting hook does not load the server's. No top-level await: `--bytecode` builds CommonJS.
+import { AGENT_GUIDANCE, SENDING_GUIDANCE } from "./guidance.ts";
 
 /** One subcommand: its usage lines and what it runs with the arguments after its name. */
 export interface Command {
@@ -187,7 +188,8 @@ function help(args: string[]): boolean {
     return false;
   }
   const command = find(args[0] === "help" ? args[1] : args[0]);
-  console.log(command ? command.usage.join("\n") : USAGE());
+  const guidance = command ? (command === commands.send ? SENDING_GUIDANCE : "") : AGENT_GUIDANCE;
+  console.log((command ? command.usage.join("\n") : USAGE()) + (guidance ? `\n\n${guidance}` : ""));
   return true;
 }
 

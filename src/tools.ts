@@ -6,6 +6,7 @@ import type { Lifecycle } from "./lifecycle.ts";
 import type { Database } from "bun:sqlite";
 import { iso, nowUs } from "./db.ts";
 import { locations } from "./location.ts";
+import { SENDING_GUIDANCE } from "./guidance.ts";
 import {
   type Args,
   agentOut,
@@ -376,7 +377,8 @@ export const TOOLS: Tool[] = [
       "not proof of death. Storage is not task acceptance. To answer a " +
       "message, use reply_message, which keeps the thread and addresses the sender. Without " +
       "idempotency_key, a retry sends another message; reuse a nonempty key with identical " +
-      "arguments within 7 days to replay its stored result instead; delivery observations on replay are historical.",
+      "arguments within 7 days to replay its stored result instead; delivery observations on replay are historical. " +
+      SENDING_GUIDANCE,
     properties: {
       project_key: PROJECT,
       sender_name: AGENT,
@@ -412,7 +414,8 @@ export const TOOLS: Tool[] = [
       "subject; importance can be overridden. ack_required defaults to false; set it explicitly " +
       "to request acknowledgement of this reply. For retries within 7 " +
       "days, reuse a nonempty idempotency_key with identical arguments. To start a new thread, " +
-      "use send_message.",
+      "use send_message. " +
+      SENDING_GUIDANCE,
     properties: {
       project_key: PROJECT,
       message_id: prop("integer", "The message to reply to."),

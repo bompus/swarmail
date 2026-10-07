@@ -173,8 +173,9 @@ repository to see it.
 Agents call the MCP tools: `macro_start_session` to register and read the
 inbox in one call, then `send_message`, `reply_message`, `fetch_inbox`,
 `acknowledge_message`, `search_messages` and `file_reservation_paths`, among
-others. [docs/usage.md](docs/usage.md) has the conventions worth putting in
-your agent rules.
+others. Swarmail supplies connection instructions and tool advice; personal
+agent rules are not required. `swarmail --help` shows the same briefing.
+[docs/usage.md](docs/usage.md) explains the details and client refresh limits.
 
 Each repository is one project, keyed by its primary checkout. A path inside
 a worktree or subdirectory maps to that checkout, so sessions in different

@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { processIdentity } from "./proc.ts";
 import { nowUs, openDatabase } from "./db.ts";
 import { buildSource } from "./build.ts";
+import { AGENT_GUIDANCE } from "./guidance.ts";
 import { createTools, TOOL_DEFINITIONS, ToolError, WAKES } from "./tools.ts";
 import {
   Lifecycle,
@@ -94,6 +95,7 @@ async function rpc(
         protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
         capabilities: { tools: { listChanged: false } },
         serverInfo: { name: "swarmail", version: buildSource ?? "source" },
+        instructions: AGENT_GUIDANCE,
       });
     }
     case "ping":

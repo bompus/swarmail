@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- MCP connections and CLI help provide Swarmail's agent briefing, with concise
+  sending guidance beside send and reply tools. Personal agent rules are no
+  longer required to obtain product guidance; client exposure and refresh vary.
+
 - Validator research is preserved through a pinned historical link in the
   README instead of a report in the current source tree.
 
