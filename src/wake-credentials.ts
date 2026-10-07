@@ -273,7 +273,8 @@ async function sessionCheck(
     result.authenticated !== true ||
     result.sessionMethod !== "bearer-access-token" ||
     Date.parse(result.expiresAt ?? "") !== Date.parse(credential.expiresAt) ||
-    !result.scopes?.includes("orchestration:operate")
+    !Array.isArray(result.scopes) ||
+    !result.scopes.includes("orchestration:operate")
   ) {
     fail("unexpected T3 session contract");
   }

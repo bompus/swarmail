@@ -135,6 +135,22 @@ linuxTest(
   },
 );
 
+linuxTest("session scopes must be an array before a current credential is accepted", async () => {
+  const f = fixture();
+  const before = f.snapshot();
+  const service = credentialService(f.path);
+  const backend = await service.backend();
+  const fetch = fetchMock(async () => {
+    const response = await f.response().json();
+    return Response.json({ ...response, scopes: "orchestration:operate" });
+  });
+  await expect(service.current(backend)).rejects.toThrow("unexpected T3 session contract");
+  fetch.mockImplementation(f.response);
+  expect(await service.current(backend)).toBeDefined();
+  expect(f.cli).toEqual([]);
+  expect(f.snapshot()).toEqual(before);
+});
+
 linuxTest("only measured transport errors from eligible current checks are retryable", async () => {
   const f = fixture();
   const service = credentialService(f.path);
