@@ -212,3 +212,33 @@ still settle after the final check and before T3 admits the command. An atomic
 T3 admission guard is required to close that gap. Standalone SessionEnd hooks
 keep their current behavior; automatic retirement needs verified activation
 and end-event ordering before it can be enabled.
+
+## Optional T3 reader primitives
+
+Linux reader consumers can import `credentialService` and `wakeCredentials`
+from `src/wake-credentials.ts`, backend identity checks from `src/wake-backend.ts`,
+and `followT3Backend` from `src/wake-t3-backend.ts`. The normal Swarmail CLI does
+not enable these primitives or expose a new credential command. A consumer can
+use the existing extra-command interface for its explicit credential operation.
+
+`followT3Backend(configPath, { baseDir, url }, signal)` returns a polling
+function. A ready result contains `url`, `moved` and `restarted`; `undefined`
+means the backend is temporarily unavailable. The consumer owns its polling
+cadence, shutdown signal and delivery behavior. A backend change requires a
+fresh identity check before any credential is sent. Identity verification uses
+the actual Linux listener, its executable and its open T3 database.
+
+The follower first checks an existing credential without a CLI call or state
+write. Only a clean, owned credential outside its renewal window can retry
+connection refusal, connection reset or its own request timeout. Listener
+absence and these transport failures share one absolute five-minute grace.
+Each retry rechecks identity; requests and identity subprocesses respect the
+remaining budget and cancellation. Verified readiness resets the grace.
+
+Credential rejection, redirects, HTTP errors, malformed responses and identity
+mismatches remain fatal. Missing or due credentials and unfinished rotation
+state use the existing locked renewal path outside an outage. If retry
+eligibility disappears during an outage, the follower stops without renewal.
+It never enrolls a session, delivers mail, clears quarantine or changes a
+pending delivery journal. Consumers must adopt the module explicitly;
+installing Swarmail does not restore a stopped reader.
