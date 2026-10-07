@@ -113,6 +113,12 @@ const COMMANDS: Record<string, Command> = {
   updates: {
     usage: [
       "swarmail updates --session [--json] [--reset-context] [--ack COMPONENT --revision REVISION]  approved targets and loaded attestations",
+      "Optional lifecycle: without SWARMAIL_UPDATE_TARGETS, checks stay inactive and create no update state.",
+      "Targets are host-approved installed/deployed revisions, not new upstream commits. Follow refresh instructions only within your authorization.",
+      "Use --session --json to inspect targets and pending/held states; reading status does not mark anything loaded.",
+      "After actually rereading guidance or completing a supported tool reload, use --ack COMPONENT --revision REVISION for the exact target.",
+      "This records your attestation, not proof of provider cache replacement. Held sessions suppress hints, preserve evidence and reject acknowledgments.",
+      "Use --reset-context after a context reset to invalidate context-dependent attestations; it leaves other attestations intact. Held contexts must be released first.",
     ],
     run: async (args) => {
       const { updatesCommand } = await import("./updates.ts");
@@ -135,7 +141,7 @@ const COMMANDS: Record<string, Command> = {
     ),
     mail(
       "ping",
-      "swarmail ping <agent> [--timeout S]              whether the agent's wake hook is waiting (mail.ts)",
+      "swarmail ping <agent> [--timeout S]              observe a wake-hook pong; no proof of model liveness or future delivery (mail.ts)",
     ),
     mail(
       "withdraw",

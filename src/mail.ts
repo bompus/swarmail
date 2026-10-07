@@ -2,7 +2,7 @@
 //   swarmail inbox [--all] [--peek] [--limit N] [--json] [--as NAME]   unread messages (--all: read ones too), marked
 //                                                        read unless --peek; --json prints the fetch_inbox array, newest first
 //   swarmail send <to[,to...]> <subject> [body] [--as NAME]    body from stdin when omitted
-//   swarmail ping <agent> [--timeout S] [--as NAME]            whether the agent's wake hook answers (wake.ts)
+//   swarmail ping <agent> [--timeout S] [--as NAME]            observe a wake-hook pong, not model liveness or future delivery (wake.ts)
 //   swarmail search <words...> [--limit N] [--cursor CURSOR] [--json | --json-page]  project mail matching every word, best match first
 //   swarmail thread <id> [--limit N] [--json]                   a thread's messages, oldest first; needs no sender name
 // The sender is --as, else SWARMAIL_AGENT, else the name the register hook recorded for the agent host above this shell.
@@ -470,8 +470,8 @@ async function ping(
     await Bun.sleep(250);
   }
   console.log(
-    `no pong from ${target} within ${timeoutS}s: its wake hook is not waiting (mid-turn, no wake hook on its host,` +
-      " or the session is gone). The ping stays unread and is answered when the hook next waits.",
+    `no pong from ${target} within ${timeoutS}s: no wake-hook response observed (mid-turn, unavailable route,` +
+      " or other delay). This does not prove the session ended. Pending ping mail can be answered when the hook next waits.",
   );
   return 1;
 }
