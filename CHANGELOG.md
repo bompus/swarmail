@@ -5,6 +5,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 ## Unreleased
 
 - Remove unused installer fields and an unused generic V2 command builder; retain notice and legacy journal delivery. Process readers now explicitly support only Linux and Windows.
+- Add validated resource release/cancellation notices with generated readable text and derived quiet or actionable delivery, available through MCP send_message and CLI JSON stdin.
+- Keep resource coordination and receiver summaries relevant, with readable sender prose.
 
 - Preserve hook configuration files when only JSON object key order or formatting differs; report and repair changed values as before.
 

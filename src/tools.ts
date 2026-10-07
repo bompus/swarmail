@@ -8,6 +8,11 @@ import { iso, nowUs } from "./db.ts";
 import { locations } from "./location.ts";
 import { SENDING_GUIDANCE } from "./guidance.ts";
 import {
+  compileResourceNotice,
+  RESOURCE_NOTICE_SCHEMA,
+  RESOURCE_SEND_CONSTRAINTS,
+} from "./resource-notice.ts";
+import {
   type Args,
   agentOut,
   list,
@@ -75,6 +80,7 @@ interface ToolBase {
   description: string;
   properties: Record<string, Schema>;
   required: string[];
+  constraints?: Schema;
   /** Never writes, not even agent activity, so hosts may treat it as safe to run. */
   readOnly?: true;
   /** A repeat with the same arguments changes nothing more. */
@@ -380,10 +386,13 @@ export const TOOLS: Tool[] = [
       "message, use reply_message, which keeps the thread and addresses the sender. Without " +
       "idempotency_key, a retry sends another message; reuse a nonempty key with identical " +
       "arguments within 7 days to replay its stored result instead; delivery observations on replay are historical. " +
+      "Alternatively provide resource_notice instead of subject/body_md: one recipient, a nonempty idempotency key, no free-text or delivery overrides. Released/cancelled notices generate readable text; next_action:none stays quiet, other allowed actions wake the dependent receiver. Claimed release is not admission or permission. " +
       SENDING_GUIDANCE,
+    constraints: RESOURCE_SEND_CONSTRAINTS,
     properties: {
       project_key: PROJECT,
       sender_name: AGENT,
+      resource_notice: RESOURCE_NOTICE_SCHEMA,
       to: strings("Recipient agent names in this project."),
       cc: strings("Recipients copied, visible to everyone."),
       bcc: strings("Recipients the others do not see."),
@@ -397,12 +406,18 @@ export const TOOLS: Tool[] = [
       notification_policy: NOTIFICATION_POLICY,
       idempotency_key: IDEMPOTENCY_KEY,
     },
-    required: ["project_key", "sender_name", "to", "subject", "body_md"],
+    required: ["project_key", "sender_name", "to"],
     wakes: true,
     run: (s, a) => {
+      const delivery = Object.hasOwn(a, "resource_notice") ? compileResourceNotice(a) : a;
       const p = s.project(a.project_key),
         sender = s.acting(p, a.sender_name, "sender_name");
-      return s.idempotent("send_message", sender.id, a, () => s.deliver(p, sender, a));
+      const retryArgs = Object.hasOwn(a, "resource_notice")
+        ? { ...a, resource_notice: delivery.resource_notice }
+        : a;
+      return s.idempotent("send_message", sender.id, retryArgs, () =>
+        s.deliver(p, sender, delivery),
+      );
     },
   },
   {
@@ -834,7 +849,7 @@ export const TOOLS: Tool[] = [
 export const TOOL_DEFINITIONS = TOOLS.map((t) => ({
   name: t.name,
   description: t.description,
-  inputSchema: { type: "object", properties: t.properties, required: t.required },
+  inputSchema: { type: "object", properties: t.properties, required: t.required, ...t.constraints },
   ...(t.outputSchema && { outputSchema: t.outputSchema }),
   annotations: t.readOnly
     ? { readOnlyHint: true, openWorldHint: false }

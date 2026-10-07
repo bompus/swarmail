@@ -78,8 +78,12 @@ Write only to sessions that must act or whose work you could affect:
 - a handoff, a requested result or a blocking question, naming the resource
   and the action or decision needed.
 
-Keep routine progress in your own conversation. An informational message
-needs no reply.
+Keep routine progress in your own conversation. Resource coordination names
+the affected resource, finite phase boundary and receiver action. Include an
+error or result only when it changes that receiver's next action. Write readable
+sentences with spaces between words. An informational message needs no reply.
+When processing coordination mail, retain facts needed for your work and omit
+unrelated sender progress or errors from onward messages and user summaries.
 
 Make clear to the human and receiver whether the message informs or requests
 work. For requests, name the action, repository and owner; distinguish
@@ -93,6 +97,49 @@ option code.
 Use one supported transport per recipient and purpose; do not duplicate an
 uncertain send through another route. Notify only still-dependent resource
 owners, sending release or cancellation before dropping waiting recipients.
+
+### Typed resource notices
+
+Use `send_message.resource_notice` instead of `subject` and `body_md` for a
+resource release or dependency cancellation. It requires one recipient and a
+nonempty idempotency key. The server validates the fields and generates the
+subject and readable body; callers cannot add unrelated detail or override
+importance, acknowledgement or notification policy.
+
+```json
+{
+  "resource_id": "heavy-local-work",
+  "phase_id": "suite-42",
+  "state": "released",
+  "next_action": "retry_admission"
+}
+```
+
+Pass this object on stdin to
+`swarmail send GreenLake --resource-notice --idempotency-key suite-42-release`.
+IDs have 1..96 ASCII letters, digits or `_.:-`, starting with a letter or digit.
+They identify the resource and phase; they are not summaries or proof of release.
+Only these four fields are accepted. `released` permits `none` or
+`retry_admission`; `cancelled` permits `none` or `drop_dependency`.
+
+`none` stores quiet mail without an automatic hint. `retry_admission` asks the
+waiting receiver to recheck admission before starting; `drop_dependency` asks
+it to remove the cancelled dependency and does not claim resource availability.
+Both actions permit the existing wake hint. Confirm the receiver's matching
+dependency before requesting an action. Neither a notice nor its receipt grants
+permission, reserves a resource or stops a process. Retry keys follow the normal
+seven-day cleanup contract.
+
+Typed calls allow only `project_key`, `sender_name`, `to`, `resource_notice`,
+`idempotency_key` and optional `thread_id`. General mail and replies retain their
+existing contracts. Historical bodies are not rewritten. Typed validation limits
+this path; it cannot establish the truth or relevance of a caller's identifiers.
+
+Follow the host's transport preference and send an event through one route.
+If nobody needs to act or retain a requested record, send nothing. Quiet mail
+remains visible to explicit inbox/search reads, including an inbox read prompted
+by other actionable mail. Neither typed notices nor quiet delivery hide native
+host messages or tool output in a conversation UI.
 
 When referring to an agent in a message or summary, include its verified
 session title or repository beside its name, such as `BlueLake (API cleanup)`.

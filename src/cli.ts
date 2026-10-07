@@ -137,7 +137,8 @@ const COMMANDS: Record<string, Command> = {
     ),
     mail(
       "send",
-      "swarmail send <to[,to]> <subject> [body] [--delivery-policy checked|durable] [--notification-policy wake|quiet] [--json]  send with availability feedback; body from stdin when omitted (mail.ts)",
+      "swarmail send <to[,to]> <subject> [body] [--delivery-policy checked|durable] [--notification-policy wake|quiet] [--json]  send with availability feedback; body from stdin when omitted (mail.ts)\n" +
+        "  swarmail send <to> --resource-notice --idempotency-key KEY [--json]  JSON stdin: resource_id, phase_id, state released|cancelled, next_action none|retry_admission|drop_dependency; no text/delivery overrides. none is quiet; released pairs with retry_admission, cancelled with drop_dependency. IDs: 1..96 ASCII letters/digits/_.:-, starting with a letter or digit.",
     ),
     mail(
       "ping",
