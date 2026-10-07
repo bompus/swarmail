@@ -27,7 +27,7 @@ interface Proc {
 
 /**
  * Parent and argv of a process: /proc on Linux; kernel32 for the parent on Windows, with the command line asked of
- * PowerShell (about 440 ms) only when read; one `ps` snapshot of the process table elsewhere.
+ * PowerShell only when read. Other platforms have no process reader.
  */
 export function processReader(platform = process.platform): (pid: number) => Proc | null {
   if (platform === "win32") {
@@ -67,23 +67,7 @@ export function processReader(platform = process.platform): (pid: number) => Pro
       }
     };
   }
-  let table: Map<number, Proc> | null = null;
-  return (pid) => {
-    if (!table) {
-      const cmd = ["ps", "-A", "-o", "pid=,ppid=,args="];
-      const out =
-        (spawnSync(cmd[0]!, cmd.slice(1), { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] })
-          .stdout as string | null) ?? "";
-      table = new Map();
-      for (const line of out.split(/\r?\n/)) {
-        const [pid, ppid, ...args] = line.trim().split(/\s+/);
-        if (pid && ppid) {
-          table.set(Number(pid), { ppid: Number(ppid), args });
-        }
-      }
-    }
-    return table.get(pid) ?? null;
-  };
+  return () => null;
 }
 
 /**

@@ -1,8 +1,8 @@
 #!/usr/bin/env bun
 // Compiles the swarmail command (src/cli.ts, or main.ts beside it when a build adds its own
 // commands there, with bytecode and an embedded source map) into ~/.local/bin/swarmail, which the service, the host
-// hooks and the git guard run. The binary carries a hash of the server's sources and the Bun that built it, so
-// `--if-stale` rebuilds only after a source change or a Bun upgrade.
+// hooks and the git guard run. The binary hashes server sources, the dependency manifest and lockfile, and Bun.
+// `--if-stale` rebuilds when one of those inputs changes.
 // A running server keeps its old build until the service restarts.
 // Usage: bun scripts/build.ts [--if-stale] [--out path]
 import { createHash } from "node:crypto";
@@ -14,7 +14,7 @@ import { binaryPath, homeDir } from "../src/paths.ts";
 const REPO_ROOT = join(import.meta.dir, "..");
 export const defaultBinary = (home = homeDir()) => binaryPath(home);
 
-/** A hash of what the binary is built from: the server sources, by path and content, and the Bun version. */
+/** Hash the server sources, dependency manifest and lockfile, and the Bun version. */
 export function sourceHash(root = REPO_ROOT, bun = Bun.version): string {
   const dir = join(root, "src");
   const hash = createHash("sha256").update(`bun ${bun}\0`);
