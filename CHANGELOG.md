@@ -4,6 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Retry-key guidance documents cleanup at server startup as well as hourly.
+
 - Sending guidance distinguishes informational messages from requested work,
   and source implementation from update installation or guidance additions.
 
