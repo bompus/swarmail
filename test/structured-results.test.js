@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import Ajv from "ajv";
+import Schema from "typebox/schema";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +13,6 @@ let dir,
   id = 0;
 const project_key = "/project/structured";
 const sender_name = "StructuredSender";
-const validator = new Ajv();
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "swarmail-structured-"));
   ({ server, db } = createServer(join(dir, "mail.sqlite3"), 0));
@@ -89,9 +88,9 @@ for (const version of [undefined, "2024-11-05", "2025-03-26", "2025-06-18", "202
       expect(result.isError).toBeUndefined();
       if (modern) {
         expect(result.structuredContent).toEqual(value(result));
-        const validate = validator.compile(definitions.find((t) => t.name === name).outputSchema);
-        expect(validate(result.structuredContent)).toBe(true);
-        expect(validate({ ...result.structuredContent, unexpected: "leak" })).toBe(false);
+        const validate = Schema.Compile(definitions.find((t) => t.name === name).outputSchema);
+        expect(validate.Check(result.structuredContent)).toBe(true);
+        expect(validate.Check({ ...result.structuredContent, unexpected: "leak" })).toBe(false);
       } else {
         expect(result.structuredContent).toBeUndefined();
       }
