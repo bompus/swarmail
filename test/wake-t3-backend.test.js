@@ -10,6 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import * as credentialModule from "../src/wake-credentials.ts";
 import { credentialService, T3SessionTransportUnavailable } from "../src/wake-credentials.ts";
 import { followT3Backend } from "../src/wake-t3-backend.ts";
 import { verifyT3Backend } from "../src/wake-backend.ts";
@@ -417,3 +418,84 @@ linuxTest("the owned request timeout is transient even after response headers ar
   expect(f.snapshot()).toEqual(before);
   expect(f.cli).toEqual([]);
 });
+
+linuxTest(
+  "listener absence preserves the existing renewal path when no transport retry occurred",
+  async () => {
+    const f = fixture();
+    const service = credentialService(f.path);
+    const factory = spyOn(credentialModule, "credentialService").mockReturnValue(service);
+    const renew = spyOn(service, "renew").mockResolvedValue({ status: "current", url: f.url });
+    cleanup.push(
+      () => factory.mockRestore(),
+      () => renew.mockRestore(),
+    );
+    let now = 0;
+    const clock = spyOn(performance, "now").mockImplementation(() => now);
+    cleanup.push(() => clock.mockRestore());
+    f.publish(process.pid + 1000000);
+    const poll = followT3Backend(f.path, f);
+    expect(await poll()).toBeUndefined();
+    now = 1000;
+    f.publish();
+    f.save({
+      ...f.state,
+      current: { ...f.state.current, expiresAt: new Date(Date.now() + 1000).toISOString() },
+    });
+    expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
+    expect(renew).toHaveBeenCalledTimes(1);
+    expect(renew.mock.calls[0][2].deadline).toBe(300000);
+    expect(f.cli).toEqual([]);
+  },
+);
+
+linuxTest(
+  "a later eligible transport failure still forbids recovery within a listener outage",
+  async () => {
+    const f = fixture();
+    const before = f.snapshot();
+    const fetch = fetchMock(() => Promise.reject(transport("ConnectionRefused")));
+    const poll = followT3Backend(f.path, f);
+    f.publish(process.pid + 1000000);
+    expect(await poll()).toBeUndefined();
+    f.publish();
+    expect(await poll()).toBeUndefined();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    f.save({ ...f.state, disabled: true });
+    await expect(poll()).rejects.toThrow("no longer eligible");
+    expect(f.cli).toEqual([]);
+    f.save();
+    expect(f.snapshot()).toEqual(before);
+  },
+);
+
+linuxTest(
+  "verified readiness clears the transport restriction for the next listener outage",
+  async () => {
+    const f = fixture();
+    const service = credentialService(f.path);
+    const factory = spyOn(credentialModule, "credentialService").mockReturnValue(service);
+    const renew = spyOn(service, "renew").mockResolvedValue({ status: "current", url: f.url });
+    cleanup.push(
+      () => factory.mockRestore(),
+      () => renew.mockRestore(),
+    );
+    let now = 0;
+    const clock = spyOn(performance, "now").mockImplementation(() => now);
+    cleanup.push(() => clock.mockRestore());
+    const fetch = fetchMock(() => Promise.reject(transport("ConnectionRefused")));
+    const poll = followT3Backend(f.path, f);
+    expect(await poll()).toBeUndefined();
+    fetch.mockImplementation(f.response);
+    expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
+    now = 61000;
+    f.publish(process.pid + 1000000);
+    expect(await poll()).toBeUndefined();
+    f.publish();
+    f.save({ ...f.state, pending: { subject: "unfinished" } });
+    expect(await poll()).toEqual({ url: f.url, moved: false, restarted: false });
+    expect(renew).toHaveBeenCalledTimes(1);
+    expect(renew.mock.calls[0][2].deadline).toBe(361000);
+    expect(f.cli).toEqual([]);
+  },
+);

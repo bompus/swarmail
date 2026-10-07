@@ -237,8 +237,10 @@ remaining budget and cancellation. Verified readiness resets the grace.
 
 Credential rejection, redirects, HTTP errors, malformed responses and identity
 mismatches remain fatal. Missing or due credentials and unfinished rotation
-state use the existing locked renewal path outside an outage. If retry
-eligibility disappears during an outage, the follower stops without renewal.
+state use the existing locked renewal path when no eligible session transport
+retry has occurred. Listener absence alone does not disable that path. Once a
+clean session check has a transport failure, losing retry eligibility before
+verified readiness stops the follower without renewal.
 It never enrolls a session, delivers mail, clears quarantine or changes a
 pending delivery journal. Consumers must adopt the module explicitly;
 installing Swarmail does not restore a stopped reader.

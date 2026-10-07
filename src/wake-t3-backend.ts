@@ -5,7 +5,7 @@ import {
   T3Unavailable,
   type BackendCheck,
 } from "./wake-backend.ts";
-import { credentialService } from "./wake-credentials.ts";
+import { credentialService, T3SessionTransportUnavailable } from "./wake-credentials.ts";
 import { BridgeError } from "./wake-target.ts";
 
 const unavailableGraceMs = 5 * 60_000;
@@ -21,6 +21,7 @@ export function followT3Backend(
   let published: string | undefined;
   let nextCheck = 0;
   let deadline: number | undefined;
+  let transportOutage = false;
   return async () => {
     const started = performance.now();
     const check: BackendCheck = { signal, deadline: deadline ?? started + unavailableGraceMs };
@@ -35,7 +36,7 @@ export function followT3Backend(
       const backend = await credential.backend(check);
       let checked = await credential.current(backend, check);
       if (!checked) {
-        if (deadline !== undefined) {
+        if (transportOutage) {
           throw new BridgeError(
             "credential no longer eligible for transport retry; reconcile owned state",
           );
@@ -52,6 +53,7 @@ export function followT3Backend(
       published = listener;
       nextCheck = performance.now() + 60_000;
       deadline = undefined; // Only verified readiness closes an outage.
+      transportOutage = false;
       return { url, moved, restarted };
     } catch (error) {
       checkBackendOperation(check);
@@ -60,6 +62,10 @@ export function followT3Backend(
           throw error;
         }
         throw new BridgeError("T3 backend check failed; reconcile configuration and owned state");
+      }
+      // Eligibility is established by a clean session check, not listener absence.
+      if (error instanceof T3SessionTransportUnavailable) {
+        transportOutage = true;
       }
       if (deadline === undefined) {
         deadline = started + unavailableGraceMs;
