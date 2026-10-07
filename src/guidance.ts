@@ -1,7 +1,7 @@
 /** Product guidance shared by MCP connection instructions, sending tools and CLI help. */
 export const SENDING_GUIDANCE =
   "Send only when the recipient needs to act or know: a handoff, requested result, blocker or shared-resource change. " +
-  "Make clear to the human and receiver whether the message informs or requests work; name the action, repository and owner. " +
+  "Make clear to the human and receiver whether the message informs or requests work; for requests, name the action, repository and owner. " +
   "Distinguish implementing source, installing an update and adding guidance. " +
   "Lead with the action, decision or changed result; keep necessary scope and constraints inline and link detailed evidence in the same message. " +
   "When referring to another agent, include its verified session title or repository beside its name; use this session for the current receiver only after matching session identity. " +

@@ -67,8 +67,8 @@ Keep routine progress in your own conversation. An informational message
 needs no reply.
 
 Make clear to the human and receiver whether the message informs or requests
-work. Name the action, repository and owner; distinguish implementing source,
-installing an update and adding guidance. Use plain verbs in the existing
+work. For requests, name the action, repository and owner; distinguish
+implementing source, installing an update and adding guidance. Use plain verbs in the existing
 message, without a separate notice or template.
 
 Lead with the action, decision or changed result. Keep the scope and constraints
