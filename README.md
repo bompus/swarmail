@@ -251,6 +251,12 @@ do not delete message bodies. Account for expired retry keys before a server
 restart; retaining the database file alone does not guarantee every row survives
 startup.
 
+Read-only MCP requests do not suspend cleanup. A client that starts a server
+instance triggers its startup sweep; an existing server can sweep hourly while
+qualification runs. Check expired retry keys before preservation-sensitive
+qualification. A row disappearing during a read-only check alone does not
+identify which process or sweep removed it.
+
 ## Register hook
 
 On a session's first edit in a repository, `swarmail register` registers it
