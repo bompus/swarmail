@@ -1,6 +1,6 @@
 {
   "name": "swarmail-mcp",
-  "version": "0.1.1",
+  "version": "0.4.0",
   "description": "Stdio MCP relay to a running Swarmail server, for MCP clients that install servers from a registry.",
   "keywords": [
     "mcp",

@@ -1,6 +1,6 @@
 {
   "name": "swarmail",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Local mail, roster and file reservations for coding-agent sessions on one machine, served over MCP.",
   "license": "MIT",
@@ -14,7 +14,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "oxlint --deny-warnings .",
     "fmt": "oxfmt",
-    "check": "oxfmt --check && oxlint --deny-warnings . && tsc --noEmit -p tsconfig.json"
+    "check": "bun scripts/check-release.ts && oxfmt --check && oxlint --deny-warnings . && tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "@types/bun": "1.4.2",

@@ -338,8 +338,11 @@ wake an idle session.
 
 ## Performance
 
-Measured on one machine with one small workload (40 agents, 250 seed messages,
-1,560 messages by the end), each server started on empty storage. Startup is
+Measured on 2026-10-04 at
+[`67e187a`](https://github.com/bompus/swarmail/tree/67e187a6b4beb7319c6ab30466448742297e2a01).
+These results have not been remeasured for 0.4.0.
+The measurements used one machine with one small workload (40 agents, 250 seed messages,
+1,560 messages by the end). Each server started on empty storage. Startup is
 hyperfine's mean of 20 runs; every other number is the median of three rounds,
 with latency from Tinybench and requests per second from oha. [docs/benchmarks.md](docs/benchmarks.md) has
 the method, a sixth server, each tool's raw output and a feature comparison

@@ -8,6 +8,9 @@ measures memory and CPU from `/proc` and checks every server's answers.
 
 The results cover this workload only. They say nothing about durability after
 a crash, large archives or production load.
+Swarmail was measured at
+[`67e187a`](https://github.com/bompus/swarmail/tree/67e187a6b4beb7319c6ab30466448742297e2a01).
+These results have not been remeasured for 0.4.0.
 
 ## Summary
 
