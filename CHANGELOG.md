@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.4.0 - 2026-10-07
 
 - Default ordinary normal/low, acknowledgement-free mail to quiet when every
   recipient has a valid registered T3 thread ID. Explicit policies, urgent mail
@@ -24,8 +24,6 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - Maintenance documentation distinguishes idle-agent retirement from startup
   and hourly retry-key cleanup.
 
-- Retry-key guidance documents cleanup at server startup as well as hourly.
-
 - Sending guidance distinguishes informational messages from requested work,
   and source implementation from update installation or guidance additions.
 
@@ -44,7 +42,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 - Sends and replies support quiet normal/low informational mail, retained in
   inbox and search without automatic wakeups. Urgent mail and acknowledgement
-  requests require wake delivery. Existing callers keep wake delivery by default.
+  requests require wake delivery. Non-T3 and mixed recipients keep wake delivery
+  by default; ordinary registered T3 recipients default to quiet as described above.
 
 - Opt-in approved update targets produce one pending hint at supported session
   context hooks. Loaded attestations are separate from mail acknowledgments;
@@ -63,7 +62,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   validation runs before transaction commit. Legacy requests retain text results;
   unsupported protocol headers fail before execution.
 - The npm relay forwards the successfully negotiated MCP protocol version on
-  subsequent requests. Relay and registry metadata are prepared for 0.1.1.
+  subsequent requests. Core, relay and registry versions are aligned at 0.4.0.
+  Release checks reject mismatched versions.
 
 ## 0.3.0 - 2026-10-06
 
