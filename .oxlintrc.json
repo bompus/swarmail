@@ -101,19 +101,10 @@
       }
     ]
   },
-  "plugins": [
-    "eslint",
-    "typescript",
-    "unicorn",
-    "oxc",
-    "import",
-    "promise"
-  ],
+  "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "promise"],
   "overrides": [
     {
-      "files": [
-        "test/**"
-      ],
+      "files": ["test/**"],
       "rules": {
         "max-lines-per-function": "off",
         "max-lines": "off"

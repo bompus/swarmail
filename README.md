@@ -184,43 +184,43 @@ keeps one name across repositories.
 
 ## Commands
 
-| Command | What it does |
-| --- | --- |
-| `swarmail serve` | Run the server |
-| `swarmail who [repo]` | Agent names, session titles and edit checkouts, live sessions first |
-| `swarmail inbox`, `send`, `search` | Read, send or search mail as this session |
-| `swarmail thread <id>` | One thread's messages, oldest first |
-| `swarmail inbox --session` | Drain this session's unread mail across repositories |
-| `swarmail wake-bridge <config.json>` | Deliver notices to one explicitly configured local target |
-| `swarmail send <to> <subject> <body> --notification-policy quiet` | Store normal/low informational mail without an automatic inbox hint |
-| `swarmail ping <agent>` | Exit 0 if that agent's wake hook is waiting |
-| `swarmail register` | The register hook; `--tag` prints the tag for a manual registration; `--host <host>` selects the host explicitly |
-| `swarmail hook wake <host>` | The Claude Code and Cursor wake hook |
-| `swarmail hook context <cursor\|devin\|agy> [stop]` | Check mail at a native context point without cancelling the task |
-| `swarmail hook rearm` | The Claude Code re-arm on Windows, which has no POSIX shell to run the Linux one |
-| `swarmail guard` | The git guard |
-| `swarmail version` | The source hash the binary was built from |
-| `swarmail updates --session` | Approved update targets and loaded attestations |
+| Command                                                           | What it does                                                                                                     |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `swarmail serve`                                                  | Run the server                                                                                                   |
+| `swarmail who [repo]`                                             | Agent names, session titles and edit checkouts, live sessions first                                              |
+| `swarmail inbox`, `send`, `search`                                | Read, send or search mail as this session                                                                        |
+| `swarmail thread <id>`                                            | One thread's messages, oldest first                                                                              |
+| `swarmail inbox --session`                                        | Drain this session's unread mail across repositories                                                             |
+| `swarmail wake-bridge <config.json>`                              | Deliver notices to one explicitly configured local target                                                        |
+| `swarmail send <to> <subject> <body> --notification-policy quiet` | Store normal/low informational mail without an automatic inbox hint                                              |
+| `swarmail ping <agent>`                                           | Exit 0 if that agent's wake hook is waiting                                                                      |
+| `swarmail register`                                               | The register hook; `--tag` prints the tag for a manual registration; `--host <host>` selects the host explicitly |
+| `swarmail hook wake <host>`                                       | The Claude Code and Cursor wake hook                                                                             |
+| `swarmail hook context <cursor\|devin\|agy> [stop]`               | Check mail at a native context point without cancelling the task                                                 |
+| `swarmail hook rearm`                                             | The Claude Code re-arm on Windows, which has no POSIX shell to run the Linux one                                 |
+| `swarmail guard`                                                  | The git guard                                                                                                    |
+| `swarmail version`                                                | The source hash the binary was built from                                                                        |
+| `swarmail updates --session`                                      | Approved update targets and loaded attestations                                                                  |
 
 `swarmail --help` lists every subcommand and flag. A `--help` or `-h`
 anywhere prints usage and runs nothing.
 
 ## Settings
 
-| Variable | Default | Effect |
-| --- | --- | --- |
-| `SWARMAIL_DB` | `~/.local/share/swarmail/mail.sqlite3` | Database path |
-| `SWARMAIL_PORT` | `18765` | Server port |
-| `SWARMAIL_URL` | `http://127.0.0.1:18765/mcp/` | MCP endpoint for the command, the register hook and the `swarmail-mcp` relay |
-| `SWARMAIL_WAKE_URL` | `http://127.0.0.1:18765` | Server base URL for the wake hook |
-| `SWARMAIL_SYNCHRONOUS` | `normal` | `full` syncs every commit, at about 3 ms per send instead of 0.5 ms |
-| `SWARMAIL_ENABLE_MUTATIONS` | `0` | Enable sender withdrawal/priority edits only after all readers are qualified; [rollout and rollback requirements](docs/usage.md#withdrawing-mail-and-editing-priority) |
-| `SWARMAIL_RETIRE_DAYS` | `7` | Retire idle agents and drop projects whose checkout is gone; `0` keeps both |
-| `SWARMAIL_GUARD` | `block` | `warn` only reports, `off` skips |
-| `SWARMAIL_AGENT` | from hook state | Name used by `inbox`, `send`, `ping`, `guard` and `who` |
-| `SWARMAIL_LIVE_ROOM` | unset | A JSON heartbeat file (`heartbeatAt`, plus `agentName`, `hostSessionId` or `t3Thread`); while its heartbeat is under 5 minutes old, `who` flags the session it names |
-| `SWARMAIL_UPDATE_TARGETS` | unset | Absolute approved-target manifest; [quiet session checks and loaded attestations](docs/updates.md) |
-| `SWARMAIL_UPDATE_HOLD` | unset | `1` holds update hints and attestations for a frozen session context |
+| Variable                    | Default                                | Effect                                                                                                                                                                 |
+| --------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SWARMAIL_DB`               | `~/.local/share/swarmail/mail.sqlite3` | Database path                                                                                                                                                          |
+| `SWARMAIL_PORT`             | `18765`                                | Server port                                                                                                                                                            |
+| `SWARMAIL_URL`              | `http://127.0.0.1:18765/mcp/`          | MCP endpoint for the command, the register hook and the `swarmail-mcp` relay                                                                                           |
+| `SWARMAIL_WAKE_URL`         | `http://127.0.0.1:18765`               | Server base URL for the wake hook                                                                                                                                      |
+| `SWARMAIL_SYNCHRONOUS`      | `normal`                               | `full` syncs every commit, at about 3 ms per send instead of 0.5 ms                                                                                                    |
+| `SWARMAIL_ENABLE_MUTATIONS` | `0`                                    | Enable sender withdrawal/priority edits only after all readers are qualified; [rollout and rollback requirements](docs/usage.md#withdrawing-mail-and-editing-priority) |
+| `SWARMAIL_RETIRE_DAYS`      | `7`                                    | Retire idle agents and drop projects whose checkout is gone; `0` keeps both                                                                                            |
+| `SWARMAIL_GUARD`            | `block`                                | `warn` only reports, `off` skips                                                                                                                                       |
+| `SWARMAIL_AGENT`            | from hook state                        | Name used by `inbox`, `send`, `ping`, `guard` and `who`                                                                                                                |
+| `SWARMAIL_LIVE_ROOM`        | unset                                  | A JSON heartbeat file (`heartbeatAt`, plus `agentName`, `hostSessionId` or `t3Thread`); while its heartbeat is under 5 minutes old, `who` flags the session it names   |
+| `SWARMAIL_UPDATE_TARGETS`   | unset                                  | Absolute approved-target manifest; [quiet session checks and loaded attestations](docs/updates.md)                                                                     |
+| `SWARMAIL_UPDATE_HOLD`      | unset                                  | `1` holds update hints and attestations for a frozen session context                                                                                                   |
 
 `scripts/enable.sh`, `scripts/enable-windows.ts`, the service unit and
 `configure-mcp.ts` use port 18765. Change `SWARMAIL_PORT` and the two URL
@@ -270,11 +270,11 @@ lives in `~/.local/state/swarmail-register/`, under your profile on Windows.
 After upgrading, run `bun scripts/configure-hooks.ts` again to add the
 session-start hook.
 
-| Host | Session id in the shell |
-| --- | --- |
-| Claude Code | `$CLAUDE_CODE_SESSION_ID` |
-| Codex | `$CODEX_THREAD_ID` |
-| Cursor | `$CURSOR_CONVERSATION_ID` |
+| Host            | Session id in the shell    |
+| --------------- | -------------------------- |
+| Claude Code     | `$CLAUDE_CODE_SESSION_ID`  |
+| Codex           | `$CODEX_THREAD_ID`         |
+| Cursor          | `$CURSOR_CONVERSATION_ID`  |
 | OpenCode, Devin | none; their hooks carry it |
 
 ## Waking sessions
@@ -324,14 +324,14 @@ These are the six servers measured below. Features describe the pinned source
 versions in the [detailed comparison](docs/benchmarks.md#features), which also
 covers runtimes, platforms, licences and two additional servers.
 
-| Server | Roster scope | Search | Threads and receipts | File reservations | Wakes an idle session |
-| --- | --- | --- | --- | --- | --- |
-| Swarmail | Per repository; worktrees share it | Full text (FTS5) | Threads; read, acknowledged and delivery receipts | Advisory, with a git guard | Claude Code and Cursor |
-| [mcp_agent_mail_rust](https://github.com/Dicklesworthstone/mcp_agent_mail_rust/tree/21a25c2bcfd20c9b31bcb109c294d17411eb5ba1) | Per project path | Full text (Tantivy) | Threads; read, acknowledged and delivery receipts | Advisory, with a git guard | No; Claude Code hooks check the inbox during a turn |
-| [mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_agent_mail/tree/3fad5ec672869f81d2ca0a4c525dde004ac96f45) | Per project path | Full text (FTS5) | Threads; read and acknowledged | Advisory, with a git guard that is off by default | No; Claude Code, Codex and Factory hooks check the inbox during a turn |
-| [agent-inbox](https://github.com/salimfadhley/agent-inbox/tree/a86647c2d61265e9a12fbc9ea0826a27712492cb) | One per hub | Substring, at most 25 results | Threads; read state | None | Claude Code (opt-in hook), opencode, omp |
-| [agentbus](https://github.com/oznotes/AgentCommBus/tree/225a57c91180421bf2d698328a57f488f18bd820) | One per server | None | No threads; reading moves a cursor | None | No; an agent waits in `recv` for up to 600 s |
-| [Project Relay](https://github.com/MuhammadFarhantahirvoltic/project-relay/tree/36d9a0765e4469f667c2e09fafe745166493fa86) | Per project | None | Replies; acknowledged per recipient | Advisory leases | No; an inbox read waits for up to 25 s |
+| Server                                                                                                                        | Roster scope                       | Search                        | Threads and receipts                              | File reservations                                 | Wakes an idle session                                                  |
+| ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ----------------------------- | ------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------- |
+| Swarmail                                                                                                                      | Per repository; worktrees share it | Full text (FTS5)              | Threads; read, acknowledged and delivery receipts | Advisory, with a git guard                        | Claude Code and Cursor                                                 |
+| [mcp_agent_mail_rust](https://github.com/Dicklesworthstone/mcp_agent_mail_rust/tree/21a25c2bcfd20c9b31bcb109c294d17411eb5ba1) | Per project path                   | Full text (Tantivy)           | Threads; read, acknowledged and delivery receipts | Advisory, with a git guard                        | No; Claude Code hooks check the inbox during a turn                    |
+| [mcp_agent_mail](https://github.com/Dicklesworthstone/mcp_agent_mail/tree/3fad5ec672869f81d2ca0a4c525dde004ac96f45)           | Per project path                   | Full text (FTS5)              | Threads; read and acknowledged                    | Advisory, with a git guard that is off by default | No; Claude Code, Codex and Factory hooks check the inbox during a turn |
+| [agent-inbox](https://github.com/salimfadhley/agent-inbox/tree/a86647c2d61265e9a12fbc9ea0826a27712492cb)                      | One per hub                        | Substring, at most 25 results | Threads; read state                               | None                                              | Claude Code (opt-in hook), opencode, omp                               |
+| [agentbus](https://github.com/oznotes/AgentCommBus/tree/225a57c91180421bf2d698328a57f488f18bd820)                             | One per server                     | None                          | No threads; reading moves a cursor                | None                                              | No; an agent waits in `recv` for up to 600 s                           |
+| [Project Relay](https://github.com/MuhammadFarhantahirvoltic/project-relay/tree/36d9a0765e4469f667c2e09fafe745166493fa86)     | Per project                        | None                          | Replies; acknowledged per recipient               | Advisory leases                                   | No; an inbox read waits for up to 25 s                                 |
 
 An inbox read that waits for mail needs an agent already running. It does not
 wake an idle session.
@@ -349,8 +349,8 @@ the method, a sixth server, each tool's raw output and a feature comparison
 with seven other local agent-mail servers.
 
 <a href="docs/assets/benchmark-light.png"><picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-dark.png">
-  <img src="docs/assets/benchmark-light.png" alt="Bar charts sorted from best to worst for each metric. Send p50: Swarmail 0.46 ms, agentbus 2.3 ms, Project Relay 2.5 ms, Rust Agent Mail 39 ms, Python Agent Mail 70 ms. Search p50: Swarmail 0.65 ms, Python Agent Mail 12 ms, Rust Agent Mail 56 ms; agentbus and Project Relay have no search tool. Startup: Swarmail 38 ms, Project Relay 123 ms, agentbus 408 ms, Python Agent Mail 0.86 s, Rust Agent Mail 1.5 s. Idle memory: Swarmail 32 MiB, agentbus 81 MiB, Project Relay 121 MiB, Python Agent Mail 154 MiB, Rust Agent Mail 190 MiB." width="100%">
+<source media="(prefers-color-scheme: dark)" srcset="docs/assets/benchmark-dark.png">
+<img src="docs/assets/benchmark-light.png" alt="Bar charts sorted from best to worst for each metric. Send p50: Swarmail 0.46 ms, agentbus 2.3 ms, Project Relay 2.5 ms, Rust Agent Mail 39 ms, Python Agent Mail 70 ms. Search p50: Swarmail 0.65 ms, Python Agent Mail 12 ms, Rust Agent Mail 56 ms; agentbus and Project Relay have no search tool. Startup: Swarmail 38 ms, Project Relay 123 ms, agentbus 408 ms, Python Agent Mail 0.86 s, Rust Agent Mail 1.5 s. Idle memory: Swarmail 32 MiB, agentbus 81 MiB, Project Relay 121 MiB, Python Agent Mail 154 MiB, Rust Agent Mail 190 MiB." width="100%">
 </picture></a>
 
 Each chart ranks its metric from best to worst. Lower values are better in
@@ -363,39 +363,39 @@ Rust Agent Mail and Python Agent Mail are
 Median latency in milliseconds; lower is better. Rows are sorted by send
 latency. Search has a different ranking. A dash means no search tool.
 
-| Server | Send ↓ | Inbox ↓ | Search ↓ |
-| :--- | ---: | ---: | ---: |
-| **Swarmail** | **0.46** | **0.50** | **0.65** |
-| agentbus | 2.3 | 1.1 | — |
-| Project Relay | 2.5 | 1.4 | — |
-| Rust Agent Mail | 39 | 12 | 56 |
-| Python Agent Mail | 70 | 23 | 12 |
+| Server            |   Send ↓ |  Inbox ↓ | Search ↓ |
+| :---------------- | -------: | -------: | -------: |
+| **Swarmail**      | **0.46** | **0.50** | **0.65** |
+| agentbus          |      2.3 |      1.1 |        — |
+| Project Relay     |      2.5 |      1.4 |        — |
+| Rust Agent Mail   |       39 |       12 |       56 |
+| Python Agent Mail |       70 |       23 |       12 |
 
 ### Throughput
 
 Requests per second with eight clients; higher is better. Rows are sorted by
 send throughput. Search has a different ranking.
 
-| Server | Send ↑ | Inbox ↑ | Search ↑ |
-| :--- | ---: | ---: | ---: |
-| **Swarmail** | **5,500** | **6,300** | **4,300** |
-| agentbus | 876 | 1,600 | — |
-| Project Relay | 482 | 1,100 | — |
-| Rust Agent Mail | 50 | 416 | 90 |
-| Python Agent Mail | 9.7 | 27 | 44 |
+| Server            |    Send ↑ |   Inbox ↑ |  Search ↑ |
+| :---------------- | --------: | --------: | --------: |
+| **Swarmail**      | **5,500** | **6,300** | **4,300** |
+| agentbus          |       876 |     1,600 |         — |
+| Project Relay     |       482 |     1,100 |         — |
+| Rust Agent Mail   |        50 |       416 |        90 |
+| Python Agent Mail |       9.7 |        27 |        44 |
 
 ### Memory
 
 Resident memory in MiB; lower is better. Rows are sorted by idle memory.
 Peak memory has a different ranking.
 
-| Server | Idle ↓ | Peak under load ↓ |
-| :--- | ---: | ---: |
-| **Swarmail** | **32** | **67** |
-| agentbus | 81 | 96 |
-| Project Relay | 121 | 296 |
-| Python Agent Mail | 154 | 258 |
-| Rust Agent Mail | 190 | 688 |
+| Server            | Idle ↓ | Peak under load ↓ |
+| :---------------- | -----: | ----------------: |
+| **Swarmail**      | **32** |            **67** |
+| agentbus          |     81 |                96 |
+| Project Relay     |    121 |               296 |
+| Python Agent Mail |    154 |               258 |
+| Rust Agent Mail   |    190 |               688 |
 
 CPU usage, seed-loading times and the full ratios are in the
 [detailed results](docs/benchmarks.md#summary).
@@ -406,14 +406,14 @@ Mean startup time in milliseconds across 20 hyperfine runs; lower is better.
 Rows are sorted by mean time. Each run starts the server, waits for its health
 check, then stops it.
 
-| Server | Mean ± SD ↓ | Min | Max |
-| :--- | ---: | ---: | ---: |
-| **Swarmail** | **37.7 ± 0.7** | **37.1** | **39.3** |
-| Project Relay | 122.9 ± 5.3 | 113.8 | 132.7 |
-| agent-inbox* | 263.0 ± 11.4 | 252.0 | 297.9 |
-| agentbus | 408.2 ± 15.6 | 385.1 | 443.3 |
-| Python Agent Mail | 857.7 ± 38.7 | 803.5 | 925.7 |
-| Rust Agent Mail | 1530.3 ± 14.9 | 1509.6 | 1562.8 |
+| Server            |    Mean ± SD ↓ |      Min |      Max |
+| :---------------- | -------------: | -------: | -------: |
+| **Swarmail**      | **37.7 ± 0.7** | **37.1** | **39.3** |
+| Project Relay     |    122.9 ± 5.3 |    113.8 |    132.7 |
+| agent-inbox*      |   263.0 ± 11.4 |    252.0 |    297.9 |
+| agentbus          |   408.2 ± 15.6 |    385.1 |    443.3 |
+| Python Agent Mail |   857.7 ± 38.7 |    803.5 |    925.7 |
+| Rust Agent Mail   |  1530.3 ± 14.9 |   1509.6 |   1562.8 |
 
 The harness without a server takes 7.2 ± 0.6 ms (min 6.6, max 8.5).
 Hyperfine's raw `Relative` column compares against that harness, not Swarmail;
@@ -429,6 +429,10 @@ numbers don't compare durability. Requests per second varied by up to 29%
 between rounds of the same server.
 
 ## Development
+
+Oxfmt checks authored Markdown, HTML, JSON, JSONC, YAML, TOML and CSS as well
+as JavaScript and TypeScript. The generated dependency lockfile stays
+excluded. Package key sorting is disabled to preserve the existing key order.
 
 [Archived validator research](https://github.com/bompus/swarmail/blob/d55186b117c66bc522f4d2b4b041cd949eb0dc73/docs/research/validators-2026-10-06.md)
 records the generated/runtime comparison, TypeBox compatibility findings and the

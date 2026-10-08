@@ -9,13 +9,13 @@ information to an existing session; it does not assign tasks or manage agents.
 
 ## Choose a target
 
-| Target type | Transport | Delivery |
-| --- | --- | --- |
-| `t3-v1-steer` | Loopback HTTP | Starts a turn that steers the active turn using its current modes |
-| `t3-v2-queue` | Loopback HTTP and WebSocket | Agent message with steering intent; can reconcile older queued mail notices |
-| `opencode-v2-queue` | Loopback HTTP | Prompt with steering delivery and a matching admission receipt |
-| `codex-queue` | Unix WebSocket | Native app-server steering with a durable command ID |
-| `grok-queue` | Unix socket | Native leader steering with a durable prompt ID |
+| Target type         | Transport                   | Delivery                                                                    |
+| ------------------- | --------------------------- | --------------------------------------------------------------------------- |
+| `t3-v1-steer`       | Loopback HTTP               | Starts a turn that steers the active turn using its current modes           |
+| `t3-v2-queue`       | Loopback HTTP and WebSocket | Agent message with steering intent; can reconcile older queued mail notices |
+| `opencode-v2-queue` | Loopback HTTP               | Prompt with steering delivery and a matching admission receipt              |
+| `codex-queue`       | Unix WebSocket              | Native app-server steering with a durable command ID                        |
+| `grok-queue`        | Unix socket                 | Native leader steering with a durable prompt ID                             |
 
 The names ending in `queue` are retained configuration identifiers. New mail
 uses steering regardless of priority. Native Codex and Grok bridges require
@@ -142,7 +142,6 @@ Keep existing journals when adopting these modules. If the destination binding
 changes, the bridge refuses to reuse the journal. Inspect and reconcile pending
 delivery before changing its destination or removing state. A refused bridge
 has not established whether its saved command reached the target.
-
 
 ## Local T3 lifecycle
 

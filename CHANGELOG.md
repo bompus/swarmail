@@ -2,6 +2,11 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- Check authored documentation and configuration files with Oxfmt; preserve
+  the generated dependency lockfile and package key order.
+
 ## 0.4.0 - 2026-10-07
 
 - Default ordinary normal/low, acknowledgement-free mail to quiet when every
