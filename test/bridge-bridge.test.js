@@ -414,6 +414,12 @@ for (const boundary of ["mail", "target"]) {
     const stop = new AbortController();
     const proxy = createTcpServer((socket) => {
       sockets.add(socket);
+      socket.on("error", (error) => {
+        // The peer can reset the deliberately truncated response or a pending teardown write.
+        if (error.code !== "ECONNRESET") {
+          throw error;
+        }
+      });
       socket.on("close", () => sockets.delete(socket));
       let input = "";
       socket.on("data", async (chunk) => {
