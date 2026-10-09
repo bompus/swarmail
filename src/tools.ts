@@ -338,6 +338,7 @@ export const TOOLS: Tool[] = [
   {
     name: "retire_agent",
     description:
+      "At an agreed whole-session closeout or a whole-session completion with nothing remaining, record the closeout, release owned resources and finish required dependency notices, then retire your own registration in every project you joined. " +
       "Retire an agent whose session has ended, so it no longer appears in list_agents and " +
       "new messages to it fail. Its messages stay. unretire_agent reverses it, and so does " +
       "the agent registering again or sending, reading mail or reserving files as itself. " +

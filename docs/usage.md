@@ -54,6 +54,27 @@ checkout, unless a project already exists under that exact path.
   later does not change old inbox entries. Messages predating this field have
   a null location.
 
+## Ending the entire session
+
+Record the closeout when the user ends the entire session or accepts an option
+that closes it. Do the same when you conclude that the entire session is finished
+with nothing remaining. Retire your own registration in every project you joined.
+Completing one task, waiting for an answer, pausing or deferring a
+candidate while continuing the session does not trigger retirement.
+
+1. Release resources you own and send any still-required dependency notices.
+2. Save completed work, deferred items or blockers, and resource-release results
+   in the session's durable record.
+3. Call `retire_agent` for your own name in each registered project.
+4. Check the `retired:true` result, then confirm your name is absent from the
+   read-only `list_agents` result. Use a limit that covers the complete roster;
+   a full result can omit agents and cannot verify absence.
+
+Finish mail and registration operations before retiring. Registering, sending,
+reading mail or reserving files as yourself can reactivate the registration.
+Retirement retains existing messages and rejects new mail to that registration;
+it does not archive the host conversation or delete its checkout.
+
 ## Status evidence
 
 `list_agents` and `whois` return recorded metadata and activity timestamps.

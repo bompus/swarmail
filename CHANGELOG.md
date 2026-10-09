@@ -4,6 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Require agents to record whole-session closeouts and retire their own project
+  registrations, with read-only verification and task/pause boundaries.
+
 - Sort package fields and dependency maps with Oxfmt while preserving script order.
 
 - Check authored documentation and configuration files with Oxfmt; preserve
