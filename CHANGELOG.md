@@ -8,6 +8,12 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   while another process still holds a handle to it, such as the parent that
   started it.
 
+- The Claude Code wake mod polls for mail for 3 seconds instead of 25 when no
+  person is at the prompt (`claude -p` and SDK hosts). A `claude -p` run started
+  from an SDK-hosted session inherits that session's entrypoint, so the mod
+  could not tell it apart and held the process open until its wait ended, about
+  25 seconds after the answer. The poll still returns as soon as mail arrives.
+
 ## 0.5.0 - 2026-10-09
 
 - A Claude Code plugin in `packages/claude-plugin/` connects Claude Code to a
