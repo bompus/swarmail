@@ -214,11 +214,16 @@ function main(input: HookInput): string {
     const pending = registry.resume(sessionId, started);
     return pending ? settle(pending.project, pending.tag, pending.worktree) : "";
   }
+  const starting = event === "SessionStart";
+  // A `claude -p` run is unattended and often read-only: it registers on its first edit, not at start, so a one-shot
+  // lookup does not add an agent to the roster.
+  if (starting && session.host === "claude" && process.env.CLAUDE_CODE_ENTRYPOINT === "sdk-cli") {
+    return "";
+  }
   const dir = targetDir({ ...input, cwd: session.cwd });
   const project = dir && primaryCheckout(dir);
   const t3 = t3ThreadId(sessionId);
   const tag = sessionTag({ ...session, t3 }, session.cwd);
-  const starting = event === "SessionStart";
   if (!project) {
     return starting ? startNotice(tag) : "";
   }

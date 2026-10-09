@@ -563,6 +563,59 @@ test("a failed registration tells Claude, then the next prompt retries against t
   }
 }, 30000);
 
+test("a claude -p run registers on its first edit, not at start", async () => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-headless-")));
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const server = createServer(join(dir, "mail.sqlite3"), port);
+  try {
+    const repo = join(dir, "repo");
+    Bun.spawnSync(["git", "init", "-q", repo]);
+    const { CLAUDECODE, ...parent } = process.env;
+    const env = {
+      ...parent,
+      CLAUDE_CODE_ENTRYPOINT: "sdk-cli",
+      SWARMAIL_URL: `http://127.0.0.1:${port}/mcp/`,
+      XDG_STATE_HOME: join(dir, "state"),
+      HOME: dir,
+    };
+    const run = async (input) => {
+      const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
+        stdin: new Blob([JSON.stringify(input)]),
+        env,
+      });
+      await proc.exited;
+      const out = (await new Response(proc.stdout).text()).trim();
+      return out && JSON.parse(out);
+    };
+    const roster = () => server.db.query("SELECT name FROM agents").all();
+    const claude = {
+      session_id: "headless-1",
+      cwd: repo,
+      transcript_path: join(dir, ".claude/projects/-repo/headless-1.jsonl"),
+    };
+    expect(await run({ ...claude, hook_event_name: "SessionStart", source: "startup" })).toBe("");
+    expect(await run({ ...claude, hook_event_name: "SessionEnd" })).toBe("");
+    expect(roster()).toEqual([]);
+
+    // A headless run that edits files still registers, once.
+    const edit = {
+      ...claude,
+      session_id: "headless-2",
+      hook_event_name: "PreToolUse",
+      tool_input: { file_path: join(repo, "a.txt") },
+    };
+    expect(
+      await run({ ...claude, session_id: "headless-2", hook_event_name: "SessionStart" }),
+    ).toBe("");
+    await run(edit);
+    expect(roster()).toHaveLength(1);
+  } finally {
+    server.server.stop(true);
+    server.db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 30000);
+
 test("a session registers at start, keeps that one name through edits, restarts and hand registration", async () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-start-")));
   const port = 20000 + Math.floor(Math.random() * 20000);

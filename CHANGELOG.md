@@ -4,6 +4,12 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- A `claude -p` run whose `CLAUDE_CODE_ENTRYPOINT` is `sdk-cli` registers with
+  Swarmail on its first file edit instead of at session start, so a read-only
+  one-shot run no longer adds an agent to the roster. A child that inherited
+  `sdk-ts` from an SDK-hosted session, and interactive sessions, still register
+  at start.
+
 - On Windows, a host session whose process has exited no longer reads as alive
   while another process still holds a handle to it, such as the parent that
   started it.
