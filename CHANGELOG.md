@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.5.0 - 2026-10-09
 
 - A Claude Code plugin in `packages/claude-plugin/` connects Claude Code to a
   running local server through a bundled copy of the relay, which needs Node 18
@@ -24,13 +24,13 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - A lifecycle reconcile that changes nothing no longer rechecks every waiting
   long poll. Each recheck reconciled again and reread T3's database, so a
   client calling `/lifecycle/reconcile` every 2 seconds with five waiters made
-  the server read about 26 MB per call; it now reads about 2.6 MB. A change
+  the server read about 26 MB per call; it now reads about 2.6 MB, measured on
+  a local copy of the server against copies of live databases. A change
   found by any reconcile, including a wait status check, still wakes held
   long polls at once, and so does a T3 database that becomes readable again.
 - Export `pause(ms, signal)` from `wake-loop.ts`: a wait that ends as soon as its
   signal aborts. The delivery loop's retry backoff now uses it.
 - Sort package fields and dependency maps with Oxfmt while preserving script order.
-
 - Check authored documentation and configuration files with Oxfmt; preserve
   the generated dependency lockfile.
 - Sending guidance gives coordination messages a brief Markdown recipe with
