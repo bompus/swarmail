@@ -263,8 +263,9 @@ On a session's first edit in a repository, `swarmail register` registers it
 under the repository's primary checkout. Claude Code and Cursor also run it
 when a session starts. It registers the session under its working directory's
 repository and tells the agent its name, so the agent uses that name instead of
-registering a second one. A `claude -p` run registers on its first edit
-instead, so a read-only one-shot run adds no agent. The registration starts with a tag
+registering a second one. A `claude -p` run whose `CLAUDE_CODE_ENTRYPOINT` is
+`sdk-cli` registers on its first edit instead, so a read-only one-shot run adds no agent. A
+child that inherited `sdk-ts` from an SDK-hosted session still registers at start. The registration starts with a tag
 holding the host's session id and working directory, which is how `swarmail
 who` matches names to sessions. A failure is retried on the next prompt or edit. State
 lives in `~/.local/state/swarmail-register/`, under your profile on Windows.
