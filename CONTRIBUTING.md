@@ -52,13 +52,14 @@ The maintainer cuts each release from `main`:
    and enter `X.Y.Z`. The saved build spec (build steps
    `["npm install -g bun@1.4.2"]`, CMD `["bun", "scripts/glama.ts"]`) needs a
    change only when the Bun version CI uses or `scripts/glama.ts` changes.
-5. Check every listing in the next section. Update by hand any that still
-   shows an older version or outdated details.
+5. Check every listing in the next section that is not marked pending.
+   Update by hand any that still shows an older version or outdated details.
 
 ## Listings
 
 Swarmail is listed in these places. When you list it somewhere new, add it
-here, so a release or a change to its description reaches every listing.
+here, so a release or a change to its description reaches every listing. Mark
+a submission pending until it is accepted.
 
 - [npm `swarmail-mcp`](https://www.npmjs.com/package/swarmail-mcp): details
   come from `packages/mcp-relay/package.json` and its README. `npm publish`
@@ -73,8 +74,9 @@ here, so a release or a change to its description reaches every listing.
   listing of the npm package. It is not known whether it follows new npm
   releases, so check the version it shows. Edit it while signed in as its
   owner.
-- [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers): one
-  line under Communication in that repository's `README.md`, submitted in
+- [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers)
+  (pending): one line under Communication in that repository's `README.md`,
+  submitted in
   [#16031](https://github.com/punkpeye/awesome-mcp-servers/pull/16031). It
   shows no version, so releases need no change. To change its description or
   tags, open a pull request there that edits that line.
