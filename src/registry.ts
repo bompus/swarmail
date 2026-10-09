@@ -22,7 +22,10 @@ import { SESSION_RE } from "./wake.ts";
 
 /** Per-session state under ~/.local/state/swarmail-register/<session id>.json. */
 export interface RegisterState {
+  /** The name the session first registered under; the name in every project that has no entry in `names`. */
   name: string | null;
+  /** Names that differ from `name`, by project: the server refused `name` there because another session holds it. */
+  names?: Record<string, string>;
   projects: string[];
   tags?: Record<string, string>;
   worktrees?: Record<string, string>;
@@ -39,6 +42,14 @@ export interface Session {
   model: string | null;
   sessionId: string | null;
   cwd: string | null;
+}
+
+/** The name the session registered under in `project`. */
+export function nameIn(
+  state: Pick<RegisterState, "name" | "names">,
+  project: string,
+): string | null {
+  return state.names?.[project] ?? state.name;
 }
 
 /** A `list_agents` roster row, as far as registration reads it. */
@@ -122,14 +133,24 @@ export function ensureRegistered<S extends RegisterState>(
   ) {
     return state;
   }
-  const name = register(project, state.name);
+  const wanted = nameIn(state, project);
+  let name = register(project, wanted);
+  // The server answered and refused the name, because another session holds it in this project:
+  // take the name the server assigns here and keep the session's own name everywhere else.
+  if (!name && wanted && register.refusal) {
+    name = register(project, null);
+  }
   if (!name) {
     return state;
   }
   const projects = state.projects.includes(project) ? state.projects : [...state.projects, project];
+  const headline = state.name ?? name;
+  const { [project]: _, ...otherNames } = state.names ?? {};
+  const names = name === headline ? otherNames : { ...otherNames, [project]: name };
   return {
     ...state,
-    name,
+    name: headline,
+    names: Object.keys(names).length > 0 ? names : undefined,
     projects,
     tags: { ...state.tags, [project]: tag },
     ...(worktree !== undefined && { worktrees: { ...state.worktrees, [project]: worktree } }),
@@ -417,7 +438,7 @@ export function openRegistry<S extends RegisterState = RegisterState>(
       }
       for (const project of state.projects) {
         try {
-          release(project, state.name);
+          release(project, nameIn(state, project) ?? state.name);
         } catch {
           // Server down: the reservations expire on their own.
         }
@@ -480,6 +501,9 @@ export function selfNames(env: NodeJS.ProcessEnv = process.env, host = hostProce
       )
     ) {
       names.add(state.name);
+      for (const other of Object.values(state.names ?? {})) {
+        names.add(other);
+      }
     }
   }
   return names;

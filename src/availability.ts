@@ -1,7 +1,7 @@
 // Admission observations are snapshots, not proof of wake delivery or task acceptance.
 import type { Database } from "bun:sqlite";
 import { hostAlive } from "./proc.ts";
-import { openRegistry, registryDir } from "./registry.ts";
+import { nameIn, openRegistry, registryDir } from "./registry.ts";
 import { parseTag, sameSession } from "./tag.ts";
 import {
   list,
@@ -73,7 +73,7 @@ export function recipientObservation(
     const tag = parseTag(state?.tags?.[project.human_key]);
     if (
       !state ||
-      state.name !== who.name ||
+      nameIn(state, project.human_key) !== who.name ||
       !state.projects.includes(project.human_key) ||
       !tag ||
       !sameSession(tag, parseTag(who.task_description)) ||

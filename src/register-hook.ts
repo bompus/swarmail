@@ -11,7 +11,7 @@ import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { primaryCheckout, worktreeRoot } from "./checkout.ts";
 import { hostProcess, sameHost } from "./proc.ts";
-import { openRegistry, serverRegister, type Session } from "./registry.ts";
+import { nameIn, openRegistry, serverRegister, type Session } from "./registry.ts";
 import { sessionTag, SESSION_ENV } from "./tag.ts";
 import { t3ThreadId } from "./t3-state.ts";
 import { updateHint } from "./updates.ts";
@@ -88,7 +88,7 @@ export function startNotice(tag: string, name?: string | null, project?: string)
   }
   return (
     `Swarmail: you are registered as ${name} in ${project}. Use ${name} as your agent name; do not call ` +
-    `macro_start_session or register_agent to get another one. In another repository, register with name ${name}.`
+    `macro_start_session or register_agent to get another one. In another repository, register with name ${name}; if another session holds it there, the hook registers you under a different name.`
   );
 }
 
@@ -202,7 +202,7 @@ function main(input: HookInput): string {
       return failureNotice(project, tag, register.refusal);
     }
     if (settled?.before.pending?.project === project) {
-      return `Swarmail: registered as ${settled.after.name} in ${project}.`;
+      return `Swarmail: registered as ${nameIn(settled.after, project)} in ${project}.`;
     }
     return "";
   };
@@ -248,10 +248,11 @@ function main(input: HookInput): string {
       : settle(project, tag, worktree);
   // Every start names the session, registered just now or before: a compacted or resumed session has lost its name.
   const state = starting ? registry.read(sessionId) : null;
-  if (!state?.name || state.pending?.project === project) {
+  const name = state && nameIn(state, project);
+  if (!name || state.pending?.project === project) {
     return text;
   }
-  return startNotice(tag, state.name, project);
+  return startNotice(tag, name, project);
 }
 
 /**

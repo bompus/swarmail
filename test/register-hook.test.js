@@ -19,6 +19,7 @@ import { failureNotice, hookSession, targetDir } from "../src/register-hook.ts";
 import {
   ensureRegistered,
   keptTask,
+  nameIn,
   openRegistry,
   rowForSession,
   withLock,
@@ -102,6 +103,70 @@ test("registers once per repository and tag, keeping one name across repositorie
   });
   const failed = { name: null, projects: [] };
   expect(ensureRegistered(failed, "/home/u/c", "[t1]", () => null)).toBe(failed);
+});
+
+test("a name another session holds in a project is replaced there only", () => {
+  const taken = (project, name) => {
+    if (name === "TanOwl" && project === "/home/u/b") {
+      taken.refusal = "Registration cannot replace a bound lifecycle identity.";
+      return null;
+    }
+    taken.refusal = undefined;
+    return name ?? "BlueHarbor";
+  };
+  const first = { name: "TanOwl", projects: ["/home/u/a"], tags: { "/home/u/a": "[t1]" } };
+  const state = ensureRegistered(first, "/home/u/b", "[t1]", taken);
+  expect(state.name).toBe("TanOwl");
+  expect(state.names).toEqual({ "/home/u/b": "BlueHarbor" });
+  expect(nameIn(state, "/home/u/a")).toBe("TanOwl");
+  expect(nameIn(state, "/home/u/b")).toBe("BlueHarbor");
+  // Later registrations in each project ask for that project's name.
+  const calls = [];
+  const record = (project, name) => {
+    calls.push([project, name]);
+    return name;
+  };
+  ensureRegistered({ ...state, tags: {} }, "/home/u/b", "[t2]", record);
+  ensureRegistered({ ...state, tags: {} }, "/home/u/a", "[t2]", record);
+  expect(calls).toEqual([
+    ["/home/u/b", "BlueHarbor"],
+    ["/home/u/a", "TanOwl"],
+  ]);
+});
+
+test("a server that does not answer keeps the name and records nothing new", () => {
+  const down = () => null;
+  const state = { name: "TanOwl", projects: [] };
+  expect(ensureRegistered(state, "/home/u/b", "[t1]", down)).toBe(state);
+});
+
+test("ending a session releases each project's reservations under that project's name", () => {
+  const dir = mkdtempSync(join(tmpdir(), "end-names-"));
+  try {
+    const registry = openRegistry(dir);
+    registry.settle("s1", {
+      since: 0,
+      project: "/home/u/a",
+      tag: "[t1]",
+      register: (_project, name) => name ?? "TanOwl",
+    });
+    registry.settle("s1", {
+      since: 0,
+      project: "/home/u/b",
+      tag: "[t1]",
+      register: Object.assign((_project, name) => (name ? null : "BlueHarbor"), {
+        refusal: "held",
+      }),
+    });
+    const released = [];
+    registry.end("s1", (project, name) => released.push([project, name]), new Date(1));
+    expect(released).toEqual([
+      ["/home/u/a", "TanOwl"],
+      ["/home/u/b", "BlueHarbor"],
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("re-registers under the same name when the tag changed or state predates tags", () => {
@@ -543,6 +608,52 @@ test("a registration the server refuses says so instead of blaming an unanswered
   }
   expect(await attempt("http://127.0.0.1:1/mcp/")).toEqual({ name: null, refusal: null });
   expect(failureNotice("/home/u/c", "[claude:s1]")).toContain("the server did not answer");
+});
+
+test("the hook registers under a fresh name when the server refuses the session's own", async () => {
+  // serverRegister blocks on curl, so it runs in its own process, away from the stand-in server.
+  const calls = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      const msg = await req.json();
+      const { name, arguments: args } = msg.params;
+      calls.push([name, args.name]);
+      const reply = (result) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
+      const text = (value) => ({ content: [{ type: "text", text: JSON.stringify(value) }] });
+      if (name === "list_agents") {
+        return reply(text([]));
+      }
+      if (args.name === "TanOwl") {
+        const error = {
+          error: { message: "Registration cannot replace a bound lifecycle identity." },
+        };
+        return reply({ isError: true, ...text(error) });
+      }
+      return reply(text({ name: args.name ?? "BlueHarbor" }));
+    },
+  });
+  try {
+    const code = `
+      import { ensureRegistered, serverRegister } from ${JSON.stringify(join(import.meta.dir, "../src/registry.ts"))};
+      const session = { host: "claude", program: "claude-code", model: null, sessionId: "s1", cwd: null };
+      const register = serverRegister(session, "[claude:s1]", ${JSON.stringify(`http://127.0.0.1:${server.port}/mcp/`)});
+      const state = { name: "TanOwl", projects: ["/home/u/a"], tags: { "/home/u/a": "[claude:s1]" } };
+      console.log(JSON.stringify(ensureRegistered(state, "/home/u/b", "[claude:s1]", register)));`;
+    const proc = Bun.spawn(["bun", "-e", code], { stdout: "pipe" });
+    await proc.exited;
+    const state = JSON.parse(await new Response(proc.stdout).text());
+    expect(state.name).toBe("TanOwl");
+    expect(state.names).toEqual({ "/home/u/b": "BlueHarbor" });
+    expect(state.projects).toEqual(["/home/u/a", "/home/u/b"]);
+    expect(calls.filter(([tool]) => tool === "register_agent")).toEqual([
+      ["register_agent", "TanOwl"],
+      ["register_agent", undefined],
+    ]);
+  } finally {
+    server.stop(true);
+  }
 });
 
 test("a failed registration tells Claude, then the next prompt retries against the server and reports the name", async () => {
