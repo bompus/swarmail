@@ -99,6 +99,12 @@ a listing not yet submitted, or pending until it is accepted.
   `packages/codex-plugin/`. People add it with
   `codex plugin marketplace add bompus/swarmail`. Its `relay.mjs` is another
   copy of `packages/mcp-relay/index.mjs`, checked the same way.
+- OpenAI plugin directory (not yet submitted): the skill-only package in
+  `packages/openai-plugin/`, uploaded as a ZIP at
+  <https://platform.openai.com/plugins> under a verified developer identity.
+  It does not follow this repository: when the skill, icon or listing text in
+  `plugin.json` changes, raise its `version` and upload a new ZIP. Releases need
+  no change otherwise. Its privacy policy link points at `PRIVACY.md`.
 - Cursor Marketplace (pending): the plugin in `packages/cursor-plugin/`,
   listed by `.cursor-plugin/marketplace.json`, submitted at
   <https://cursor.com/marketplace/publish> while signed in to Cursor. The
