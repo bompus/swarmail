@@ -41,7 +41,7 @@ for (const plugin of ["claude-plugin", "codex-plugin"]) {
 // its description reaches every listing.
 const contributing = readFileSync(new URL("CONTRIBUTING.md", root), "utf8");
 const listings = contributing.slice(contributing.indexOf("\n## Listings")).split(/\n## /)[1] ?? "";
-const rows = listings.split(/\n(?=- )/).filter((row) => row.startsWith("- "));
+const rows = listings.split(/\n(?=- |\n)/).filter((row) => row.startsWith("- "));
 for (const entry of readdirSync(new URL("packages/", root), { withFileTypes: true })) {
   if (entry.isDirectory() && !rows.some((row) => row.includes(`packages/${entry.name}/`))) {
     console.error(`CONTRIBUTING.md must name packages/${entry.name}/ in its Listings section`);

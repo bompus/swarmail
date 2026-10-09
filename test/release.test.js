@@ -101,3 +101,16 @@ test("release check rejects a package that is named only in the Listings introdu
   expect(result.exitCode).toBe(1);
   expect(result.stderr.toString()).toContain("must name packages/codex-plugin/");
 });
+
+test("release check rejects a package that is named only in a paragraph after the Listings rows", () => {
+  const root = fixture();
+  const path = join(root, "CONTRIBUTING.md");
+  const text = readFileSync(path, "utf8");
+  writeFileSync(
+    path,
+    `${text.replaceAll("packages/codex-plugin/", "").trimEnd()}\n\nSee packages/codex-plugin/.\n`,
+  );
+  const result = check(root);
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr.toString()).toContain("must name packages/codex-plugin/");
+});
