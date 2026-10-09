@@ -1,12 +1,17 @@
 import { Database } from "bun:sqlite";
 import { createT3V2Tables, addT3V2Thread } from "./fixtures/t3-v2-state.js";
-import { afterEach, expect, spyOn, test } from "bun:test";
+import { afterEach, expect, mock, spyOn, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import * as proc from "../src/proc.ts";
 import { createServer } from "../src/server.ts";
 import { call, mail } from "../src/mail.ts";
 import { selfSession } from "../src/registry.ts";
 import { testScratch } from "./fixtures/test-scratch.js";
+
+// These tests fake a Codex session through its variable. A runner under another agent host (Claude Code, say) would
+// otherwise find that host's process above it and refuse the identity, so the tests see no host, as in CI.
+mock.module("../src/proc.ts", () => ({ ...proc, hostProcess: () => null }));
 
 const root = testScratch();
 const cleanups = [];

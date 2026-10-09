@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { hostProcess } from "../src/proc.ts";
 import { sessionUpdates, updateHint } from "../src/updates.ts";
 import { createServer } from "../src/server.ts";
 import { SESSION_ENV } from "../src/tag.ts";
@@ -213,42 +214,47 @@ test("start context uses supported provider output, while unqualified hosts stay
   }
 });
 
-test("the public session command reads and acknowledges the exact approved target", async () => {
-  const f = fixture();
-  const env = { ...process.env, ...f.env, T3_HOME: f.dir };
-  for (const key of Object.values(SESSION_ENV)) {
-    delete env[key];
-  }
-  env.CODEX_THREAD_ID = "receiver";
-  const run = async (...args) => {
-    const child = Bun.spawn(
-      [process.execPath, join(import.meta.dir, "../src/cli.ts"), "updates", ...args],
-      {
-        env,
-        stdout: "pipe",
-        stderr: "pipe",
-      },
-    );
-    const [out, error, code] = await Promise.all([
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-      child.exited,
-    ]);
-    return { out, error, code };
-  };
-  const status = await run("--session", "--json");
-  expect(status.code).toBe(0);
-  expect(JSON.parse(status.out)).toMatchObject({ session_id: "receiver", status: "pending" });
-  const ack = await run("--session", "--ack", "guidance", "--revision", "A");
-  expect(ack.code).toBe(0);
-  expect(JSON.parse(ack.out).targets[0]).toMatchObject({
-    component: "guidance",
-    status: "attested",
-  });
-  const invalid = await run("--session", "--ack", "guidance");
-  expect(invalid.code).toBe(1);
-  expect(invalid.error).toContain("--ack and --revision");
-});
+// The command runs as a child that inherits this runner's ancestry, so under an agent host it finds that host's process
+// above it and refuses the faked Codex identity. CI has no host above the runner and covers it.
+test.skipIf(hostProcess() !== null)(
+  "the public session command reads and acknowledges the exact approved target",
+  async () => {
+    const f = fixture();
+    const env = { ...process.env, ...f.env, T3_HOME: f.dir };
+    for (const key of Object.values(SESSION_ENV)) {
+      delete env[key];
+    }
+    env.CODEX_THREAD_ID = "receiver";
+    const run = async (...args) => {
+      const child = Bun.spawn(
+        [process.execPath, join(import.meta.dir, "../src/cli.ts"), "updates", ...args],
+        {
+          env,
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+      const [out, error, code] = await Promise.all([
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+        child.exited,
+      ]);
+      return { out, error, code };
+    };
+    const status = await run("--session", "--json");
+    expect(status.code).toBe(0);
+    expect(JSON.parse(status.out)).toMatchObject({ session_id: "receiver", status: "pending" });
+    const ack = await run("--session", "--ack", "guidance", "--revision", "A");
+    expect(ack.code).toBe(0);
+    expect(JSON.parse(ack.out).targets[0]).toMatchObject({
+      component: "guidance",
+      status: "attested",
+    });
+    const invalid = await run("--session", "--ack", "guidance");
+    expect(invalid.code).toBe(1);
+    expect(invalid.error).toContain("--ack and --revision");
+  },
+);
 
 test("invalid approval is visible to status, quiet in hooks and leaves no evidence", () => {
   const f = fixture();
