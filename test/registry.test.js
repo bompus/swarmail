@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openRegistry } from "../src/registry.ts";
@@ -92,7 +92,11 @@ test("readers skip unreadable or foreign state and leftover temporary files", ()
 });
 
 test("a changed edit checkout refreshes registration and survives a failed retry", () => {
-  withRegistry((registry) => {
+  withRegistry((registry, dir) => {
+    const a = join(dir, "a");
+    const b = join(dir, "b");
+    mkdirSync(a);
+    mkdirSync(b);
     let up = true;
     const calls = [];
     const register = (project, name) => {
@@ -107,30 +111,50 @@ test("a changed edit checkout refreshes registration and survives a failed retry
         worktree,
         register,
       });
-    settle("/w/a");
-    settle("/w/a");
+    settle(a);
+    settle(a);
     expect(calls).toHaveLength(1);
     up = false;
-    expect(settle("/w/b").after.worktrees["/r"]).toBe("/w/a");
+    expect(settle(b).after.worktrees["/r"]).toBe(a);
     expect(registry.resume("edit", 0)).toEqual({
       project: "/r",
       tag: "[claude:edit cwd:/launch]",
-      worktree: "/w/b",
+      worktree: b,
     });
     expect(settle(undefined).after.pending).toEqual({
       project: "/r",
       tag: "[claude:edit cwd:/launch]",
-      worktree: "/w/b",
+      worktree: b,
     });
     up = true;
     const pending = registry.resume("edit", 0);
-    expect(settle(pending.worktree).after.worktrees["/r"]).toBe("/w/b");
+    expect(settle(pending.worktree).after.worktrees["/r"]).toBe(b);
     expect(registry.read("edit").pending).toBeUndefined();
     expect(calls).toEqual([
       ["/r", null],
       ["/r", "BlueLake"],
       ["/r", "BlueLake"],
     ]);
+  });
+});
+
+test("a prompt drops a pending registration whose edit checkout was deleted", () => {
+  withRegistry((registry, dir) => {
+    const gone = join(dir, "gone");
+    mkdirSync(gone);
+    const settle = (worktree) =>
+      registry.settle("s1", {
+        since: 0,
+        project: "/r",
+        tag: "[t1]",
+        worktree,
+        register: () => null,
+      });
+    expect(settle(gone).after.pending).toEqual({ project: "/r", tag: "[t1]", worktree: gone });
+    expect(registry.resume("s1", 0)).toEqual({ project: "/r", tag: "[t1]", worktree: gone });
+    rmSync(gone, { recursive: true });
+    expect(registry.resume("s1", 0)).toBeUndefined();
+    expect(registry.read("s1").pending).toBeUndefined();
   });
 });
 
