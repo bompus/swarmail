@@ -5,6 +5,7 @@ import { renameOver } from "./files.ts";
 import { stateHome, t3Home } from "./paths.ts";
 import {
   closeSync,
+  existsSync,
   mkdirSync,
   openSync,
   readdirSync,
@@ -412,10 +413,14 @@ export function openRegistry<S extends RegisterState = RegisterState>(
         if (endedSince(state, since)) {
           return;
         }
-        pending = state.pending;
-        if (state.ended) {
+        // A retry for an edit checkout that has since been deleted can never succeed: the server refuses a
+        // worktree that is gone, and the hook would warn on every prompt. A later edit registers again.
+        const stale = state.pending?.worktree !== undefined && !existsSync(state.pending.worktree);
+        pending = stale ? undefined : state.pending;
+        if (stale || state.ended) {
           const { ended, ...rest } = state;
-          writeState(file, rest as S);
+          const { pending: dropped, ...withoutPending } = rest;
+          writeState(file, (stale ? withoutPending : rest) as S);
         }
       });
       return pending;
