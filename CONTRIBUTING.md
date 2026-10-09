@@ -102,6 +102,13 @@ a listing not yet submitted, or pending until it is accepted.
 - OpenAI plugin directory (not yet submitted): the skill-only package in
   `packages/openai-plugin/`, uploaded as a ZIP at
   <https://platform.openai.com/plugins> under a verified developer identity.
+  The portal rejected the upload of this package with "We are not accepting
+  more skills-only submissions at this time", although OpenAI's submission
+  guide still describes skills-only plugins, so the package waits until the
+  portal takes it. The upload also asked for a terms of service URL, which the
+  package lacks, and for listing text that names no other AI assistant or
+  platform, which `plugin.json` does not yet meet. Swarmail cannot take the
+  remote-server route, because it is local only.
   It does not follow this repository: when the skill, icon or listing text in
   `plugin.json` changes, raise its `version` and upload a new ZIP. Releases need
   no change otherwise. Its privacy policy link points at `PRIVACY.md`.
