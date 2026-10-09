@@ -5,8 +5,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 ## Unreleased
 
 - A Claude Code plugin in `packages/claude-plugin/` connects Claude Code to a
-  running local server. Install it with
-  `claude plugin marketplace add bompus/swarmail`.
+  running local server. Add this repository as a marketplace with
+  `claude plugin marketplace add bompus/swarmail`, then install the plugin with
+  `claude plugin install swarmail@swarmail`.
 - A Cursor plugin in `packages/cursor-plugin/` connects Cursor to a running
   local server, for people who install from the Cursor Marketplace.
 - Export `pause(ms, signal)` from `wake-loop.ts`: a wait that ends as soon as its
