@@ -86,8 +86,14 @@ a listing not yet submitted, or pending until it is accepted.
   `claude plugin marketplace add bompus/swarmail`. The plugin has no version,
   so Claude Code treats each new commit as an update and releases need no
   change. Its `relay.mjs` is a copy of `packages/mcp-relay/index.mjs`;
-  `bun run check` fails until a change to one is copied to the other. It is
-  not listed in Anthropic's plugin directory.
+  `bun run check` fails until a change to one is copied to the other.
+- Anthropic's plugin directory (pending): the same plugin, submitted in the
+  developer portal at <https://claude.ai/directory/manage> with plugin path
+  `packages/claude-plugin`, following `main`. The directory scans new commits
+  on `main`; a version that passes goes live when it is published from the
+  plugin's page in the portal, or by itself once auto-publish is on.
+  The listing's icon is `packages/claude-plugin/.claude-plugin/icon.png`; the
+  directory took it at submission and ignores later changes to it.
 - Cursor Marketplace (pending): the plugin in `packages/cursor-plugin/`,
   listed by `.cursor-plugin/marketplace.json`, submitted at
   <https://cursor.com/marketplace/publish> while signed in to Cursor. The
