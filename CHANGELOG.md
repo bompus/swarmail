@@ -21,6 +21,12 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   `codex plugin add swarmail@swarmail`.
 - A Cursor plugin in `packages/cursor-plugin/` connects Cursor to a running
   local server, for people who install from the Cursor Marketplace.
+- A lifecycle reconcile that changes nothing no longer rechecks every waiting
+  long poll. Each recheck reconciled again and reread T3's database, so a
+  client calling `/lifecycle/reconcile` every 2 seconds with five waiters made
+  the server read about 26 MB per call; it now reads about 2.6 MB. A change
+  found by any reconcile, including a wait status check, still wakes held
+  long polls at once, and so does a T3 database that becomes readable again.
 - Export `pause(ms, signal)` from `wake-loop.ts`: a wait that ends as soon as its
   signal aborts. The delivery loop's retry backoff now uses it.
 - Sort package fields and dependency maps with Oxfmt while preserving script order.
