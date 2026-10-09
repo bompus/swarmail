@@ -2,6 +2,12 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- On Windows, a host session whose process has exited no longer reads as alive
+  while another process still holds a handle to it, such as the parent that
+  started it.
+
 ## 0.5.0 - 2026-10-09
 
 - A Claude Code plugin in `packages/claude-plugin/` connects Claude Code to a

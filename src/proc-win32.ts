@@ -6,6 +6,7 @@ import { dlopen, FFIType } from "bun:ffi";
 const SNAPPROCESS = 0x2;
 const QUERY_LIMITED_INFORMATION = 0x1000;
 const INVALID_HANDLE = 0xffffffffffffffffn;
+const STILL_ACTIVE = 259;
 // sizeof(PROCESSENTRY32W) on 64-bit Windows, and the offsets of the fields read from it.
 const ENTRY_SIZE = 568;
 const PID_AT = 8;
@@ -22,6 +23,7 @@ const symbols = {
     args: [FFIType.u64, FFIType.ptr, FFIType.ptr, FFIType.ptr, FFIType.ptr],
     returns: FFIType.i32,
   },
+  GetExitCodeProcess: { args: [FFIType.u64, FFIType.ptr], returns: FFIType.i32 },
   CloseHandle: { args: [FFIType.u64], returns: FFIType.i32 },
   GetShortPathNameW: { args: [FFIType.ptr, FFIType.ptr, FFIType.u32], returns: FFIType.u32 },
   QueryFullProcessImageNameW: {
@@ -70,7 +72,10 @@ function processTable(): Map<number, Entry> {
   return table;
 }
 
-/** A process's creation time in 100 ns units since 1601, or undefined when it is gone or not readable. */
+/**
+ * A process's creation time in 100 ns units since 1601, or undefined when it has exited or is not readable. An
+ * exited process stays openable while any handle to it is open, such as its parent's, so its exit code decides.
+ */
 function startTime(pid: number): string | undefined {
   const k = lib();
   const handle = k.OpenProcess(QUERY_LIMITED_INFORMATION, 0, pid);
@@ -78,7 +83,11 @@ function startTime(pid: number): string | undefined {
     return undefined;
   }
   const times = new BigUint64Array(4);
+  const code = new Uint32Array(1);
   try {
+    if (!k.GetExitCodeProcess(handle, code) || code[0] !== STILL_ACTIVE) {
+      return undefined;
+    }
     const ok = k.GetProcessTimes(
       handle,
       times.subarray(0, 1),
