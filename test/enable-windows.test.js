@@ -28,7 +28,8 @@ test("stops the server its record names, and nothing once that process is gone",
     expect(server.exitCode).toBeNull();
     writeFileSync(record, JSON.stringify(processIdentity(server.pid)));
     expect(await stopServer(record)).toBe(true);
-    // stopServer waits for the exit, so the process has already ended.
+    // stopServer returns once the process is gone; Bun reports the exit on a later turn of the event loop.
+    await server.exited;
     expect(server.exitCode !== null || server.signalCode !== null).toBe(true);
     expect(await stopServer(record)).toBe(false);
   } finally {
