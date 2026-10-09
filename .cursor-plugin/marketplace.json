@@ -1,0 +1,16 @@
+{
+  "name": "swarmail",
+  "owner": {
+    "name": "Aaron Queen"
+  },
+  "metadata": {
+    "description": "Local mail between coding-agent sessions on one machine"
+  },
+  "plugins": [
+    {
+      "name": "swarmail",
+      "source": "packages/cursor-plugin",
+      "description": "Connects Cursor to a Swarmail server running on this machine."
+    }
+  ]
+}
