@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
-import { deliveryLoop } from "../src/wake-loop.ts";
+import { deliveryLoop, pause } from "../src/wake-loop.ts";
 import { openWakeState, wakeStatePath } from "../src/wake-state.ts";
 import { BridgeError } from "../src/wake-target.ts";
 import { testScratch } from "./fixtures/test-scratch.js";
@@ -144,4 +144,15 @@ test("shutdown during delivery retains the durable offer for restart", async () 
   await deliveryLoop(state, a, { signal: stop.signal, label: "test" });
   expect(saved().acknowledged).toBe(0);
   expect(JSON.parse(saved().pending).eventId).toBe(9);
+});
+
+test("a pause ends when its signal aborts", async () => {
+  const stop = new AbortController();
+  const started = performance.now();
+  const waiting = pause(60_000, stop.signal);
+  setTimeout(() => stop.abort(), 10);
+  await waiting;
+  expect(performance.now() - started).toBeLessThan(1000);
+  await pause(60_000, stop.signal); // Already aborted: returns without waiting.
+  expect(performance.now() - started).toBeLessThan(1000);
 });

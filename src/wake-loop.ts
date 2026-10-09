@@ -22,6 +22,22 @@ type Journal = Pick<WakeState, "acknowledged" | "pending" | "savePending" | "acc
   markAttempted(): void;
 };
 
+/** Wait `ms`, ending early when `signal` aborts. Never rejects. */
+export function pause(ms: number, signal: AbortSignal): Promise<void> {
+  if (signal.aborted) {
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
+
 /**
  * Deliver until `signal` aborts. A retryable `BridgeError` backs off from 1 s to 30 s and keeps
  * the journaled command for the next attempt; any other error rejects with it still journaled.
@@ -70,15 +86,9 @@ export async function deliveryLoop(
         throw error;
       }
       console.error(`${label}: ${error.message}; retry in ${backoff / 1000}s`);
-      await new Promise<void>((resolve) => {
-        const done = () => {
-          clearTimeout(timer);
-          signal.removeEventListener("abort", done);
-          resolve();
-        };
-        const timer = setTimeout(done, backoff);
-        signal.addEventListener("abort", done, { once: true });
-      });
+      await pause(backoff, signal);
+      // The next retry reads it; the rule misses the loop's path back from this catch.
+      // oxlint-disable-next-line no-useless-assignment
       backoff = Math.min(backoff * 2, 30_000);
     }
   }

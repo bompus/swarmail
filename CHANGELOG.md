@@ -4,6 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Export `pause(ms, signal)` from `wake-loop.ts`: a wait that ends as soon as its
+  signal aborts. The delivery loop's retry backoff now uses it.
 - Sort package fields and dependency maps with Oxfmt while preserving script order.
 
 - Check authored documentation and configuration files with Oxfmt; preserve
