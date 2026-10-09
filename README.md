@@ -432,7 +432,8 @@ between rounds of the same server.
 
 Oxfmt checks authored Markdown, HTML, JSON, JSONC, YAML, TOML and CSS as well
 as JavaScript and TypeScript. The generated dependency lockfile stays
-excluded. Package key sorting is disabled to preserve the existing key order.
+excluded. Package fields and dependency maps are sorted; script order is
+preserved.
 
 [Archived validator research](https://github.com/bompus/swarmail/blob/d55186b117c66bc522f4d2b4b041cd949eb0dc73/docs/research/validators-2026-10-06.md)
 records the generated/runtime comparison, TypeBox compatibility findings and the
