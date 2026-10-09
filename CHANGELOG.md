@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.5.1 - 2026-10-09
 
 - A session whose usual name is already held by another session in a project
   now registers there under a different name instead of failing. The register
