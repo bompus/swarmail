@@ -12,6 +12,11 @@
 
 // $.http.fetch gives up after 30 s.
 const WAIT_SECONDS = 25;
+// A session with nobody at the prompt (`claude -p` and SDK hosts alike) polls for a shorter time. A
+// `claude -p` run that inherited an SDK host's CLAUDE_CODE_ENTRYPOINT cannot be told from the host's own
+// session, and its process stays open until the wait in flight ends; the poll still returns the moment mail
+// arrives, so only the renewal interval shortens.
+const UNATTENDED_WAIT_SECONDS = 3;
 // How often an unregistered session checks its registration, and the pause after an error or a replaced wait.
 const IDLE_MS = 5000;
 const ERROR_MS = 3000;
@@ -27,6 +32,7 @@ let acked = 0;
 let waitedFor = "";
 // Bumped by session.start, so a timer from an older chain does nothing.
 let generation = 0;
+let waitSeconds = WAIT_SECONDS;
 
 function schedule($, ms) {
   const mine = generation;
@@ -96,7 +102,7 @@ async function wait($) {
   }
   const base = (await $.env.get("SWARMAIL_WAKE_URL")) || "http://127.0.0.1:18765";
   const res = await $.http.fetch(
-    `${base}/wait?session=${encodeURIComponent(sid)}&timeout=${WAIT_SECONDS}&after=${acked}`,
+    `${base}/wait?session=${encodeURIComponent(sid)}&timeout=${waitSeconds}&after=${acked}`,
   );
   if ((await $.session.id()) !== sid) {
     // /clear ran during the wait: the mail is for the old session.
@@ -152,6 +158,7 @@ export function register(on) {
     busy = false;
     held = null;
     acked = 0;
+    waitSeconds = e.isInteractive === false ? UNATTENDED_WAIT_SECONDS : WAIT_SECONDS;
     generation++;
     await $.env.set("SWARMAIL_WAKE_MOD", "1");
     schedule($, 0);
