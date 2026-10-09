@@ -456,8 +456,15 @@ function hostProvider(host: { name?: string } | null): string | undefined {
   return name === "cursor-agent" ? "cursor" : name === "antigravity" ? "agy" : name;
 }
 
-/** Names owned by this session; a shared host process alone never identifies one of its sessions. */
-export function selfNames(env: NodeJS.ProcessEnv = process.env, host = hostProcess()): Set<string> {
+/**
+ * Names owned by this session, as registered in `project` when given; a shared host process alone
+ * never identifies one of its sessions.
+ */
+export function selfNames(
+  env: NodeJS.ProcessEnv = process.env,
+  host = hostProcess(),
+  project?: string,
+): Set<string> {
   if (env.SWARMAIL_AGENT) {
     return new Set([env.SWARMAIL_AGENT]);
   }
@@ -500,10 +507,7 @@ export function selfNames(env: NodeJS.ProcessEnv = process.env, host = hostProce
           (!explicit || (tag.host === explicit[0] && tag.sessionId === env[explicit[1]])),
       )
     ) {
-      names.add(state.name);
-      for (const other of Object.values(state.names ?? {})) {
-        names.add(other);
-      }
+      names.add((project && nameIn(state, project)) || state.name);
     }
   }
   return names;

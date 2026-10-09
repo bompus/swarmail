@@ -201,8 +201,14 @@ function main(input: HookInput): string {
     if (settled?.after.pending?.project === project) {
       return failureNotice(project, tag, register.refusal);
     }
-    if (settled?.before.pending?.project === project) {
-      return `Swarmail: registered as ${nameIn(settled.after, project)} in ${project}.`;
+    const name = settled && nameIn(settled.after, project);
+    // A different name than the usual one is news to the agent, whether this registration retried or was the first.
+    if (
+      name &&
+      (settled.before.pending?.project === project ||
+        (name !== settled.after.name && name !== nameIn(settled.before, project)))
+    ) {
+      return `Swarmail: registered as ${name} in ${project}.`;
     }
     return "";
   };

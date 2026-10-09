@@ -323,7 +323,7 @@ export function main(args: string[]): void {
       row.hostAlive ||
       (row.lastActive !== null && now - Date.parse(row.lastActive) < RECENT_MS),
   );
-  const self = selfNames();
+  const self = selfNames(process.env, undefined, project);
   if (json) {
     const marked = rows.map((row) => ({ ...row, self: row.name !== null && self.has(row.name) }));
     console.log(JSON.stringify(marked, null, 2));

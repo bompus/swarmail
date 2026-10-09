@@ -134,6 +134,74 @@ test("a name another session holds in a project is replaced there only", () => {
   ]);
 });
 
+test("the notice names a different project name on a first registration, not on later ones", async () => {
+  // The hook runs as it does for a Claude edit; the stand-in server holds the usual name in the project.
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      const msg = await req.json();
+      const { name, arguments: args } = msg.params;
+      const reply = (result) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
+      const text = (value) => ({ content: [{ type: "text", text: JSON.stringify(value) }] });
+      if (name === "list_agents") {
+        return reply(text([]));
+      }
+      if (args.name === "TanOwl") {
+        const error = {
+          error: { message: "Registration cannot replace a bound lifecycle identity." },
+        };
+        return reply({ isError: true, ...text(error) });
+      }
+      return reply(text({ name: args.name ?? "BlueHarbor" }));
+    },
+  });
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-alt-")));
+  try {
+    const repo = join(dir, "repo");
+    Bun.spawnSync(["git", "init", "-q", repo]);
+    const state = join(dir, "state/swarmail-register");
+    mkdirSync(state, { recursive: true });
+    writeFileSync(
+      join(state, "alt-1.json"),
+      JSON.stringify({
+        name: "TanOwl",
+        projects: ["/elsewhere"],
+        tags: { "/elsewhere": "[claude:alt-1]" },
+      }),
+    );
+    const env = {
+      ...process.env,
+      SWARMAIL_URL: `http://127.0.0.1:${server.port}/mcp/`,
+      XDG_STATE_HOME: join(dir, "state"),
+      HOME: dir,
+    };
+    const run = async (input) => {
+      const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
+        stdin: new Blob([JSON.stringify(input)]),
+        env,
+      });
+      await proc.exited;
+      const out = (await new Response(proc.stdout).text()).trim();
+      return out && JSON.parse(out).hookSpecificOutput;
+    };
+    const edit = {
+      session_id: "alt-1",
+      cwd: repo,
+      transcript_path: join(dir, ".claude/projects/-repo/alt-1.jsonl"),
+      hook_event_name: "PreToolUse",
+      tool_input: { file_path: join(repo, "a.txt") },
+    };
+    expect((await run(edit)).additionalContext).toBe(
+      `Swarmail: registered as BlueHarbor in ${repo}.`,
+    );
+    expect(await run(edit)).toBe("");
+  } finally {
+    server.stop(true);
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 30000);
+
 test("a server that does not answer keeps the name and records nothing new", () => {
   const down = () => null;
   const state = { name: "TanOwl", projects: [] };
