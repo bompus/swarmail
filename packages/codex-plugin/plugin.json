@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "swarmail",
+  "description": "Connects Codex to a Swarmail server running on this machine: mail, a session roster and advisory file reservations shared with other coding-agent sessions. Install and start the server first. If you ran Swarmail's own setup, Codex is already connected; do not install this plugin as well.",
+  "author": {
+    "name": "Aaron Queen"
+  },
+  "homepage": "https://github.com/bompus/swarmail",
+  "repository": "https://github.com/bompus/swarmail",
+  "license": "MIT",
+  "keywords": ["mcp", "agents", "coordination", "mail", "file-reservations"]
+}

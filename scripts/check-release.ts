@@ -30,9 +30,11 @@ if (
 // The Claude Code plugin ships its own copy of the relay, since a plugin can only run files inside
 // its folder.
 const relaySource = readFileSync(new URL("packages/mcp-relay/index.mjs", root), "utf8");
-if (readFileSync(new URL("packages/claude-plugin/relay.mjs", root), "utf8") !== relaySource) {
-  console.error("packages/claude-plugin/relay.mjs must match packages/mcp-relay/index.mjs");
-  process.exit(1);
+for (const plugin of ["claude-plugin", "codex-plugin"]) {
+  if (readFileSync(new URL(`packages/${plugin}/relay.mjs`, root), "utf8") !== relaySource) {
+    console.error(`packages/${plugin}/relay.mjs must match packages/mcp-relay/index.mjs`);
+    process.exit(1);
+  }
 }
 
 console.log(`Release versions match ${core.version}`);

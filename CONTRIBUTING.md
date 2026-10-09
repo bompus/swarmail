@@ -94,6 +94,11 @@ a listing not yet submitted, or pending until it is accepted.
   plugin's page in the portal, or by itself once auto-publish is on.
   The listing's icon is `packages/claude-plugin/.claude-plugin/icon.png`; the
   directory took it at submission and ignores later changes to it.
+- Codex plugin marketplace: this repository, through
+  `.agents/plugins/marketplace.json` and the plugin in
+  `packages/codex-plugin/`. People add it with
+  `codex plugin marketplace add bompus/swarmail`. Its `relay.mjs` is another
+  copy of `packages/mcp-relay/index.mjs`, checked the same way.
 - Cursor Marketplace (pending): the plugin in `packages/cursor-plugin/`,
   listed by `.cursor-plugin/marketplace.json`, submitted at
   <https://cursor.com/marketplace/publish> while signed in to Cursor. The

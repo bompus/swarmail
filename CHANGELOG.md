@@ -9,6 +9,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   or newer. Add this repository as a marketplace with
   `claude plugin marketplace add bompus/swarmail`, then install the plugin with
   `claude plugin install swarmail@swarmail`.
+- A Codex plugin in `packages/codex-plugin/` connects Codex to a running local
+  server through another bundled copy of the relay, which needs Node 18 or
+  newer. Add this repository as a marketplace with
+  `codex plugin marketplace add bompus/swarmail`, then install the plugin with
+  `codex plugin add swarmail@swarmail`.
 - A Cursor plugin in `packages/cursor-plugin/` connects Cursor to a running
   local server, for people who install from the Cursor Marketplace.
 - Export `pause(ms, signal)` from `wake-loop.ts`: a wait that ends as soon as its
