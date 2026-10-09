@@ -47,8 +47,14 @@ export interface RosterRow {
   task_description?: string;
 }
 
-/** Registers in `project`, reusing `name` when set; returns the agent name, or null when the server did not answer. */
-export type Register = (project: string, name: string | null) => string | null;
+/**
+ * Registers in `project`, reusing `name` when set; returns the agent name, or null when it failed.
+ * After a failure `refusal` holds the server's reason when it answered and rejected the call, and is
+ * unset when it did not answer.
+ */
+export type Register = ((project: string, name: string | null) => string | null) & {
+  refusal?: string;
+};
 
 export const registryDir = (env: NodeJS.ProcessEnv = process.env): string =>
   join(stateHome(env), "swarmail-register");
@@ -192,7 +198,8 @@ export function serverRegister(
   url = swarmailUrl(),
   worktree?: string,
 ): Register {
-  return (project, name) => {
+  const register: Register = (project, name) => {
+    register.refusal = undefined;
     try {
       let rows: RosterRow[] = [];
       try {
@@ -221,10 +228,23 @@ export function serverRegister(
           ) as { name?: string }
         ).name ?? null
       );
-    } catch {
+    } catch (error) {
+      register.refusal = refusalReason(error);
       return null;
     }
   };
+  return register;
+}
+
+/** The server's reason when it answered and rejected the call (see `callTool`), else undefined. */
+function refusalReason(error: unknown): string | undefined {
+  const text = error instanceof Error ? error.message : "";
+  try {
+    const { error: refusal } = JSON.parse(text.replace(/^register_agent failed: /, ""));
+    return typeof refusal?.message === "string" ? refusal.message : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export interface Registry<S extends RegisterState = RegisterState> {

@@ -70,9 +70,10 @@ export function targetDir(input: HookInput): string | null {
 }
 
 /** The one line an agent sees when its registration failed. */
-export function failureNotice(project: string, tag: string): string {
+export function failureNotice(project: string, tag: string, refusal?: string): string {
+  const why = refusal ? `the server refused it (${refusal})` : "the server did not answer";
   return (
-    `Swarmail registration for ${project} failed: the server did not answer, so other sessions cannot mail you. ` +
+    `Swarmail registration for ${project} failed: ${why}, so other sessions cannot mail you. ` +
     `It retries on your next prompt and edit; to register now, call macro_start_session with a task that starts with ${tag}.`
   );
 }
@@ -188,16 +189,17 @@ function main(input: HookInput): string {
   }
   const registry = openRegistry();
   const settle = (project: string, tag: string, worktree?: string): string => {
+    const register = serverRegister(session, tag, undefined, worktree);
     const settled = registry.settle(sessionId, {
       since: started,
       project,
       tag,
       worktree,
-      register: serverRegister(session, tag, undefined, worktree),
+      register,
       extra: { host: hostProcess() },
     });
     if (settled?.after.pending?.project === project) {
-      return failureNotice(project, tag);
+      return failureNotice(project, tag, register.refusal);
     }
     if (settled?.before.pending?.project === project) {
       return `Swarmail: registered as ${settled.after.name} in ${project}.`;
