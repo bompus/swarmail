@@ -16,12 +16,14 @@ function fixture() {
   mkdirSync(join(root, "scripts"));
   mkdirSync(join(root, "packages/mcp-relay"), { recursive: true });
   mkdirSync(join(root, "packages/claude-plugin"), { recursive: true });
+  mkdirSync(join(root, "packages/codex-plugin"), { recursive: true });
   for (const file of [
     "scripts/check-release.ts",
     "package.json",
     "packages/mcp-relay/package.json",
     "packages/mcp-relay/index.mjs",
     "packages/claude-plugin/relay.mjs",
+    "packages/codex-plugin/relay.mjs",
     "server.json",
   ]) {
     cpSync(new URL(`../${file}`, import.meta.url), join(root, file));
@@ -53,11 +55,14 @@ test.each([
   expect(result.stderr.toString()).toContain("Release versions must match");
 });
 
-test("release check rejects a Claude Code plugin relay that differs from the published relay", () => {
-  const root = fixture();
-  const path = join(root, "packages/claude-plugin/relay.mjs");
-  writeFileSync(path, readFileSync(path, "utf8") + "// changed\n");
-  const result = check(root);
-  expect(result.exitCode).toBe(1);
-  expect(result.stderr.toString()).toContain("must match packages/mcp-relay/index.mjs");
-});
+test.each(["claude-plugin", "codex-plugin"])(
+  "release check rejects a %s relay that differs from the published relay",
+  (plugin) => {
+    const root = fixture();
+    const path = join(root, `packages/${plugin}/relay.mjs`);
+    writeFileSync(path, readFileSync(path, "utf8") + "// changed\n");
+    const result = check(root);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr.toString()).toContain("must match packages/mcp-relay/index.mjs");
+  },
+);
