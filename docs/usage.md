@@ -90,8 +90,8 @@ acknowledgment timestamps are observations, not proof that a model accepted work
 
 `swarmail ping` observes a pong generated while the recipient wake hook waits.
 Success establishes that response at that time, not a model reply or future
-delivery. A timeout does not prove the session ended. Confirm session state
-with the owning host before retiring an agent.
+delivery. A timeout does not prove the session ended. Before retiring another
+agent, confirm with its owning host that its session has ended.
 
 ## When to send mail
 
