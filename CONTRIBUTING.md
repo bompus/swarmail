@@ -80,6 +80,12 @@ a listing not yet submitted, or pending until it is accepted.
   [#16031](https://github.com/punkpeye/awesome-mcp-servers/pull/16031). It
   shows no version, so releases need no change. To change its description or
   tags, open a pull request there that edits that line.
+- Claude Code plugin marketplace: this repository, through
+  `.claude-plugin/marketplace.json` and the plugin in
+  `packages/claude-plugin/`. People add it with
+  `claude plugin marketplace add bompus/swarmail`. The plugin has no version,
+  so Claude Code treats each new commit as an update and releases need no
+  change. It is not listed in Anthropic's plugin directory.
 - Cursor Marketplace (pending): the plugin in `packages/cursor-plugin/`,
   listed by `.cursor-plugin/marketplace.json`, submitted at
   <https://cursor.com/marketplace/publish> while signed in to Cursor. The
