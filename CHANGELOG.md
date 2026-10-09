@@ -4,6 +4,14 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- A session whose usual name is already held by another session in a project
+  now registers there under a different name instead of failing. The register
+  hook keeps the session's first name everywhere it is free, records the
+  different name for that project only, and uses it for that project's
+  registrations, `who` rows, availability checks, the session-start notice and
+  reservation release. Before, the server refused the name on every prompt and
+  edit and the session stayed unregistered in that project.
+
 - The register hook's failure notice says why a registration failed. When the
   server answers and refuses it, such as when the session's reused name is held
   by another session in that project, the notice quotes the server's reason

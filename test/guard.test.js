@@ -112,6 +112,25 @@ test("finds its own names from the register hook's state for the host process", 
   rmSync(state, { recursive: true });
 });
 
+test("selfNames gives the name the session holds in the project asked about", () => {
+  const state = join(dir, "state", "swarmail-register");
+  mkdirSync(state, { recursive: true });
+  writeFileSync(
+    join(state, "a.json"),
+    JSON.stringify({
+      name: "GreenLake",
+      names: { "/other": "BlueHarbor" },
+      projects: ["/fixture", "/other"],
+      host: { pid: 42, start: "7" },
+    }),
+  );
+  const host = { pid: 42, start: "7" };
+  expect([...selfNames(env, host, "/fixture")]).toEqual(["GreenLake"]);
+  expect([...selfNames(env, host, "/other")]).toEqual(["BlueHarbor"]);
+  expect([...selfNames(env, host)]).toEqual(["GreenLake"]);
+  rmSync(state, { recursive: true });
+});
+
 test("shared host processes never confer another session's reservation identity", () => {
   const state = join(dir, "state", "swarmail-register");
   mkdirSync(state, { recursive: true });

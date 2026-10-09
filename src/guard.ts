@@ -91,7 +91,7 @@ export function guard(
   if (held.length === 0) {
     return 0;
   }
-  const self = new Set([...selfNames(env)].map((n) => n.toLowerCase()));
+  const self = new Set([...selfNames(env, undefined, project)].map((n) => n.toLowerCase()));
   const foreign = held.filter((r) => !self.has(r.agent.toLowerCase()));
   if (foreign.length === 0) {
     return 0;
