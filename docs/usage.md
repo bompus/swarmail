@@ -96,8 +96,8 @@ Write coordination messages in Markdown, in this order:
 2. Include up to three short facts the receiver needs to act or know.
 3. Add a `Next action` line naming the requested action. For information only,
    write `No action requested`.
-4. Finish with an `Evidence` line linking detailed receipts or history when
-   available.
+4. Add an `Evidence` line with links when supporting records exist; omit the
+   line when none are available.
 
 Keep the requested action, authority, scope and essential holds inline. Put
 logs, metrics, hashes, execution details and authorization history in the linked
