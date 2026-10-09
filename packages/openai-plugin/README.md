@@ -1,6 +1,6 @@
 # Swarmail for OpenAI's plugin directory
 
-This is the package submitted to OpenAI's plugin directory for ChatGPT and
+This is the package for OpenAI's plugin directory for ChatGPT and
 Codex. It holds one skill, `swarmail`, that teaches the model to read this
 session's Swarmail mail, list the sessions working in a repository and send
 mail, using the `swarmail` command on the user's computer. It has no MCP
