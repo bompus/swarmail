@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 const root = new URL("../", import.meta.url);
 const read = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
@@ -33,6 +33,17 @@ const relaySource = readFileSync(new URL("packages/mcp-relay/index.mjs", root), 
 for (const plugin of ["claude-plugin", "codex-plugin"]) {
   if (readFileSync(new URL(`packages/${plugin}/relay.mjs`, root), "utf8") !== relaySource) {
     console.error(`packages/${plugin}/relay.mjs must match packages/mcp-relay/index.mjs`);
+    process.exit(1);
+  }
+}
+
+// Every package is published somewhere, and CONTRIBUTING.md records where, so a release or a change to
+// its description reaches every listing.
+const contributing = readFileSync(new URL("CONTRIBUTING.md", root), "utf8");
+const listings = contributing.slice(contributing.indexOf("\n## Listings")).split(/\n## /)[1] ?? "";
+for (const entry of readdirSync(new URL("packages/", root), { withFileTypes: true })) {
+  if (entry.isDirectory() && !listings.includes(`packages/${entry.name}/`)) {
+    console.error(`CONTRIBUTING.md must name packages/${entry.name}/ in its Listings section`);
     process.exit(1);
   }
 }
