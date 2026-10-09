@@ -59,7 +59,8 @@ The maintainer cuts each release from `main`:
 
 Swarmail is listed in these places. When you list it somewhere new, add it
 here, so a release or a change to its description reaches every listing. Mark
-a listing not yet submitted, or pending until it is accepted.
+a listing not yet submitted, or pending until it is accepted. `bun run check`
+fails until every folder in `packages/` is named in this section.
 
 - [npm `swarmail-mcp`](https://www.npmjs.com/package/swarmail-mcp): details
   come from `packages/mcp-relay/package.json` and its README. `npm publish`
