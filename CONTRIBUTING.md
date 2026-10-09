@@ -80,9 +80,8 @@ a listing not yet submitted, or pending until it is accepted.
   [#16031](https://github.com/punkpeye/awesome-mcp-servers/pull/16031). It
   shows no version, so releases need no change. To change its description or
   tags, open a pull request there that edits that line.
-- Cursor Marketplace (not yet submitted): the plugin in
-  `packages/cursor-plugin/`, listed by `.cursor-plugin/marketplace.json`.
-  Submit the repository link at <https://cursor.com/marketplace/publish>. The
+- Cursor Marketplace (pending): the plugin in `packages/cursor-plugin/`,
+  listed by `.cursor-plugin/marketplace.json`, submitted at
+  <https://cursor.com/marketplace/publish> while signed in to Cursor. The
   plugin has no version and points at the local server, so releases need no
-  change. It is not known whether Cursor picks up later edits to the plugin
-  without a new submission.
+  change. Cursor reviews each update to the plugin before publishing it.
