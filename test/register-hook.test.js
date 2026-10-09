@@ -15,7 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { primaryCheckout } from "../src/checkout.ts";
 import { hostProcess } from "../src/proc.ts";
-import { hookSession, targetDir } from "../src/register-hook.ts";
+import { failureNotice, hookSession, targetDir } from "../src/register-hook.ts";
 import {
   ensureRegistered,
   keptTask,
@@ -497,6 +497,52 @@ test("finds the agent host above the hook and records its PID and start time", (
   });
   expect(hostProcess(20, (pid) => procs[pid] ?? null)).toBeNull();
   expect(hostProcess(99, () => null)).toBeNull();
+});
+
+test("a registration the server refuses says so instead of blaming an unanswered server", async () => {
+  // serverRegister blocks on curl, so it runs in its own process, away from the stand-in server.
+  const attempt = async (url) => {
+    const code = `
+      import { serverRegister } from ${JSON.stringify(join(import.meta.dir, "../src/registry.ts"))};
+      const session = { host: "claude", program: "claude-code", model: null, sessionId: "s1", cwd: null };
+      const register = serverRegister(session, "[claude:s1]", ${JSON.stringify(url)});
+      console.log(JSON.stringify({ name: register("/home/u/c", "TanGlen"), refusal: register.refusal ?? null }));`;
+    const proc = Bun.spawn(["bun", "-e", code], { stdout: "pipe" });
+    await proc.exited;
+    return JSON.parse(await new Response(proc.stdout).text());
+  };
+  const refused = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      const msg = await req.json();
+      const reply = (result) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
+      if (msg.params.name === "list_agents") {
+        return reply({ content: [{ type: "text", text: "[]" }] });
+      }
+      const error = {
+        error: {
+          type: "INVALID_ARGUMENT",
+          message: "Registration cannot replace a bound lifecycle identity.",
+        },
+      };
+      return reply({ isError: true, content: [{ type: "text", text: JSON.stringify(error) }] });
+    },
+  });
+  try {
+    const result = await attempt(`http://127.0.0.1:${refused.port}/mcp/`);
+    expect(result).toEqual({
+      name: null,
+      refusal: "Registration cannot replace a bound lifecycle identity.",
+    });
+    expect(failureNotice("/home/u/c", "[claude:s1]", result.refusal)).toContain(
+      "the server refused it (Registration cannot replace a bound lifecycle identity.)",
+    );
+  } finally {
+    refused.stop(true);
+  }
+  expect(await attempt("http://127.0.0.1:1/mcp/")).toEqual({ name: null, refusal: null });
+  expect(failureNotice("/home/u/c", "[claude:s1]")).toContain("the server did not answer");
 });
 
 test("a failed registration tells Claude, then the next prompt retries against the server and reports the name", async () => {

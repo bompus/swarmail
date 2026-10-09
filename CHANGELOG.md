@@ -4,6 +4,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- The register hook's failure notice says why a registration failed. When the
+  server answers and refuses it, such as when the session's reused name is held
+  by another session in that project, the notice quotes the server's reason
+  instead of saying the server did not answer.
+
 - A `claude -p` run whose `CLAUDE_CODE_ENTRYPOINT` is `sdk-cli` registers with
   Swarmail on its first file edit instead of at session start, so a read-only
   one-shot run no longer adds an agent to the roster. A child that inherited
