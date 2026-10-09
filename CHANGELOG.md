@@ -5,7 +5,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 ## Unreleased
 
 - A Claude Code plugin in `packages/claude-plugin/` connects Claude Code to a
-  running local server. Add this repository as a marketplace with
+  running local server through a bundled copy of the relay, which needs Node 18
+  or newer. Add this repository as a marketplace with
   `claude plugin marketplace add bompus/swarmail`, then install the plugin with
   `claude plugin install swarmail@swarmail`.
 - A Cursor plugin in `packages/cursor-plugin/` connects Cursor to a running
