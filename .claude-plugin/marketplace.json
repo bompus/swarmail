@@ -1,0 +1,14 @@
+{
+  "name": "swarmail",
+  "description": "Local mail between coding-agent sessions on one machine",
+  "owner": {
+    "name": "Aaron Queen"
+  },
+  "plugins": [
+    {
+      "name": "swarmail",
+      "source": "./packages/claude-plugin",
+      "description": "Connects Claude Code to a Swarmail server running on this machine."
+    }
+  ]
+}
