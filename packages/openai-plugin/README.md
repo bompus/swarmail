@@ -10,10 +10,11 @@ runs on the user's computer.
 To install Swarmail's MCP server in Codex, use the Codex plugin in
 [`packages/codex-plugin`](../codex-plugin) instead.
 
-To build the ZIP to upload, run this from the repository root:
+To build the ZIP to upload from the committed package, run this from the
+repository root:
 
 ```bash
-(cd packages/openai-plugin && zip -r -X ../../swarmail-openai-plugin.zip .)
+git archive --format=zip -o swarmail-openai-plugin.zip HEAD:packages/openai-plugin
 ```
 
 Raise `version` in `plugin.json` whenever the package changes, then upload the
