@@ -90,10 +90,38 @@ work. For requests, name the action, repository and owner; distinguish
 implementing source, installing an update and adding guidance. Use plain verbs in the existing
 message, without a separate notice or template.
 
-Lead with the action, decision or changed result. Keep the scope and constraints
-needed to act inline; link detailed evidence in the same message. Relayed
-selections need the source, exact selected action and target owner, not just an
-option code.
+Write coordination messages in Markdown, in this order:
+
+1. Open with the action, decision or changed result.
+2. Include up to three short facts the receiver needs to act or know.
+3. Add a `Next action` line naming the requested action. For information only,
+   write `No action requested`.
+4. Finish with an `Evidence` line linking detailed receipts or history when
+   available.
+
+Keep the requested action, authority, scope and essential holds inline. Put
+logs, metrics, hashes, execution details and authorization history in the linked
+records. When a decision depends on those details, ask the receiver to inspect
+the record. Preserve exact identifiers, paths and commands. Relayed selections
+need the source, exact selected action and target owner. A bare option code
+does not establish authorization.
+
+For example, an informational source update can use this body:
+
+```markdown
+The spacing checker source has landed.
+
+- The fix flags joined counts and units in prose.
+- Installation remains held until selected.
+
+Next action: No action requested.
+Evidence: [Landed change](https://github.com/example/project/pull/42).
+```
+
+This recipe uses the existing message text. It does not validate free-text
+messages or add a structured display. Use typed resource notices below for
+resource releases and cancellations.
+
 Use one supported transport per recipient and purpose; do not duplicate an
 uncertain send through another route. Notify only still-dependent resource
 owners, sending release or cancellation before dropping waiting recipients.

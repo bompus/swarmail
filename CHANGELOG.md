@@ -6,6 +6,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 - Check authored documentation and configuration files with Oxfmt; preserve
   the generated dependency lockfile and package key order.
+- Sending guidance gives coordination messages a brief Markdown recipe with
+  receiver-needed facts, an explicit next action and linked execution details.
 
 ## 0.4.0 - 2026-10-07
 
