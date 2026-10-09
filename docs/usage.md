@@ -70,8 +70,13 @@ candidate while continuing the session does not trigger retirement.
    read-only `list_agents` result. Use a limit that covers the complete roster;
    a full result can omit agents and cannot verify absence.
 
-Finish mail and registration operations before retiring. Registering, sending,
-reading mail or reserving files as yourself can reactivate the registration.
+If the roster remains full at the maximum limit of 1000, record absence
+verification as incomplete. Keep the `retired:true` result as evidence of the
+retirement call; it does not establish subsequent roster absence.
+
+Finish mail, registration and file-reservation operations before retiring.
+Registering, sending, reading mail or reserving files as yourself can reactivate
+the registration.
 Retirement retains existing messages and rejects new mail to that registration;
 it does not archive the host conversation or delete its checkout.
 
