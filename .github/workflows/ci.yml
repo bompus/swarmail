@@ -8,6 +8,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -21,6 +22,7 @@ jobs:
 
   windows:
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -30,4 +32,7 @@ jobs:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       - run: bun run check
-      - run: bun test
+      # Windows runners take about 1.7 times as long as Linux, which puts
+      # several tests near Bun's 5-second default. Tests that set their own
+      # timeout keep it.
+      - run: bun test --timeout 20000
