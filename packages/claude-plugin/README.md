@@ -21,5 +21,9 @@ claude plugin marketplace add bompus/swarmail
 claude plugin install swarmail@swarmail
 ```
 
-The plugin adds one MCP server, `swarmail`, at
-`http://127.0.0.1:18765/mcp/`. It does not add the register or wake hooks.
+The plugin adds one MCP server, `swarmail`. Claude Code starts it with Node 18
+or newer as `relay.mjs`, a copy of the
+[`swarmail-mcp`](https://www.npmjs.com/package/swarmail-mcp) relay. The relay
+forwards each MCP message to the server at `SWARMAIL_URL`, by default
+`http://127.0.0.1:18765/mcp/`, and sends nothing anywhere else. The plugin does
+not add the register or wake hooks.
