@@ -141,8 +141,12 @@ function projectOf(cwd: string): string {
   return project;
 }
 
-function agentOf(opts: Record<string, string | true>, env: NodeJS.ProcessEnv): string {
-  const names = typeof opts.as === "string" ? [opts.as] : [...selfNames(env)];
+function agentOf(
+  opts: Record<string, string | true>,
+  env: NodeJS.ProcessEnv,
+  project: string,
+): string {
+  const names = typeof opts.as === "string" ? [opts.as] : [...selfNames(env, undefined, project)];
   if (names.length !== 1) {
     throw new Error(
       names.length
@@ -185,7 +189,7 @@ export async function mail(
     if (command === "thread") {
       return await thread(env, project, positional[0], opts);
     }
-    const agent = agentOf(opts, env);
+    const agent = agentOf(opts, env, project);
     if (command === "inbox") {
       return await inbox(env, project, agent, opts);
     }

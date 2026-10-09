@@ -7,8 +7,66 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - Require agents to record whole-session closeouts and retire their own project
   registrations, with read-only verification and task/pause boundaries.
 
-- Sort package fields and dependency maps with Oxfmt while preserving script order.
+## 0.5.1 - 2026-10-09
 
+- A session whose usual name is already held by another session in a project
+  now registers there under a different name instead of failing. The register
+  hook keeps the session's first name everywhere it is free, records the
+  different name for that project only, and uses it for that project's
+  registrations, `who` rows, availability checks, the session-start notice and
+  reservation release. Before, the server refused the name on every prompt and
+  edit and the session stayed unregistered in that project.
+
+- The register hook's failure notice says why a registration failed. When the
+  server answers and refuses it, such as when the session's reused name is held
+  by another session in that project, the notice quotes the server's reason
+  instead of saying the server did not answer.
+
+- A `claude -p` run whose `CLAUDE_CODE_ENTRYPOINT` is `sdk-cli` registers with
+  Swarmail on its first file edit instead of at session start, so a read-only
+  one-shot run no longer adds an agent to the roster. A child that inherited
+  `sdk-ts` from an SDK-hosted session, and interactive sessions, still register
+  at start.
+
+- On Windows, a host session whose process has exited no longer reads as alive
+  while another process still holds a handle to it, such as the parent that
+  started it.
+
+- The Claude Code wake mod polls for mail for 3 seconds instead of 25 when no
+  person is at the prompt (`claude -p` and SDK hosts). A `claude -p` run started
+  from an SDK-hosted session inherits that session's entrypoint, so the mod
+  could not tell it apart and held the process open until its wait ended, about
+  25 seconds after the answer. The poll still returns as soon as mail arrives.
+
+## 0.5.0 - 2026-10-09
+
+- A Claude Code plugin in `packages/claude-plugin/` connects Claude Code to a
+  running local server through a bundled copy of the relay, which needs Node 18
+  or newer. Add this repository as a marketplace with
+  `claude plugin marketplace add bompus/swarmail`, then install the plugin with
+  `claude plugin install swarmail@swarmail`.
+- `packages/openai-plugin/` holds a skill-only package for OpenAI's plugin
+  directory. Its `swarmail` skill reads and sends mail with the `swarmail`
+  command on the user's computer.
+- `PRIVACY.md` states what Swarmail stores, who can read it and how long it is
+  kept.
+- A Codex plugin in `packages/codex-plugin/` connects Codex to a running local
+  server through another bundled copy of the relay, which needs Node 18 or
+  newer. Add this repository as a marketplace with
+  `codex plugin marketplace add bompus/swarmail`, then install the plugin with
+  `codex plugin add swarmail@swarmail`.
+- A Cursor plugin in `packages/cursor-plugin/` connects Cursor to a running
+  local server, for people who install from the Cursor Marketplace.
+- A lifecycle reconcile that changes nothing no longer rechecks every waiting
+  long poll. Each recheck reconciled again and reread T3's database, so a
+  client calling `/lifecycle/reconcile` every 2 seconds with five waiters made
+  the server read about 26 MB per call; it now reads about 2.6 MB, measured on
+  a local copy of the server against copies of live databases. A change
+  found by any reconcile, including a wait status check, still wakes held
+  long polls at once, and so does a T3 database that becomes readable again.
+- Export `pause(ms, signal)` from `wake-loop.ts`: a wait that ends as soon as its
+  signal aborts. The delivery loop's retry backoff now uses it.
+- Sort package fields and dependency maps with Oxfmt while preserving script order.
 - Check authored documentation and configuration files with Oxfmt; preserve
   the generated dependency lockfile.
 - Sending guidance gives coordination messages a brief Markdown recipe with

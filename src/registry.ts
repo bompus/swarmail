@@ -22,7 +22,10 @@ import { SESSION_RE } from "./wake.ts";
 
 /** Per-session state under ~/.local/state/swarmail-register/<session id>.json. */
 export interface RegisterState {
+  /** The name the session first registered under; the name in every project that has no entry in `names`. */
   name: string | null;
+  /** Names that differ from `name`, by project: the server refused `name` there because another session holds it. */
+  names?: Record<string, string>;
   projects: string[];
   tags?: Record<string, string>;
   worktrees?: Record<string, string>;
@@ -41,14 +44,28 @@ export interface Session {
   cwd: string | null;
 }
 
+/** The name the session registered under in `project`. */
+export function nameIn(
+  state: Pick<RegisterState, "name" | "names">,
+  project: string,
+): string | null {
+  return state.names?.[project] ?? state.name;
+}
+
 /** A `list_agents` roster row, as far as registration reads it. */
 export interface RosterRow {
   name?: string;
   task_description?: string;
 }
 
-/** Registers in `project`, reusing `name` when set; returns the agent name, or null when the server did not answer. */
-export type Register = (project: string, name: string | null) => string | null;
+/**
+ * Registers in `project`, reusing `name` when set; returns the agent name, or null when it failed.
+ * After a failure `refusal` holds the server's reason when it answered and rejected the call, and is
+ * unset when it did not answer.
+ */
+export type Register = ((project: string, name: string | null) => string | null) & {
+  refusal?: string;
+};
 
 export const registryDir = (env: NodeJS.ProcessEnv = process.env): string =>
   join(stateHome(env), "swarmail-register");
@@ -116,14 +133,24 @@ export function ensureRegistered<S extends RegisterState>(
   ) {
     return state;
   }
-  const name = register(project, state.name);
+  const wanted = nameIn(state, project);
+  let name = register(project, wanted);
+  // The server answered and refused the name, because another session holds it in this project:
+  // take the name the server assigns here and keep the session's own name everywhere else.
+  if (!name && wanted && register.refusal) {
+    name = register(project, null);
+  }
   if (!name) {
     return state;
   }
   const projects = state.projects.includes(project) ? state.projects : [...state.projects, project];
+  const headline = state.name ?? name;
+  const { [project]: _, ...otherNames } = state.names ?? {};
+  const names = name === headline ? otherNames : { ...otherNames, [project]: name };
   return {
     ...state,
-    name,
+    name: headline,
+    names: Object.keys(names).length > 0 ? names : undefined,
     projects,
     tags: { ...state.tags, [project]: tag },
     ...(worktree !== undefined && { worktrees: { ...state.worktrees, [project]: worktree } }),
@@ -192,7 +219,8 @@ export function serverRegister(
   url = swarmailUrl(),
   worktree?: string,
 ): Register {
-  return (project, name) => {
+  const register: Register = (project, name) => {
+    register.refusal = undefined;
     try {
       let rows: RosterRow[] = [];
       try {
@@ -221,10 +249,23 @@ export function serverRegister(
           ) as { name?: string }
         ).name ?? null
       );
-    } catch {
+    } catch (error) {
+      register.refusal = refusalReason(error);
       return null;
     }
   };
+  return register;
+}
+
+/** The server's reason when it answered and rejected the call (see `callTool`), else undefined. */
+function refusalReason(error: unknown): string | undefined {
+  const text = error instanceof Error ? error.message : "";
+  try {
+    const { error: refusal } = JSON.parse(text.replace(/^register_agent failed: /, ""));
+    return typeof refusal?.message === "string" ? refusal.message : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export interface Registry<S extends RegisterState = RegisterState> {
@@ -397,7 +438,7 @@ export function openRegistry<S extends RegisterState = RegisterState>(
       }
       for (const project of state.projects) {
         try {
-          release(project, state.name);
+          release(project, nameIn(state, project) ?? state.name);
         } catch {
           // Server down: the reservations expire on their own.
         }
@@ -415,8 +456,15 @@ function hostProvider(host: { name?: string } | null): string | undefined {
   return name === "cursor-agent" ? "cursor" : name === "antigravity" ? "agy" : name;
 }
 
-/** Names owned by this session; a shared host process alone never identifies one of its sessions. */
-export function selfNames(env: NodeJS.ProcessEnv = process.env, host = hostProcess()): Set<string> {
+/**
+ * Names owned by this session, as registered in `project` when given; a shared host process alone
+ * never identifies one of its sessions.
+ */
+export function selfNames(
+  env: NodeJS.ProcessEnv = process.env,
+  host = hostProcess(),
+  project?: string,
+): Set<string> {
   if (env.SWARMAIL_AGENT) {
     return new Set([env.SWARMAIL_AGENT]);
   }
@@ -459,7 +507,7 @@ export function selfNames(env: NodeJS.ProcessEnv = process.env, host = hostProce
           (!explicit || (tag.host === explicit[0] && tag.sessionId === env[explicit[1]])),
       )
     ) {
-      names.add(state.name);
+      names.add((project && nameIn(state, project)) || state.name);
     }
   }
   return names;

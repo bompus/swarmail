@@ -116,6 +116,45 @@ test("ranks running sessions first and links untagged rows through the hook's st
   }
 });
 
+test("links a roster row through the name the session holds in that project", () => {
+  const dir = mkdtempSync(join(tmpdir(), "who-names-"));
+  try {
+    const stateDir = join(dir, "state");
+    mkdirSync(stateDir);
+    writeFileSync(
+      join(stateDir, "c583.json"),
+      JSON.stringify({
+        name: "TanOwl",
+        names: { "/b": "BlueHarbor" },
+        projects: ["/a", "/b"],
+        host: { name: "claude", pid: 7, start: "1" },
+      }),
+    );
+    const roster = (name) => [
+      { name, task_description: "registered by hook", last_active_ts: "2026-09-26T05:47:00Z" },
+    ];
+    const rowsIn = (project, name) =>
+      whoRows(
+        {
+          project,
+          roster: roster(name),
+          stateDir,
+          threads: new Map(),
+          room: null,
+          checkout: () => project,
+        },
+        () => null,
+        () => true,
+      );
+    expect(rowsIn("/a", "TanOwl")[0].sessionId).toBe("c583");
+    expect(rowsIn("/b", "BlueHarbor")[0].sessionId).toBe("c583");
+    // The headline name is not this session's name in a project that holds a different one.
+    expect(rowsIn("/b", "TanOwl")[0].sessionId).toBeNull();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("an ended session ranks below a live one even while its host process lingers", () => {
   const dir = mkdtempSync(join(tmpdir(), "who-"));
   try {

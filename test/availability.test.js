@@ -197,6 +197,26 @@ test("standalone process/end evidence stays unknown and is matched to exact iden
   expect(f.send({ to: ["TealDune"] }).delivery.recipients[0].source).toBe("registration");
 });
 
+test("registry evidence matches the name the session holds in that project", () => {
+  const f = fixture();
+  f.register("BlueHarbor", "[codex:native-standalone]");
+  mkdirSync(f.registry);
+  const path = join(f.registry, "native-standalone.json");
+  const data = {
+    name: "TealDune",
+    names: { "/repo/one": "BlueHarbor" },
+    projects: ["/repo/one"],
+    tags: { "/repo/one": "[codex:native-standalone]" },
+    host: processIdentity(process.pid),
+    ended: "2026-10-06T00:00:00Z",
+  };
+  writeFileSync(path, JSON.stringify(data));
+  expect(f.send({ to: ["BlueHarbor"] }).delivery.recipients[0]).toMatchObject({
+    source: "registry",
+    reason: "lifecycle_unqualified",
+  });
+});
+
 test("direct Store delivery applies the same fresh boundary and receipts survive restart", () => {
   const f = fixture();
   const store = new MailStore(f.db, f.lifecycle, f.registry);

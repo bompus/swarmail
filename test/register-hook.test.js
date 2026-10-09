@@ -15,10 +15,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { primaryCheckout } from "../src/checkout.ts";
 import { hostProcess } from "../src/proc.ts";
-import { hookSession, targetDir } from "../src/register-hook.ts";
+import { failureNotice, hookSession, targetDir } from "../src/register-hook.ts";
 import {
   ensureRegistered,
   keptTask,
+  nameIn,
   openRegistry,
   rowForSession,
   withLock,
@@ -102,6 +103,138 @@ test("registers once per repository and tag, keeping one name across repositorie
   });
   const failed = { name: null, projects: [] };
   expect(ensureRegistered(failed, "/home/u/c", "[t1]", () => null)).toBe(failed);
+});
+
+test("a name another session holds in a project is replaced there only", () => {
+  const taken = (project, name) => {
+    if (name === "TanOwl" && project === "/home/u/b") {
+      taken.refusal = "Registration cannot replace a bound lifecycle identity.";
+      return null;
+    }
+    taken.refusal = undefined;
+    return name ?? "BlueHarbor";
+  };
+  const first = { name: "TanOwl", projects: ["/home/u/a"], tags: { "/home/u/a": "[t1]" } };
+  const state = ensureRegistered(first, "/home/u/b", "[t1]", taken);
+  expect(state.name).toBe("TanOwl");
+  expect(state.names).toEqual({ "/home/u/b": "BlueHarbor" });
+  expect(nameIn(state, "/home/u/a")).toBe("TanOwl");
+  expect(nameIn(state, "/home/u/b")).toBe("BlueHarbor");
+  // Later registrations in each project ask for that project's name.
+  const calls = [];
+  const record = (project, name) => {
+    calls.push([project, name]);
+    return name;
+  };
+  ensureRegistered({ ...state, tags: {} }, "/home/u/b", "[t2]", record);
+  ensureRegistered({ ...state, tags: {} }, "/home/u/a", "[t2]", record);
+  expect(calls).toEqual([
+    ["/home/u/b", "BlueHarbor"],
+    ["/home/u/a", "TanOwl"],
+  ]);
+});
+
+test("the notice names a different project name on a first registration, not on later ones", async () => {
+  // The hook runs as it does for a Claude edit; the stand-in server holds the usual name in the project.
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      const msg = await req.json();
+      const { name, arguments: args } = msg.params;
+      const reply = (result) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
+      const text = (value) => ({ content: [{ type: "text", text: JSON.stringify(value) }] });
+      if (name === "list_agents") {
+        return reply(text([]));
+      }
+      if (args.name === "TanOwl") {
+        const error = {
+          error: { message: "Registration cannot replace a bound lifecycle identity." },
+        };
+        return reply({ isError: true, ...text(error) });
+      }
+      return reply(text({ name: args.name ?? "BlueHarbor" }));
+    },
+  });
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-alt-")));
+  try {
+    const repo = join(dir, "repo");
+    Bun.spawnSync(["git", "init", "-q", repo]);
+    const state = join(dir, "state/swarmail-register");
+    mkdirSync(state, { recursive: true });
+    writeFileSync(
+      join(state, "alt-1.json"),
+      JSON.stringify({
+        name: "TanOwl",
+        projects: ["/elsewhere"],
+        tags: { "/elsewhere": "[claude:alt-1]" },
+      }),
+    );
+    const env = {
+      ...process.env,
+      SWARMAIL_URL: `http://127.0.0.1:${server.port}/mcp/`,
+      XDG_STATE_HOME: join(dir, "state"),
+      HOME: dir,
+    };
+    const run = async (input) => {
+      const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
+        stdin: new Blob([JSON.stringify(input)]),
+        env,
+      });
+      await proc.exited;
+      const out = (await new Response(proc.stdout).text()).trim();
+      return out && JSON.parse(out).hookSpecificOutput;
+    };
+    const edit = {
+      session_id: "alt-1",
+      cwd: repo,
+      transcript_path: join(dir, ".claude/projects/-repo/alt-1.jsonl"),
+      hook_event_name: "PreToolUse",
+      tool_input: { file_path: join(repo, "a.txt") },
+    };
+    expect((await run(edit)).additionalContext).toBe(
+      `Swarmail: registered as BlueHarbor in ${repo}.`,
+    );
+    expect(await run(edit)).toBe("");
+  } finally {
+    server.stop(true);
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("a server that does not answer keeps the name and records nothing new", () => {
+  const down = () => null;
+  const state = { name: "TanOwl", projects: [] };
+  expect(ensureRegistered(state, "/home/u/b", "[t1]", down)).toBe(state);
+});
+
+test("ending a session releases each project's reservations under that project's name", () => {
+  const dir = mkdtempSync(join(tmpdir(), "end-names-"));
+  try {
+    const registry = openRegistry(dir);
+    registry.settle("s1", {
+      since: 0,
+      project: "/home/u/a",
+      tag: "[t1]",
+      register: (_project, name) => name ?? "TanOwl",
+    });
+    registry.settle("s1", {
+      since: 0,
+      project: "/home/u/b",
+      tag: "[t1]",
+      register: Object.assign((_project, name) => (name ? null : "BlueHarbor"), {
+        refusal: "held",
+      }),
+    });
+    const released = [];
+    registry.end("s1", (project, name) => released.push([project, name]), new Date(1));
+    expect(released).toEqual([
+      ["/home/u/a", "TanOwl"],
+      ["/home/u/b", "BlueHarbor"],
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("re-registers under the same name when the tag changed or state predates tags", () => {
@@ -499,6 +632,98 @@ test("finds the agent host above the hook and records its PID and start time", (
   expect(hostProcess(99, () => null)).toBeNull();
 });
 
+test("a registration the server refuses says so instead of blaming an unanswered server", async () => {
+  // serverRegister blocks on curl, so it runs in its own process, away from the stand-in server.
+  const attempt = async (url) => {
+    const code = `
+      import { serverRegister } from ${JSON.stringify(join(import.meta.dir, "../src/registry.ts"))};
+      const session = { host: "claude", program: "claude-code", model: null, sessionId: "s1", cwd: null };
+      const register = serverRegister(session, "[claude:s1]", ${JSON.stringify(url)});
+      console.log(JSON.stringify({ name: register("/home/u/c", "TanGlen"), refusal: register.refusal ?? null }));`;
+    const proc = Bun.spawn(["bun", "-e", code], { stdout: "pipe" });
+    await proc.exited;
+    return JSON.parse(await new Response(proc.stdout).text());
+  };
+  const refused = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      const msg = await req.json();
+      const reply = (result) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
+      if (msg.params.name === "list_agents") {
+        return reply({ content: [{ type: "text", text: "[]" }] });
+      }
+      const error = {
+        error: {
+          type: "INVALID_ARGUMENT",
+          message: "Registration cannot replace a bound lifecycle identity.",
+        },
+      };
+      return reply({ isError: true, content: [{ type: "text", text: JSON.stringify(error) }] });
+    },
+  });
+  try {
+    const result = await attempt(`http://127.0.0.1:${refused.port}/mcp/`);
+    expect(result).toEqual({
+      name: null,
+      refusal: "Registration cannot replace a bound lifecycle identity.",
+    });
+    expect(failureNotice("/home/u/c", "[claude:s1]", result.refusal)).toContain(
+      "the server refused it (Registration cannot replace a bound lifecycle identity.)",
+    );
+  } finally {
+    refused.stop(true);
+  }
+  expect(await attempt("http://127.0.0.1:1/mcp/")).toEqual({ name: null, refusal: null });
+  expect(failureNotice("/home/u/c", "[claude:s1]")).toContain("the server did not answer");
+});
+
+test("the hook registers under a fresh name when the server refuses the session's own", async () => {
+  // serverRegister blocks on curl, so it runs in its own process, away from the stand-in server.
+  const calls = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      const msg = await req.json();
+      const { name, arguments: args } = msg.params;
+      calls.push([name, args.name]);
+      const reply = (result) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
+      const text = (value) => ({ content: [{ type: "text", text: JSON.stringify(value) }] });
+      if (name === "list_agents") {
+        return reply(text([]));
+      }
+      if (args.name === "TanOwl") {
+        const error = {
+          error: { message: "Registration cannot replace a bound lifecycle identity." },
+        };
+        return reply({ isError: true, ...text(error) });
+      }
+      return reply(text({ name: args.name ?? "BlueHarbor" }));
+    },
+  });
+  try {
+    const code = `
+      import { ensureRegistered, serverRegister } from ${JSON.stringify(join(import.meta.dir, "../src/registry.ts"))};
+      const session = { host: "claude", program: "claude-code", model: null, sessionId: "s1", cwd: null };
+      const register = serverRegister(session, "[claude:s1]", ${JSON.stringify(`http://127.0.0.1:${server.port}/mcp/`)});
+      const state = { name: "TanOwl", projects: ["/home/u/a"], tags: { "/home/u/a": "[claude:s1]" } };
+      console.log(JSON.stringify(ensureRegistered(state, "/home/u/b", "[claude:s1]", register)));`;
+    const proc = Bun.spawn(["bun", "-e", code], { stdout: "pipe" });
+    await proc.exited;
+    const state = JSON.parse(await new Response(proc.stdout).text());
+    expect(state.name).toBe("TanOwl");
+    expect(state.names).toEqual({ "/home/u/b": "BlueHarbor" });
+    expect(state.projects).toEqual(["/home/u/a", "/home/u/b"]);
+    expect(calls.filter(([tool]) => tool === "register_agent")).toEqual([
+      ["register_agent", "TanOwl"],
+      ["register_agent", undefined],
+    ]);
+  } finally {
+    server.stop(true);
+  }
+});
+
 test("a failed registration tells Claude, then the next prompt retries against the server and reports the name", async () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-retry-")));
   const port = 20000 + Math.floor(Math.random() * 20000);
@@ -559,6 +784,59 @@ test("a failed registration tells Claude, then the next prompt retries against t
   } finally {
     server?.server.stop(true);
     server?.db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 30000);
+
+test("a claude -p run registers on its first edit, not at start", async () => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-headless-")));
+  const port = 20000 + Math.floor(Math.random() * 20000);
+  const server = createServer(join(dir, "mail.sqlite3"), port);
+  try {
+    const repo = join(dir, "repo");
+    Bun.spawnSync(["git", "init", "-q", repo]);
+    const { CLAUDECODE, ...parent } = process.env;
+    const env = {
+      ...parent,
+      CLAUDE_CODE_ENTRYPOINT: "sdk-cli",
+      SWARMAIL_URL: `http://127.0.0.1:${port}/mcp/`,
+      XDG_STATE_HOME: join(dir, "state"),
+      HOME: dir,
+    };
+    const run = async (input) => {
+      const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
+        stdin: new Blob([JSON.stringify(input)]),
+        env,
+      });
+      await proc.exited;
+      const out = (await new Response(proc.stdout).text()).trim();
+      return out && JSON.parse(out);
+    };
+    const roster = () => server.db.query("SELECT name FROM agents").all();
+    const claude = {
+      session_id: "headless-1",
+      cwd: repo,
+      transcript_path: join(dir, ".claude/projects/-repo/headless-1.jsonl"),
+    };
+    expect(await run({ ...claude, hook_event_name: "SessionStart", source: "startup" })).toBe("");
+    expect(await run({ ...claude, hook_event_name: "SessionEnd" })).toBe("");
+    expect(roster()).toEqual([]);
+
+    // A headless run that edits files still registers, once.
+    const edit = {
+      ...claude,
+      session_id: "headless-2",
+      hook_event_name: "PreToolUse",
+      tool_input: { file_path: join(repo, "a.txt") },
+    };
+    expect(
+      await run({ ...claude, session_id: "headless-2", hook_event_name: "SessionStart" }),
+    ).toBe("");
+    await run(edit);
+    expect(roster()).toHaveLength(1);
+  } finally {
+    server.server.stop(true);
+    server.db.close();
     rmSync(dir, { recursive: true, force: true });
   }
 }, 30000);

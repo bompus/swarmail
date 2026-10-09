@@ -5,6 +5,7 @@
 inheritance: true
 
 reviews:
+  fail_commit_status: true
   estimate_code_review_effort: false
   sequence_diagrams: false
   suggested_reviewers: false
@@ -12,6 +13,7 @@ reviews:
   in_progress_fortune: false
   poem: false
   auto_review:
+    auto_pause_after_reviewed_commits: 0
     ignore_title_keywords: ["WIP", "DO NOT MERGE"]
   path_instructions:
     - path: "**/*"
@@ -52,4 +54,4 @@ knowledge_base:
     filePatterns:
       - "CONTRIBUTING.md"
   learnings:
-    approval_delay: 7
+    approval_delay: 0

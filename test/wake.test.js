@@ -268,7 +268,9 @@ test("the shell-free re-arm starts a wait only for a registered session with no 
   writeFileSync(pidFile, `${process.pid}\n1\n`);
   // The arguments cmd passes for the Windows command, which has no `;` separator there.
   const waits = rearm({}, ["rearm;", "exit", "$LASTEXITCODE"]);
-  for (let i = 0; i < 50 && parseInt(readFileSync(pidFile, "utf8")) !== waits.pid; i++) {
+  // The wait writes its PID file only after it reads its host's command line, which on Windows starts
+  // PowerShell: normally about a second, but a loaded runner has taken longer than 5 s.
+  for (let i = 0; i < 150 && parseInt(readFileSync(pidFile, "utf8")) !== waits.pid; i++) {
     await Bun.sleep(100);
   }
   expect(parseInt(readFileSync(pidFile, "utf8"))).toBe(waits.pid);

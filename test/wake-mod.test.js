@@ -54,7 +54,7 @@ function session({ registered = true, entrypoint = "cli", home = { HOME: "/h" } 
   const pass = async (e) => e;
   return {
     state,
-    start: () => on["session.start"]($, {}, pass),
+    start: (e = {}) => on["session.start"]($, e, pass),
     turnStart: () => on["turn.start"]($, {}, pass),
     turnComplete: (e = {}) => on["turn.complete"]($, e, pass),
     toolCall: (e, result) => on["tool.call"]($, e, async () => result),
@@ -189,6 +189,18 @@ test("drops a held hint once /clear replaces its session", async () => {
   await s.tick();
   expect(s.state.submitted).toEqual([]);
   expect(s.state.fetched.at(-1)).toContain("session=s-2&timeout=25&after=0");
+});
+
+test("a session with nobody at the prompt polls for 3 s so a one-shot child exits promptly", async () => {
+  const s = session();
+  await s.start({ isInteractive: false });
+  await s.tick();
+  expect(s.state.fetched.at(-1)).toContain("session=s-1&timeout=3&after=0");
+
+  const person = session();
+  await person.start({ isInteractive: true });
+  await person.tick();
+  expect(person.state.fetched.at(-1)).toContain("timeout=25&after=0");
 });
 
 test("does nothing in `claude -p`, which exits after one prompt", async () => {

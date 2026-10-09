@@ -32,7 +32,9 @@ checkout, unless a project already exists under that exact path.
   `register_agent`, or start either tool's `task_description` with the
   session tag the hook gave you.
 - Keep one `name` across projects. Use `register_agent` only to rename
-  yourself or to update your task description.
+  yourself or to update your task description. When another session already
+  holds your name in a project, the hook registers you there under a different
+  name and the session-start notice names it.
 - `task_description` starts with a tag such as
   `[claude:b8ec4cab-… cwd:~/src/app-auth] Auth refactor`, which `swarmail who`
   uses to match names to sessions. A `register_agent` call whose description

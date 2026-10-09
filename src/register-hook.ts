@@ -11,7 +11,7 @@ import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { primaryCheckout, worktreeRoot } from "./checkout.ts";
 import { hostProcess, sameHost } from "./proc.ts";
-import { openRegistry, serverRegister, type Session } from "./registry.ts";
+import { nameIn, openRegistry, serverRegister, type Session } from "./registry.ts";
 import { sessionTag, SESSION_ENV } from "./tag.ts";
 import { t3ThreadId } from "./t3-state.ts";
 import { updateHint } from "./updates.ts";
@@ -70,9 +70,10 @@ export function targetDir(input: HookInput): string | null {
 }
 
 /** The one line an agent sees when its registration failed. */
-export function failureNotice(project: string, tag: string): string {
+export function failureNotice(project: string, tag: string, refusal?: string): string {
+  const why = refusal ? `the server refused it (${refusal})` : "the server did not answer";
   return (
-    `Swarmail registration for ${project} failed: the server did not answer, so other sessions cannot mail you. ` +
+    `Swarmail registration for ${project} failed: ${why}, so other sessions cannot mail you. ` +
     `It retries on your next prompt and edit; to register now, call macro_start_session with a task that starts with ${tag}.`
   );
 }
@@ -87,7 +88,7 @@ export function startNotice(tag: string, name?: string | null, project?: string)
   }
   return (
     `Swarmail: you are registered as ${name} in ${project}. Use ${name} as your agent name; do not call ` +
-    `macro_start_session or register_agent to get another one. In another repository, register with name ${name}.`
+    `macro_start_session or register_agent to get another one. In another repository, register with name ${name}; if another session holds it there, the hook registers you under a different name.`
   );
 }
 
@@ -188,19 +189,26 @@ function main(input: HookInput): string {
   }
   const registry = openRegistry();
   const settle = (project: string, tag: string, worktree?: string): string => {
+    const register = serverRegister(session, tag, undefined, worktree);
     const settled = registry.settle(sessionId, {
       since: started,
       project,
       tag,
       worktree,
-      register: serverRegister(session, tag, undefined, worktree),
+      register,
       extra: { host: hostProcess() },
     });
     if (settled?.after.pending?.project === project) {
-      return failureNotice(project, tag);
+      return failureNotice(project, tag, register.refusal);
     }
-    if (settled?.before.pending?.project === project) {
-      return `Swarmail: registered as ${settled.after.name} in ${project}.`;
+    const name = settled && nameIn(settled.after, project);
+    // A different name than the usual one is news to the agent, whether this registration retried or was the first.
+    if (
+      name &&
+      (settled.before.pending?.project === project ||
+        (name !== settled.after.name && name !== nameIn(settled.before, project)))
+    ) {
+      return `Swarmail: registered as ${name} in ${project}.`;
     }
     return "";
   };
@@ -214,11 +222,16 @@ function main(input: HookInput): string {
     const pending = registry.resume(sessionId, started);
     return pending ? settle(pending.project, pending.tag, pending.worktree) : "";
   }
+  const starting = event === "SessionStart";
+  // A `claude -p` run is unattended and often read-only: it registers on its first edit, not at start, so a one-shot
+  // lookup does not add an agent to the roster.
+  if (starting && session.host === "claude" && process.env.CLAUDE_CODE_ENTRYPOINT === "sdk-cli") {
+    return "";
+  }
   const dir = targetDir({ ...input, cwd: session.cwd });
   const project = dir && primaryCheckout(dir);
   const t3 = t3ThreadId(sessionId);
   const tag = sessionTag({ ...session, t3 }, session.cwd);
-  const starting = event === "SessionStart";
   if (!project) {
     return starting ? startNotice(tag) : "";
   }
@@ -241,10 +254,11 @@ function main(input: HookInput): string {
       : settle(project, tag, worktree);
   // Every start names the session, registered just now or before: a compacted or resumed session has lost its name.
   const state = starting ? registry.read(sessionId) : null;
-  if (!state?.name || state.pending?.project === project) {
+  const name = state && nameIn(state, project);
+  if (!name || state.pending?.project === project) {
     return text;
   }
-  return startNotice(tag, state.name, project);
+  return startNotice(tag, name, project);
 }
 
 /**

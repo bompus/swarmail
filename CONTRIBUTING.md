@@ -52,3 +52,69 @@ The maintainer cuts each release from `main`:
    and enter `X.Y.Z`. The saved build spec (build steps
    `["npm install -g bun@1.4.2"]`, CMD `["bun", "scripts/glama.ts"]`) needs a
    change only when the Bun version CI uses or `scripts/glama.ts` changes.
+5. Check every accepted listing in the next section. Update by hand any that
+   still shows an older version or outdated details.
+
+## Listings
+
+Swarmail is listed in these places. When you list it somewhere new, add it
+here, so a release or a change to its description reaches every listing. Mark
+a listing not yet submitted, or pending until it is accepted. `bun run check`
+fails until every folder in `packages/` is named in this section.
+
+- [npm `swarmail-mcp`](https://www.npmjs.com/package/swarmail-mcp): details
+  come from `packages/mcp-relay/package.json` and its README. `npm publish`
+  updates it (step 3).
+- [MCP Registry `io.github.bompus/swarmail`](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.bompus%2Fswarmail/versions/latest):
+  details come from `server.json`. `mcp-publisher publish` updates it
+  (step 3).
+- [Glama](https://glama.ai/mcp/servers/bompus/swarmail): details come from the
+  GitHub repository and `glama.json`. Auto-Release builds each release
+  (step 4). Edit the build spec and details on the admin page.
+- [MCPRush](https://mcprush.com/aaron-queen/swarmail-mcp): an owner-claimed
+  listing of the npm package. It is not known whether it follows new npm
+  releases, so check the version it shows. Edit it while signed in as its
+  owner.
+- [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers)
+  (pending): one line under Communication in that repository's `README.md`,
+  submitted in
+  [#16031](https://github.com/punkpeye/awesome-mcp-servers/pull/16031). It
+  shows no version, so releases need no change. To change its description or
+  tags, open a pull request there that edits that line.
+- Claude Code plugin marketplace: this repository, through
+  `.claude-plugin/marketplace.json` and the plugin in
+  `packages/claude-plugin/`. People add it with
+  `claude plugin marketplace add bompus/swarmail`. The plugin has no version,
+  so Claude Code treats each new commit as an update and releases need no
+  change. Its `relay.mjs` is a copy of `packages/mcp-relay/index.mjs`;
+  `bun run check` fails until a change to one is copied to the other.
+- Anthropic's plugin directory (pending): the same plugin, submitted in the
+  developer portal at <https://claude.ai/directory/manage> with plugin path
+  `packages/claude-plugin`, following `main`. The directory scans new commits
+  on `main`; a version that passes goes live when it is published from the
+  plugin's page in the portal, or by itself once auto-publish is on.
+  The listing's icon is `packages/claude-plugin/.claude-plugin/icon.png`; the
+  directory took it at submission and ignores later changes to it.
+- Codex plugin marketplace: this repository, through
+  `.agents/plugins/marketplace.json` and the plugin in
+  `packages/codex-plugin/`. People add it with
+  `codex plugin marketplace add bompus/swarmail`. Its `relay.mjs` is another
+  copy of `packages/mcp-relay/index.mjs`, checked the same way.
+- OpenAI plugin directory (not yet submitted): the skill-only package in
+  `packages/openai-plugin/`, uploaded as a ZIP at
+  <https://platform.openai.com/plugins> under a verified developer identity.
+  The portal rejected the upload of this package with "We are not accepting
+  more skills-only submissions at this time", although OpenAI's submission
+  guide still describes skills-only plugins, so the package waits until the
+  portal takes it. The upload also asked for a terms of service URL, which the
+  package lacks, and for listing text that names no other AI assistant or
+  platform, which `plugin.json` does not yet meet. Swarmail cannot take the
+  remote-server route, because it is local only.
+  It does not follow this repository: when the skill, icon or listing text in
+  `plugin.json` changes, raise its `version` and upload a new ZIP. Releases need
+  no change otherwise. Its privacy policy link points at `PRIVACY.md`.
+- Cursor Marketplace (pending): the plugin in `packages/cursor-plugin/`,
+  listed by `.cursor-plugin/marketplace.json`, submitted at
+  <https://cursor.com/marketplace/publish> while signed in to Cursor. The
+  plugin has no version and points at the local server, so releases need no
+  change. Cursor reviews each update to the plugin before publishing it.

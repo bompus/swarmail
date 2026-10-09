@@ -1,0 +1,36 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "swarmail",
+  "version": "1.0.0",
+  "description": "Coordinate with other coding-agent sessions on your computer through Swarmail: read this session's mail, see who is working where, and send handoffs or blockers.",
+  "author": {
+    "name": "Aaron Queen",
+    "url": "https://github.com/bompus"
+  },
+  "homepage": "https://github.com/bompus/swarmail",
+  "repository": "https://github.com/bompus/swarmail",
+  "license": "MIT",
+  "keywords": ["agents", "coordination", "mail", "coding"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Swarmail",
+        "shortDescription": "Mail between coding agents",
+        "longDescription": "Swarmail is local mail between coding-agent sessions on one computer. With this plugin, the model reads this session's Swarmail mail, shows which sessions are working in which checkouts, and sends handoffs, blockers and requested results to other sessions.\n\nIt is for developers who run several coding agents at once, such as Codex, Claude Code and Cursor, and want them to coordinate.\n\nLimitations: Swarmail must already be installed and running on your computer (https://github.com/bompus/swarmail#install). The plugin installs nothing. It works where the model can run commands on your computer, such as Codex; elsewhere it explains how to set Swarmail up. Swarmail runs on Linux, including WSL 2, and as a preview on Windows. macOS is not supported.",
+        "developerName": "Aaron Queen",
+        "category": "Developer Tools",
+        "capabilities": ["Read mail", "List sessions", "Send mail"],
+        "websiteURL": "https://github.com/bompus/swarmail",
+        "supportURL": "https://github.com/bompus/swarmail/issues",
+        "privacyPolicyURL": "https://github.com/bompus/swarmail/blob/main/PRIVACY.md",
+        "defaultPrompt": [
+          "Check my Swarmail inbox",
+          "Who else is working in this repository?",
+          "Tell the other session that the build is fixed"
+        ],
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/icon.png"
+      }
+    }
+  }
+}

@@ -593,6 +593,65 @@ test("inactive long polls remain held without acknowledging until reopen or abor
   expect((await reopened).eventId).toBe(first.eventId);
 });
 
+test("a reopen found by any server reconcile wakes held long polls", async () => {
+  const f = fixture();
+  f.send();
+  f.transition(2, "settled");
+  f.lifecycle.reconcile();
+  const app = createServer(f.prefix + "-mail.sqlite", 0, {
+    t3Lifecycle: f.config,
+    wakePollMs: 60_000,
+  });
+  cleanups.push(() => {
+    app.server.stop(true);
+    app.db.close();
+  });
+  let completed = false;
+  const held = fetch(new URL("/wait?session=thread-one&timeout=5&retry=1&after=0", app.server.url))
+    .then((response) => response.text())
+    .then((text) => {
+      completed = true;
+      return text;
+    });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(completed).toBe(false);
+  f.transition(3);
+  // The status check's reconcile applies the reopen, so no later reconcile reports the change.
+  await fetch(new URL("/wait/status?session=native-one", app.server.url));
+  expect(await held).toContain("inbox --session");
+  expect(
+    await (await fetch(new URL("/lifecycle/reconcile", app.server.url), { method: "POST" })).json(),
+  ).toEqual({ status: "ready", changed: 0 });
+});
+
+test("a T3 source that becomes available again wakes held long polls", async () => {
+  const f = fixture();
+  f.send();
+  const app = createServer(f.prefix + "-mail.sqlite", 0, {
+    t3Lifecycle: f.config,
+    wakePollMs: 60_000,
+  });
+  cleanups.push(() => {
+    app.server.stop(true);
+    app.db.close();
+  });
+  f.source.run("ALTER TABLE orchestration_v2_projection_metadata RENAME TO held_metadata");
+  let completed = false;
+  const held = fetch(new URL("/wait?session=thread-one&timeout=5&retry=1&after=0", app.server.url))
+    .then((response) => response.text())
+    .then((text) => {
+      completed = true;
+      return text;
+    });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(completed).toBe(false);
+  f.source.run("ALTER TABLE held_metadata RENAME TO orchestration_v2_projection_metadata");
+  expect(
+    await (await fetch(new URL("/lifecycle/reconcile", app.server.url), { method: "POST" })).json(),
+  ).toEqual({ status: "ready", changed: 0 });
+  expect(await held).toContain("inbox --session");
+});
+
 for (const state of ["settled", "archived", "deleted"]) {
   test(`withdrawal from a ${state} recipient neither reopens it nor resurrects mail on verified resume`, () => {
     const f = fixture();

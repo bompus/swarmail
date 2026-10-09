@@ -21,7 +21,7 @@ import { primaryCheckout } from "./checkout.ts";
 import { location, locationLabel, type Location } from "./location.ts";
 import { callTool } from "./client.ts";
 import { hostAlive } from "./proc.ts";
-import { openRegistry, registryDir, selfNames, type RegisterState } from "./registry.ts";
+import { nameIn, openRegistry, registryDir, selfNames, type RegisterState } from "./registry.ts";
 import { t3StatePath, t3ThreadId, t3Threads, type T3Thread } from "./t3-state.ts";
 import { leadingTag, parseTag, withoutTag } from "./tag.ts";
 import { nativeTitles } from "./native-titles.ts";
@@ -188,6 +188,16 @@ function fillNativeTitles(
   }
 }
 
+/** The session that registered `name` in `project`, by the hook's state. */
+function sessionNamed(
+  states: (RegisterState & { sessionId: string })[],
+  project: string,
+  name: string,
+): string | undefined {
+  return states.find((st) => nameIn(st, project) === name && st.projects.includes(project))
+    ?.sessionId;
+}
+
 /**
  * One row per roster agent plus one per running T3 thread in this repository with no agent,
  * running sessions first, then by last activity.
@@ -216,10 +226,7 @@ export function whoRows(
   const states = openRegistry(stateDir).all();
   const rows = roster.map((agent): WhoRow => {
     const tag = parseTag(agent.task_description);
-    const sessionId =
-      tag?.sessionId ??
-      states.find((st) => st.name === agent.name && st.projects.includes(project))?.sessionId ??
-      null;
+    const sessionId = tag?.sessionId ?? sessionNamed(states, project, agent.name) ?? null;
     const state = states.find((st) => st.sessionId === sessionId);
     const t3 = tag?.t3 ?? (sessionId ? threadOf(sessionId) : null);
     const thread = t3 ? threads.get(t3) : null;
@@ -316,7 +323,7 @@ export function main(args: string[]): void {
       row.hostAlive ||
       (row.lastActive !== null && now - Date.parse(row.lastActive) < RECENT_MS),
   );
-  const self = selfNames();
+  const self = selfNames(process.env, undefined, project);
   if (json) {
     const marked = rows.map((row) => ({ ...row, self: row.name !== null && self.has(row.name) }));
     console.log(JSON.stringify(marked, null, 2));

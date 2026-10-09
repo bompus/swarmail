@@ -16,6 +16,7 @@ import {
   sessionEligible,
   sessionLifecycleBound,
   type LifecycleConfig,
+  type Reconciliation,
 } from "./lifecycle.ts";
 import { createWaiters, SESSION_RE } from "./wake.ts";
 import { openRegistry, registryDir } from "./registry.ts";
@@ -158,9 +159,8 @@ async function waitResponse(
 async function lifecycleResponse(
   req: Request,
   url: URL,
-  lifecycle: Lifecycle | undefined,
+  reconcile: () => Reconciliation,
   eligible: (session: string) => boolean,
-  notify: () => void,
 ): Promise<Response> {
   if (url.pathname === "/lifecycle/reconcile") {
     if (req.method !== "POST") {
@@ -169,9 +169,7 @@ async function lifecycleResponse(
     if ((await req.text()).trim()) {
       return new Response("reconciliation takes no arguments", { status: 400 });
     }
-    const state = lifecycle?.reconcile() ?? { status: "ready", changed: 0 };
-    notify();
-    return Response.json(state);
+    return Response.json(reconcile());
   }
   if (url.pathname === "/wait/status") {
     const session = url.searchParams.get("session") ?? "";
@@ -199,6 +197,24 @@ function initializeLifecycle(db: Database, config?: LifecycleConfig): Lifecycle 
   }
 }
 
+/**
+ * A lifecycle change, or a source that is available again, can release held mail, so it rechecks
+ * every waiter. An unchanged reconcile does not: each recheck reconciles again, and a client may
+ * call /lifecycle/reconcile every few seconds.
+ */
+function reconcileAndNotify(lifecycle: Lifecycle | undefined, notify: () => void) {
+  let ready = true;
+  return (): Reconciliation => {
+    const state = lifecycle?.reconcile() ?? { status: "ready", changed: 0 };
+    const recovered = !ready && state.status === "ready";
+    ready = state.status === "ready";
+    if (state.changed || recovered) {
+      notify();
+    }
+    return state;
+  };
+}
+
 export function createServer(
   databasePath: string,
   port: number,
@@ -219,9 +235,10 @@ export function createServer(
   mkdirSync(dirname(databasePath), { recursive: true });
   const db = openDatabase(databasePath);
   const lifecycle = initializeLifecycle(db, t3Lifecycle);
+  const reconcile = reconcileAndNotify(lifecycle, () => waiters.notify());
   const eligible = (session: string) => {
     const bound = sessionLifecycleBound(db, session);
-    return (!bound || lifecycle?.reconcile().status === "ready") && sessionEligible(db, session);
+    return (!bound || reconcile().status === "ready") && sessionEligible(db, session);
   };
   // Sessions end without retiring, so the roster fills with dead names; any tool call as the agent brings it back.
   const sweep = () => {
@@ -284,7 +301,7 @@ export function createServer(
         return versionsResponse(req, url);
       }
       if (path === "/lifecycle/reconcile" || path === "/wait/status") {
-        return lifecycleResponse(req, url, lifecycle, eligible, waiters.notify);
+        return lifecycleResponse(req, url, reconcile, eligible);
       }
       if (path === "/wait" || path === "/wait/peek") {
         server.timeout(req, 0);

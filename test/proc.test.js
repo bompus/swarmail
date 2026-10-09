@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,12 +27,15 @@ test.if(windows)("walks parents to a host and stops at a process that is not one
   expect(hostProcess(10, read)).toEqual({ name: "claude", pid: 20, start: "2" });
 });
 
-test.if(windows)("a gone process is not alive", async () => {
-  const child = spawn(process.execPath, ["-e", "0"]);
-  const id = await new Promise((resolve) =>
-    child.on("spawn", () => resolve(processIdentity(child.pid))),
-  );
-  await new Promise((resolve) => child.on("exit", resolve));
+test.if(windows)("a gone process is not alive while its parent still holds it", async () => {
+  const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"]);
+  await once(child, "spawn");
+  // Past the process-table cache, so the child is in the table read below and still in it after it exits.
+  await Bun.sleep(600);
+  const id = processIdentity(child.pid);
+  expect(hostAlive(id)).toBe(true);
+  child.kill();
+  await once(child, "exit");
   expect(hostAlive(id)).toBe(false);
 });
 
