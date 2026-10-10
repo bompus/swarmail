@@ -16,6 +16,10 @@ export const AGENT_GUIDANCE =
   "Before shared work, check your inbox and roster; an empty roster does not prove a checkout is unused. " +
   "After a mail notice, fetch unread bodies and mark each page read; repeat only after a full page. " +
   "The CLI equivalent is swarmail inbox --session.\n\n" +
+  "When the user ends the entire session, accepts a whole-session All done option, or you conclude that the entire session is finished with nothing remaining, record the closeout and retire your own registration in each project you joined. " +
+  "First release your owned resources and send any still-required dependency notices. Record completed work, deferred items or blockers, and the resource-release result in the session's durable record. " +
+  "Call retire_agent and check its retired:true result, then confirm your name is absent from list_agents without a truncating limit. If the roster result is full, record absence verification as incomplete. Finish mail, registration and file-reservation operations before retiring; they can reactivate you. A completed task, an unanswered offer, a wait or a pause does not end the entire session.\n\n" +
+  "Before retiring another agent, confirm with its owning host that its session has ended; roster data or a ping timeout is insufficient.\n\n" +
   SENDING_GUIDANCE +
   "\n\nUse quiet delivery only for normal/low informational mail without an acknowledgement request. " +
   "Keep actionable handoffs, requested results, blockers and urgent mail on wake delivery. " +

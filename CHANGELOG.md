@@ -4,6 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Require agents to record whole-session closeouts and retire their own project
+  registrations, with read-only verification and task/pause boundaries.
+
 - A prompt no longer retries a pending registration whose edit checkout has been deleted. The server refuses a
   worktree that is gone, so the hook warned on every prompt until the session ended. The pending entry is dropped;
   the session's next edit registers it again.
