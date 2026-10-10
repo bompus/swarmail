@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.5.2 - 2026-10-09
 
 - Require agents to record whole-session closeouts and retire their own project
   registrations, with read-only verification and task/pause boundaries.
@@ -10,6 +10,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - A prompt no longer retries a pending registration whose edit checkout has been deleted. The server refuses a
   worktree that is gone, so the hook warned on every prompt until the session ended. The pending entry is dropped;
   the session's next edit registers it again.
+
+- The release check fails for a package that has no row in the listings section of
+  `CONTRIBUTING.md`, so a new package cannot ship without a listing decision.
 
 ## 0.5.1 - 2026-10-09
 
