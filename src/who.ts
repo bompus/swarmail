@@ -198,6 +198,17 @@ function sessionNamed(
     ?.sessionId;
 }
 
+/** Threads in one repository share a cwd, and each checkout lookup spawns git. */
+function memoized(checkout: (dir: string) => string | null): (dir: string) => string | null {
+  const seen = new Map<string, string | null>();
+  return (dir) => {
+    if (!seen.has(dir)) {
+      seen.set(dir, checkout(dir));
+    }
+    return seen.get(dir)!;
+  };
+}
+
 /**
  * One row per roster agent plus one per running T3 thread in this repository with no agent,
  * running sessions first, then by last activity.
@@ -266,11 +277,12 @@ export function whoRows(
     row.sameSessionAs = twins.flatMap((other) => (other.name ? [other.name] : []));
   }
   const claimed = new Set(rows.map((row) => row.t3).filter(Boolean));
+  const checkoutOf = memoized(checkout);
   for (const thread of threads.values()) {
     if (thread.status !== "running" || claimed.has(thread.thread_id) || !thread.cwd) {
       continue;
     }
-    if (checkout(thread.cwd) !== project) {
+    if (checkoutOf(thread.cwd) !== project) {
       continue;
     }
     rows.push({
