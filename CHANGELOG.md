@@ -11,6 +11,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   which is the default. A page of 20 messages took 48 µs instead of 57 µs with 2 KB bodies and 52 µs instead of 82 µs
   with 17 KB bodies.
 
+- The `swarmail-mcp` README lists the memory each launch command costs: about 180 MiB for `npx -y swarmail-mcp`, 82 MiB
+  for `bunx swarmail-mcp` and 46 MiB for `bunx --bun swarmail-mcp`, which runs the same relay under Bun.
+
 ## 0.5.2 - 2026-10-09
 
 - Require agents to record whole-session closeouts and retire their own project
