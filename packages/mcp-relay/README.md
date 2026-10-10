@@ -31,5 +31,7 @@ On one Linux machine, with the relay idle after a first request:
 
 Most of the `npx` figure is the `npm exec` process that stays running beside
 the relay. `bunx` alone still runs the relay under Node, because the script's
-`#!/usr/bin/env node` line wins; `--bun` runs it under Bun. Both runtimes pass
-the same relay tests. Use `--bun` only where Bun is installed.
+`#!/usr/bin/env node` line wins; `--bun` runs it under Bun. The relay is plain
+JavaScript with no dependencies, so it runs unchanged under Bun, but the
+repository's relay tests run it under Node only. Use `--bun` only where Bun is
+installed.
