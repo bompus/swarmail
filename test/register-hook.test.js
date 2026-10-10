@@ -29,6 +29,14 @@ import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.js";
 import { parseTag, sessionTag } from "../src/tag.ts";
 import { createServer } from "../src/server.ts";
 
+/** A port nothing listens on yet, for a server that starts later in the test. */
+function freePort() {
+  const probe = Bun.serve({ port: 0, fetch: () => new Response() });
+  const { port } = probe;
+  probe.stop(true);
+  return port;
+}
+
 /** A stand-in Swarmail MCP endpoint: `handler(tool, args)` returns the tool result and every call is recorded. */
 function fakeMail(handler) {
   const calls = [];
@@ -726,7 +734,7 @@ test("the hook registers under a fresh name when the server refuses the session'
 
 test("a failed registration tells Claude, then the next prompt retries against the server and reports the name", async () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-retry-")));
-  const port = 20000 + Math.floor(Math.random() * 20000);
+  const port = freePort();
   let server;
   try {
     const repo = join(dir, "repo");
@@ -790,8 +798,8 @@ test("a failed registration tells Claude, then the next prompt retries against t
 
 test("a claude -p run registers on its first edit, not at start", async () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-headless-")));
-  const port = 20000 + Math.floor(Math.random() * 20000);
-  const server = createServer(join(dir, "mail.sqlite3"), port);
+  const server = createServer(join(dir, "mail.sqlite3"), 0);
+  const port = server.server.port;
   try {
     const repo = join(dir, "repo");
     Bun.spawnSync(["git", "init", "-q", repo]);
@@ -843,8 +851,8 @@ test("a claude -p run registers on its first edit, not at start", async () => {
 
 test("a session registers at start, keeps that one name through edits, restarts and hand registration", async () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-start-")));
-  const port = 20000 + Math.floor(Math.random() * 20000);
-  const server = createServer(join(dir, "mail.sqlite3"), port);
+  const server = createServer(join(dir, "mail.sqlite3"), 0);
+  const port = server.server.port;
   try {
     const repo = join(dir, "repo");
     Bun.spawnSync(["git", "init", "-q", repo]);
