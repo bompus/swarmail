@@ -267,7 +267,7 @@ registering a second one. Where another session already holds that name in the p
 `sdk-cli` registers on its first edit instead, so a read-only one-shot run adds no agent. A
 child that inherited `sdk-ts` from an SDK-hosted session still registers at start. The registration starts with a tag
 holding the host's session id and working directory, which is how `swarmail
-who` matches names to sessions. A failure is retried on the next prompt or edit. State
+who` matches names to sessions. A failure is retried on the next prompt or edit; a retry for an edit checkout that has since been deleted is dropped. State
 lives in `~/.local/state/swarmail-register/`, under your profile on Windows.
 After upgrading, run `bun scripts/configure-hooks.ts` again to add the
 session-start hook.
@@ -342,7 +342,7 @@ wake an idle session.
 
 Measured on 2026-10-04 at
 [`67e187a`](https://github.com/bompus/swarmail/tree/67e187a6b4beb7319c6ab30466448742297e2a01).
-These results have not been remeasured for 0.4.0, 0.5.0 or 0.5.1.
+These results have not been remeasured for 0.4.0, 0.5.0, 0.5.1 or 0.5.2.
 The measurements used one machine with one small workload (40 agents, 250 seed messages,
 1,560 messages by the end). Each server started on empty storage. Startup is
 hyperfine's mean of 20 runs; every other number is the median of three rounds,
