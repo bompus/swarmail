@@ -2,6 +2,11 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- `swarmail who` asks git about each running T3 thread directory once instead of once per thread. With about 800
+  running threads in 149 directories it took 0.3 s instead of 1.6 s.
+
 ## 0.5.2 - 2026-10-09
 
 - Require agents to record whole-session closeouts and retire their own project

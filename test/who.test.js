@@ -400,3 +400,37 @@ test("capped and retired registrations remain unknown when absent from the visib
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("who asks git about a thread directory once however many threads share it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "who-"));
+  try {
+    const stateDir = join(dir, "state");
+    mkdirSync(stateDir);
+    const thread = (id, cwd) => [
+      id,
+      { thread_id: id, title: id, cwd, status: "running", last_seen_at: null },
+    ];
+    const threads = new Map([
+      thread("a", "/r/w"),
+      thread("b", "/r/w"),
+      thread("c", "/other"),
+      thread("d", "/other"),
+    ]);
+    const asked = [];
+    const rows = whoRows({
+      project: "/r",
+      roster: [],
+      stateDir,
+      threads,
+      room: null,
+      checkout: (cwd) => {
+        asked.push(cwd);
+        return cwd === "/r/w" ? "/r" : "/elsewhere";
+      },
+    });
+    expect(rows.map((row) => row.t3).sort()).toEqual(["a", "b"]);
+    expect(asked).toEqual(["/r/w", "/other"]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
