@@ -7,6 +7,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - `swarmail who` asks git about each running T3 thread directory once instead of once per thread. With about 800
   running threads in 149 directories it took 0.3 s instead of 1.6 s.
 
+- `fetch_inbox` and `fetch_session_inbox` no longer read each message body from storage when `include_bodies` is off,
+  which is the default. A page of 20 messages took 48 µs instead of 57 µs with 2 KB bodies and 52 µs instead of 82 µs
+  with 17 KB bodies.
+
 ## 0.5.2 - 2026-10-09
 
 - Require agents to record whole-session closeouts and retire their own project
