@@ -448,8 +448,14 @@ bun run check   # format, lint and type check
 ```
 
 `bun scripts/build.ts --if-stale` rebuilds the binary only when a source file,
-the dependency manifest or lockfile, or the Bun version changed. Restart the unit
+the dependency manifest or lockfile, the bytecode-order profile, or the Bun
+version changed. Restart the unit
 to load a new build.
+
+The build passes `scripts/swarmail.order` to Bun's `--bytecode-order` (Bun 1.4.3 or later; earlier versions ignore it).
+After a change to what the server runs at start-up or in its common calls, record the profile again with
+`bun scripts/train-bytecode-order.ts` and commit the new file. A profile from older sources still applies, because Bun
+matches functions by a hash of their syntax.
 
 ## Sponsoring
 

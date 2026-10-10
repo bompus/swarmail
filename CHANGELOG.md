@@ -2,6 +2,13 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- The build lays the compiled bytecode out from a recorded profile (`scripts/swarmail.order`, Bun's
+  `--bytecode-order`), so what a run needs sits together in the executable. On Bun 1.4.3 hook commands used 6% to 18%
+  less peak memory and the idle server 5% less in benchmarks, with no clear change in start-up time or request latency.
+  `bun scripts/train-bytecode-order.ts` records the profile again; Bun before 1.4.3 ignores it.
+
 ## 0.5.2 - 2026-10-09
 
 - Require agents to record whole-session closeouts and retire their own project
