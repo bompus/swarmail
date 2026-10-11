@@ -167,7 +167,7 @@ checkout and need reservations.
   `codex` session started its own daemon in the test. It falls back to an
   embedded server, without the task tools, with `--no-daemon` or when attaching
   fails. `codex exec` runs an embedded server and does not have them.
-- **Other apps.** T3 Code spawns its own `codex app-server` child process over
+- **Other apps (documented).** T3 Code spawns its own `codex app-server` child process over
   stdio, one per Codex provider instance and shared by that instance's threads.
   It is not the daemon that terminal `codex` sessions use, so the task tools do
   not apply to Codex threads inside T3 Code. Whether a terminal `codex queue`
