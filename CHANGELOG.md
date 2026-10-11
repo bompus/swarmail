@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- The help text, server instructions, `docs/updates.md` and README say "confirmation" where they said "attestation":
+  the caller's own confirmation that it loaded an update target's revision, not proof of provider cache replacement.
+  The `attested` status value in `swarmail updates --session --json` is unchanged.
+
 - The build lays the compiled bytecode out from a recorded profile (`scripts/swarmail.order`, Bun's
   `--bytecode-order`), so what a run needs sits together in the executable. On Bun 1.4.3 hook commands used 6% to 18%
   less peak memory and the idle server 5% less in benchmarks, with no clear change in start-up time or request latency.
