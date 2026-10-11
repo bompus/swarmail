@@ -182,9 +182,11 @@ checkout and need reservations.
   daemon are marked experimental. Both commands appear in `codex --help` and the
   release notes, but not on the CLI reference page.
 - **What Swarmail does here.** The opt-in `codex-queue` bridge talks to the same
-  app-server API: `thread/queue/add`, or `turn/start` when steering. It adds an
-  idempotent command ID, a read-back check that Codex admitted the message, and
-  one outstanding notice per session. It is the right path for Swarmail mail
+  app-server API: `thread/queue/add`, or `turn/start` when steering. It adds a
+  stable command ID that correlates each notice with Codex's admission of it
+  (Codex can run a resent ID twice, so the bridge never resends an uncertain
+  one), a read-back check that Codex admitted the message, and one outstanding
+  notice per session. It is the right path for Swarmail mail
   that should wake a Codex session. Messages between Codex sessions do not need
   Swarmail.
 
