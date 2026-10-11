@@ -112,13 +112,13 @@ const COMMANDS: Record<string, Command> = {
   },
   updates: {
     usage: [
-      "swarmail updates --session [--json] [--reset-context] [--ack COMPONENT --revision REVISION]  approved targets and loaded attestations",
+      "swarmail updates --session [--json] [--reset-context] [--ack COMPONENT --revision REVISION]  approved targets and loaded-revision confirmations",
       "Optional lifecycle: without SWARMAIL_UPDATE_TARGETS, checks stay inactive and create no update state.",
       "Targets are host-approved installed/deployed revisions, not new upstream commits. Follow refresh instructions only within your authorization.",
       "Use --session --json to inspect targets and pending/held states; reading status does not mark anything loaded.",
       "After actually rereading guidance or completing a supported tool reload, use --ack COMPONENT --revision REVISION for the exact target.",
-      "This records your attestation, not proof of provider cache replacement. Held sessions suppress hints, preserve evidence and reject acknowledgments.",
-      "Use --reset-context after a context reset to invalidate context-dependent attestations; it leaves other attestations intact. Held contexts must be released first.",
+      "This records your own confirmation that you loaded the revision, not proof of provider cache replacement. Held sessions suppress hints, preserve evidence and reject acknowledgments.",
+      "Use --reset-context after a context reset to invalidate context-dependent confirmations; it leaves other confirmations intact. Held contexts must be released first.",
     ],
     run: async (args) => {
       const { updatesCommand } = await import("./updates.ts");

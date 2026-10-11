@@ -200,7 +200,7 @@ keeps one name across repositories.
 | `swarmail hook rearm`                                             | The Claude Code re-arm on Windows, which has no POSIX shell to run the Linux one                                 |
 | `swarmail guard`                                                  | The git guard                                                                                                    |
 | `swarmail version`                                                | The source hash the binary was built from                                                                        |
-| `swarmail updates --session`                                      | Approved update targets and loaded attestations                                                                  |
+| `swarmail updates --session`                                      | Approved update targets and loaded-revision confirmations                                                        |
 
 `swarmail --help` lists every subcommand and flag. A `--help` or `-h`
 anywhere prints usage and runs nothing.
@@ -219,8 +219,8 @@ anywhere prints usage and runs nothing.
 | `SWARMAIL_GUARD`            | `block`                                | `warn` only reports, `off` skips                                                                                                                                       |
 | `SWARMAIL_AGENT`            | from hook state                        | Name used by `inbox`, `send`, `ping`, `guard` and `who`                                                                                                                |
 | `SWARMAIL_LIVE_ROOM`        | unset                                  | A JSON heartbeat file (`heartbeatAt`, plus `agentName`, `hostSessionId` or `t3Thread`); while its heartbeat is under 5 minutes old, `who` flags the session it names   |
-| `SWARMAIL_UPDATE_TARGETS`   | unset                                  | Absolute approved-target manifest; [quiet session checks and loaded attestations](docs/updates.md)                                                                     |
-| `SWARMAIL_UPDATE_HOLD`      | unset                                  | `1` holds update hints and attestations for a frozen session context                                                                                                   |
+| `SWARMAIL_UPDATE_TARGETS`   | unset                                  | Absolute approved-target manifest; [quiet session checks and loaded-revision confirmations](docs/updates.md)                                                           |
+| `SWARMAIL_UPDATE_HOLD`      | unset                                  | `1` holds update hints and confirmations for a frozen session context                                                                                                  |
 
 `scripts/enable.sh`, `scripts/enable-windows.ts`, the service unit and
 `configure-mcp.ts` use port 18765. Change `SWARMAIL_PORT` and the two URL

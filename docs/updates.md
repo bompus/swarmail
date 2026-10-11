@@ -42,7 +42,7 @@ An unknown host cannot qualify scoped targets. Provider-scoped state uses both
 host and native session ID, so matching IDs in different providers stay separate.
 
 `swarmail updates --session --json` resolves the current session and returns
-the latest targets, installed CLI build, loaded attestations and pending/held
+the latest targets, installed CLI build, loaded-revision confirmations and pending/held
 states. A source invocation reports a null CLI build. Reading status does not
 claim a hint or mark anything loaded. Missing or invalid configured manifests
 fail the command; hooks stay quiet so they cannot block a tool.
@@ -55,15 +55,17 @@ component revision with:
 swarmail updates --session --ack guidance --revision guidance-content-hash
 ```
 
-This is an **attestation by the caller**, not independent proof that a provider
-replaced its cached catalog or obeys newly read guidance. File equality, an
-HTTP catalog read, hint delivery and mail acknowledgment never produce that
-attestation. A changed or unknown target rejects an old acknowledgment.
-Provider-specific verification remains the host's responsibility.
+This is a **confirmation by the caller** that it loaded the revision, not
+independent proof that a provider replaced its cached catalog or obeys newly
+read guidance. File equality, an HTTP catalog read, hint delivery and mail
+acknowledgment never produce that confirmation. In `--json` output a confirmed
+target has `status: "attested"`. A changed or unknown target rejects an old
+acknowledgment. Provider-specific verification remains the host's
+responsibility.
 
 Claude and Devin registration context, Cursor session start and Cursor/Devin
 active context hooks can carry one short hint. Pending hints cover subsequent
-target revisions until every target is attested. They never request a Stop
+target revisions until every target is confirmed. They never request a Stop
 continuation. Antigravity's user-message injection and unqualified Codex,
 Grok/OpenCode output paths receive no new hint. Their host can inspect status
 at its own supported boundary. None of these paths guarantees MCP hot reload.
@@ -73,7 +75,7 @@ A reset recorded while another hook holds the state lock is consumed at the
 next check. Context metadata also invalidates targets temporarily omitted from
 the manifest. Hosts with another context-reset boundary can explicitly run
 `swarmail updates --session --reset-context`. Repeated resets without intervening
-attestations preserve the pending hint. Attestations for non-context components
+confirmations preserve the pending hint. Confirmations for non-context components
 remain. Mark any component whose loading depends on the conversation context
 with `context: true`.
 
