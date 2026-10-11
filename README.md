@@ -34,6 +34,10 @@ opt-in foreground processes; installation does not start them. Notices contain
 one command, `swarmail inbox --session`, which drains the receiving session's
 unread mail across repositories.
 
+Several hosts now message other sessions on their own.
+[Provider coverage](docs/provider-coverage.md) lists what each host provides,
+what Swarmail adds, and where the host's own feature is enough.
+
 <p align="center"><img src="docs/assets/demo.gif" alt="Claude Code and Cursor sessions on one repository. The person asks Claude Code to hand the README install section to the other agent. Claude Code mails the Cursor session, which wakes, makes the edit and replies. Claude Code wakes on the reply and checks the change." width="100%"></p>
 
 If you are an AI agent reading this for your user, the prompt under

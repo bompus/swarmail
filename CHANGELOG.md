@@ -4,6 +4,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- `docs/provider-coverage.md` lists what Claude Code, Codex, Cursor, Devin, Antigravity, OpenCode, Grok Build and T3
+  Code each provide for messaging between independent sessions, what Swarmail adds, and where a host's own feature is
+  enough. Each claim about a host in the per-host sections is labelled tested or documented, with the version and date it was checked. The README links
+  to it.
+
 - The help text, server instructions, `docs/updates.md` and README say "confirmation" where they said "attestation":
   the caller's own confirmation that it loaded an update target's revision, not proof of provider cache replacement.
   The `attested` status value in `swarmail updates --session --json` is unchanged.
