@@ -19,6 +19,8 @@ import {
 export { PING_SUBJECT } from "./wake-notices.ts";
 
 export const SESSION_RE = /^[\w:-]+$/;
+// T3 child-task thread IDs hold URL-encoded colons (`%3A`), which a session ID never does.
+export const T3_THREAD_RE = /^[\w:%-]+$/;
 export const PONG_SUBJECT = "swarmail pong";
 
 interface WakeOffer {

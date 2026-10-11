@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- `swarmail inbox --session` works in a T3 child-task session. It printed "invalid host or session identity" and left the
+  mail unread, because the check refused the `%` in a child task's thread ID (`thread:delegated-task:command%3A…`).
+  Ordinary T3 threads were not affected, and a plain thread ID is still checked as before.
+
 - `docs/provider-coverage.md` lists what Claude Code, Codex, Cursor, Devin, Antigravity, OpenCode, Grok Build and T3
   Code each provide for messaging between independent sessions, what Swarmail adds, and where a host's own feature is
   enough. Each claim about a host in the per-host sections is labelled tested or documented, with the version and date it was checked. The README links
