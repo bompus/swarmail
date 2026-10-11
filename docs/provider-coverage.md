@@ -9,7 +9,9 @@ recheck a limit before you depend on it.
 terminals, windows or worktrees. A subagent that a session starts for itself
 reports to its parent. It is a different feature and is not covered here.
 
-Every statement carries one of two labels:
+Every claim about a host in the per-host sections carries one of two labels. The summary
+table and the list of gaps condense those sections and carry no labels of their
+own, so check a claim there against its host's section:
 
 - **Tested**: observed in a live run on 2026-10-11, on the version shown.
 - **Documented**: taken from the host's documentation, release notes, source
