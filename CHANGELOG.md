@@ -2,6 +2,13 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- The MCP connection instructions and `docs/usage.md` no longer use the wording of one person's offer-and-reply
+  conventions ("a whole-session All done option", "an unanswered offer", "a bare option code"). They say that the
+  user says everything is done, that a question can be unanswered, and that a bare reply such as "B" or "go" does not
+  establish authorization. The meaning is unchanged.
+
 ## 0.5.3 - 2026-10-11
 
 - `swarmail inbox --session` works in a T3 child-task session. It printed "invalid host or session identity" and left the
