@@ -30,7 +30,26 @@ keeps you as its author. Contributions are licensed under the MIT licence in
 
 ## Releasing
 
-The maintainer cuts each release from `main`:
+The maintainer cuts each release from `main`. Before the version pull request
+in step 1 merges, and so before anything is tagged or published, review the
+public materials against the version being released. This follows the
+house-rules rule "Release batching", which asks for that audit. Land every
+correction first, and note the materials checked and the evidence for their
+claims in the pull request. A release needs no new measurements for this; label
+an older result with the version it was measured on.
+
+- The README, including every sentence that names a version, a count or a
+  tested host, and its feature comparison.
+- `docs/benchmarks.md` and the benchmark numbers and charts in the README,
+  including the list of versions they were not remeasured for.
+- Graphics in `docs/assets/` (banner, benchmark charts, demo recording) and
+  their alt text.
+- `packages/mcp-relay/README.md`, which npm shows, and the descriptions in
+  `package.json`, `packages/mcp-relay/package.json`, `server.json` and
+  `glama.json`.
+- The listing text under "Listings" below.
+- The release announcement, which is the `CHANGELOG.md` section that becomes
+  the GitHub release notes. It must cover every change in the release.
 
 1. Open a pull request that sets `version` in `package.json`,
    `packages/mcp-relay/package.json` and both version fields in `server.json`
