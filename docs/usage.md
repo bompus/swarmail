@@ -193,7 +193,8 @@ this path; it cannot establish the truth or relevance of a caller's identifiers.
 
 Follow the host's transport preference and send an event through one route.
 [Provider coverage](provider-coverage.md) says where a host's own messaging is
-enough (sessions of one host that are running now, subagents) and where
+enough (for example two running Claude Code or Codex sessions, or a session
+and its own subagents) and where
 Swarmail adds something (mail that must wait, be searched or acknowledged,
 sessions on different hosts, shared checkouts). Whether mail starts a turn in
 an idle session depends on the host and its wake route, so don't assume a

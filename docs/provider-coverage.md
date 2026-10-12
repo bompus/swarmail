@@ -40,7 +40,7 @@ host's messaging. Its notice is one line telling the session to read its inbox.
 
 In the versions checked, no host documents any of these. Swarmail fills them.
 
-1. **Mail that waits.** A message to a session that is busy, closed or on
+1. **Mail that waits, in threads you can search.** A message to a session that is busy, closed or on
    another host stays stored, grouped in threads and searchable. Claude Code's
    same-machine messages need the recipient's live inbox socket, though a
    message held for approval waits (five minutes by default). Codex stores
@@ -72,7 +72,7 @@ In the versions checked, no host documents any of these. Swarmail fills them.
    through the OpenCode prompt API or Grok's undocumented extension. Swarmail's
    hooks for Devin and Antigravity act during a turn or when it ends, and
    cannot wake an idle session. Its Cursor hook holds the turn open and wakes
-   the session up to five times between prompts. Opt-in bridges reach OpenCode, Grok and T3 Code
+   the session up to five times between prompts, for up to eight hours after a turn ends. Opt-in bridges reach OpenCode, Grok and T3 Code
    threads.
 
 ## When a host's own feature is enough
@@ -232,8 +232,7 @@ checkout and need reservations.
   five mails with no prompt from a person in between sees the rest at the next
   prompt.
 - **What Swarmail does here.** A wake hook after each turn, and context after
-  tool calls. It wakes an idle Cursor CLI session up to five times between
-  prompts.
+  tool calls. It wakes an idle Cursor CLI session for up to eight hours after a turn ends, and up to five times between prompts.
 
 ## Devin
 
