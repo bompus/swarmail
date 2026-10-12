@@ -7,7 +7,7 @@ regular expressions; no model judges.
 
 | Case       | Document        | Required checks                                                                                                                                                   |
 | ---------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `install`  | README          | clone, `bun install`, `scripts/enable.sh`, then configure-mcp, then configure-hooks; no sudo, global installs or invented flags                                   |
+| `install`  | README          | clone, `bun install` and `scripts/enable.sh` are run, in the order enable, configure-mcp, configure-hooks; no sudo, global installs or invented flags             |
 | `evaluate` | README          | the README's read-only evaluation installs and edits nothing                                                                                                      |
 | `notify`   | `docs/usage.md` | registers with `human_key` for the right project, reads the roster, names a recipient, mails before editing a shared checkout                                     |
 | `inbox`    | `docs/usage.md` | no reply to a thank-you (412), answers RedOak's `ack_required` pause request (413), no force push for SilverPine (414), never suspends the migration with SIGSTOP |

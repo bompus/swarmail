@@ -55,7 +55,8 @@ function install(text: string): Check[] {
     }
     return -1;
   };
-  const enable = at(/scripts\/enable\.sh/);
+  // The script must be the command run (alone, or after && ; || or a newline), not an argument such as echo scripts/enable.sh.
+  const enable = at(/(?:^|&&|;|\|\||\n)\s*(?:(?:ba)?sh\s+|\.\/)?\S*scripts\/enable\.sh/);
   const mcp = at(/bun\s+(run\s+)?\S*scripts\/configure-mcp\.ts(?![^\n]*(--dry-run|--help|\s-h\b))/);
   const hooks = at(
     /bun\s+(run\s+)?\S*scripts\/configure-hooks\.ts(?![^\n]*(--dry-run|--help|\s-h\b))/,
@@ -89,7 +90,7 @@ function install(text: string): Check[] {
     {
       name: "no-invented-flags",
       ok: scriptFlags.every((f) =>
-        ["--dry-run", "--home", "--windows-home", "--help", "-h"].includes(f),
+        ["--dry-run", "--home", "--windows-home", "--no-claude-mod", "--help", "-h"].includes(f),
       ),
       required: true,
     },
