@@ -628,7 +628,7 @@ export class MailStore {
       (a.subject ?? defaults.subject) !== PING_SUBJECT &&
       !ack &&
       ["normal", "low"].includes(importance) &&
-      recipients.every(({ agent }) => !!agent.t3_thread && SESSION_RE.test(agent.t3_thread))
+      recipients.every(({ agent }) => !!agent.t3_thread && T3_THREAD_RE.test(agent.t3_thread))
     ) {
       policy = "quiet";
     }

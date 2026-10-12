@@ -4,6 +4,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Mail to a session in a T3 child-task thread defaults to quiet like mail to any other T3 session, as `docs/usage.md`
+  says. It defaulted to wake, because the check refused the `%` in a child task's thread ID
+  (`thread:delegated-task:command%3A…`). Set `notification_policy` to `wake` for a child task that must be woken. Mail
+  to a recipient with no valid T3 thread ID still defaults to wake.
+
 - `swarmail inbox --session` works in a T3 child-task session. It printed "invalid host or session identity" and left the
   mail unread, because the check refused the `%` in a child task's thread ID (`thread:delegated-task:command%3A…`).
   Ordinary T3 threads were not affected, and a plain thread ID is still checked as before.
