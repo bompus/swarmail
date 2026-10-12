@@ -317,9 +317,8 @@ The driver reads RSS and CPU ticks for the server's whole process tree from
 
 ## Setup
 
-WSL 2 with 16 vCPUs (AMD Ryzen 9 9950X3D) and Bun 1.4.2. The run held a
-shared lock that keeps other benchmarks off the machine, ran under a 6 GiB
-memory cap at nice 10, and alternated the six servers across three rounds.
+WSL 2 with 16 vCPUs (AMD Ryzen 9 9950X3D) and Bun 1.4.2. The run used a 6 GiB
+memory cap at nice 10 and alternated the six servers across three rounds.
 Swap was cleared first and stayed unused, at least 38.9 GiB of memory stayed
 available, and no other heavy job ran during it, so no round was rerun.
 
