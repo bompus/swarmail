@@ -40,6 +40,8 @@ an older result with the version it was measured on.
 
 - The README, including every sentence that names a version, a count or a
   tested host, and its feature comparison.
+  If this release changed the README or `docs/usage.md`, rerun
+  `evals/docs-check` (its README says how) and read the failures.
 - `docs/benchmarks.md` and the benchmark numbers and charts in the README,
   including the list of versions they were not remeasured for.
 - Graphics in `docs/assets/` (banner, benchmark charts, demo recording) and
