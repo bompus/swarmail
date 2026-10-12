@@ -20,6 +20,8 @@ reply from an agent that read the old and the new text.
 1. Run the checks in the README's Development section. CI runs them too.
 2. Add a `CHANGELOG.md` entry under `Unreleased` for any change users will
    notice.
+3. If you changed the README or `docs/usage.md`, rerun `evals/docs-check`
+   (its README says how) and read the failures.
 
 ## How changes land
 
@@ -40,6 +42,8 @@ an older result with the version it was measured on.
 
 - The README, including every sentence that names a version, a count or a
   tested host, and its feature comparison.
+  If this release changed the README or `docs/usage.md`, rerun
+  `evals/docs-check` (its README says how) and read the failures.
 - `docs/benchmarks.md` and the benchmark numbers and charts in the README,
   including the list of versions they were not remeasured for.
 - Graphics in `docs/assets/` (banner, benchmark charts, demo recording) and
