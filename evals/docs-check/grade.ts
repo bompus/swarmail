@@ -161,7 +161,10 @@ function applyingInstaller(rest: string): boolean {
   flush();
   return commands.some((words) => {
     // A shell started with -c runs its quoted payload, so check that text the same way.
-    const shell = /^(?:ba|z|da)?sh$/.test(words[0] ?? "") ? words.indexOf("-c") : -1;
+    // -c may be combined with other short flags, as in bash -lc.
+    const shell = /^(?:ba|z|da)?sh$/.test(words[0] ?? "")
+      ? words.findIndex((word) => /^-[a-z]*c[a-z]*$/.test(word))
+      : -1;
     const payload = words[shell + 1];
     if (shell > 0 && payload && applyingInstaller(payload)) {
       return true;
