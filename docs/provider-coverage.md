@@ -194,6 +194,17 @@ checkout and need reservations.
   notice per session. It is the right path for Swarmail mail
   that should wake a Codex session. Messages between Codex sessions do not need
   Swarmail.
+- **The bridge on a terminal session (tested on codex-cli 0.162.1).** Two
+  interactive sessions on one throwaway daemon, each with its own bridge, and
+  sessions registered by hand, so the sessions could not read their inbox
+  themselves. An idle session took the notice and started a turn. While a
+  60-second shell command ran, the notice appeared in the running turn about
+  two seconds after the mail was sent, the model acknowledged it, and the
+  command finished normally. While an approval prompt was open, the bridge held
+  the notice and retried after 1, 2, 4, 8 and 16 seconds, and delivered it about
+  eight seconds after the approval, once the turn ended. A second mail sent
+  while the first notice was still unread produced no second notice for at
+  least three minutes, as the one-notice rule intends.
 
 ## Cursor
 
