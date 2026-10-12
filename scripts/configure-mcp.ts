@@ -65,7 +65,7 @@ function rebuild(config: HostConfig, entry: Record<string, unknown>, replace = f
   const { format, original, settings, servers } = config;
   const key = serversKey(format);
   if (format === "toml") {
-    const block = Bun.TOML.stringify({ [key]: { [serverName]: entry } }) ?? "";
+    const block = Bun.TOML.stringify({ [key]: { [serverName]: entry } });
     return replace
       ? replaceTomlSection(original, key, serverName, block)
       : original + "\n" + block + "\n";
