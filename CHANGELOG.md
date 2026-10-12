@@ -2,39 +2,37 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
-
-- The MCP connection instructions were 4,110 characters, and Claude Code shows only the first 4,096, so the closing
-  pointer to `swarmail updates --help` was cut off. They are now 4,082 characters, and a test fails if they pass 4,096.
-
-- `docs/usage.md` no longer says mail wakes idle Cursor sessions, which no test showed, and links the provider coverage
-  page for where a host's own messaging is enough. The coverage page no longer lists Devin as a host Swarmail wakes and
-  notes OpenCode's durable inbox of undelivered input. It also records a test of Cursor's stop hook: an idle Cursor CLI
-  session woke for five mails in a row, and the sixth waited for the next prompt typed into the session. It also records a test of the Codex bridge on terminal sessions:
-  it delivered to an idle session and mid-command, and held mail while an approval prompt was open.
-
-- Mail to a session in a T3 child-task thread defaults to quiet like mail to any other T3 session, as `docs/usage.md`
-  says. It defaulted to wake, because the check refused the `%` in a child task's thread ID
-  (`thread:delegated-task:command%3A…`). Set `notification_policy` to `wake` for a child task that must be woken. Mail
-  to a recipient with no valid T3 thread ID still defaults to wake.
+## 0.5.3 - 2026-10-11
 
 - `swarmail inbox --session` works in a T3 child-task session. It printed "invalid host or session identity" and left the
   mail unread, because the check refused the `%` in a child task's thread ID (`thread:delegated-task:command%3A…`).
   Ordinary T3 threads were not affected, and a plain thread ID is still checked as before.
 
+- Mail to a session in a T3 child-task thread defaults to quiet like mail to any other T3 session, as `docs/usage.md`
+  says. It defaulted to wake, because the check refused the `%` in a child task's thread ID. Set `notification_policy` to
+  `wake` for a child task that must be woken. Mail to a recipient with no valid T3 thread ID still defaults to wake.
+
+- The MCP connection instructions were 4,110 characters, and Claude Code shows only the first 4,096, so the closing
+  pointer to `swarmail updates --help` was cut off. They are now 4,082 characters, and a test fails if they pass 4,096.
+
+- The build lays the compiled bytecode out from a recorded profile (`scripts/swarmail.order`, Bun's
+  `--bytecode-order`), so what a run needs sits together in the executable. On Bun 1.4.3, on one host, hook commands used
+  5% to 18% less peak memory and the idle server 5% less, with no clear change in start-up time or request latency.
+  `bun scripts/train-bytecode-order.ts` records the profile again; Bun before 1.4.3 ignores it.
+
 - `docs/provider-coverage.md` lists what Claude Code, Codex, Cursor, Devin, Antigravity, OpenCode, Grok Build and T3
   Code each provide for messaging between independent sessions, what Swarmail adds, and where a host's own feature is
-  enough. Each claim about a host in the per-host sections is labelled tested or documented, with the version and date it was checked. The README links
-  to it.
+  enough. Each claim about a host in the per-host sections is labelled tested or documented, with the version and date
+  it was checked. The README links to it.
+  - Two tests are recorded there. An idle Cursor CLI session woke for five mails in a row through Swarmail's stop hook,
+    and the sixth waited for the next prompt typed into the session (Cursor's default limit of five follow-ups, which
+    the installer leaves in place). The Codex bridge on terminal sessions delivered to an idle session and mid-command,
+    and held mail while an approval prompt was open.
+  - `docs/usage.md` no longer says mail wakes idle Cursor sessions, which no test showed, and links the coverage page.
 
 - The help text, server instructions, `docs/updates.md` and README say "confirmation" where they said "attestation":
   the caller's own confirmation that it loaded an update target's revision, not proof of provider cache replacement.
   The `attested` status value in `swarmail updates --session --json` is unchanged.
-
-- The build lays the compiled bytecode out from a recorded profile (`scripts/swarmail.order`, Bun's
-  `--bytecode-order`), so what a run needs sits together in the executable. On Bun 1.4.3 hook commands used 6% to 18%
-  less peak memory and the idle server 5% less in benchmarks, with no clear change in start-up time or request latency.
-  `bun scripts/train-bytecode-order.ts` records the profile again; Bun before 1.4.3 ignores it.
 
 ## 0.5.2 - 2026-10-09
 

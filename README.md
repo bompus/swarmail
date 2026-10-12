@@ -301,8 +301,9 @@ Cursor, and Claude Code without the mod, wake through the wake hook, which
 long-polls the server after each turn: about 23 days in Claude Code, 8 hours
 in Cursor. When mail arrives, it starts a new turn with the hint. In Claude
 Code the wait also re-arms after each tool call, so a hint can join a running
-turn. The server answers `swarmail ping` itself, so a ping never wakes the
-model. Hosts without a wake integration see mail on their next `fetch_inbox`.
+turn. Cursor stops continuing on its own after five wakes with no prompt from a
+person, so further mail waits for the next prompt ([tested](docs/provider-coverage.md)).
+The server answers `swarmail ping` itself, so a ping never wakes the model. Hosts without a wake integration see mail on their next `fetch_inbox`.
 
 Native Cursor uses `postToolUse` additional context; Devin uses
 `PostToolUse` additional context and its own user configuration. Antigravity
