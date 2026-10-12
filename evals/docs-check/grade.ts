@@ -155,6 +155,12 @@ function applyingInstaller(rest: string): boolean {
   }
   flush();
   return commands.some((words) => {
+    // A shell started with -c runs its quoted payload, so check that text the same way.
+    const shell = /^(?:ba|z|da)?sh$/.test(words[0] ?? "") ? words.indexOf("-c") : -1;
+    const payload = words[shell + 1];
+    if (shell > 0 && payload && applyingInstaller(payload)) {
+      return true;
+    }
     const script = words.findIndex((word) => /(?:^|\/)configure-(?:mcp|hooks)\.ts$/.test(word));
     if (script < 0) {
       return false;

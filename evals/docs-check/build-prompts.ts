@@ -90,6 +90,11 @@ if (import.meta.main) {
         text: readFileSync(values.rules, "utf8").replace(/^---\n[\s\S]*?\n---\n/, ""),
       }
     : undefined;
+  // grade.ts reads the arm back out of reply file names with \w+.
+  if (!/^\w+$/.test(values.arm)) {
+    console.error("--arm may contain only letters, digits and underscores");
+    process.exit(2);
+  }
   mkdirSync(values.out, { recursive: true });
   for (const name of cases) {
     const text = fill(readFileSync(join(dir, `${name}.md`), "utf8"), values.tree, tools, rules);

@@ -27,17 +27,18 @@ changed either (CONTRIBUTING.md, "Releasing").
    rule text in place of `docs/usage.md`.
 
    ```bash
-   bun evals/docs-check/build-prompts.ts --tree . --arm current --out <dir>/prompts --tools evals/docs-check/tools.json
+   bun evals/docs-check/build-prompts.ts --tree . --arm current --out docs-check-run/prompts --tools evals/docs-check/tools.json
    ```
 
 2. Send each prompt file to the models you want to test, asking for text only,
-   and save every reply as `<model>-<case>-<arm>-r<run>.txt` in one directory.
+   and save every reply as `<model>-<case>-<arm>-r<run>.txt` in `docs-check-run/replies`.
+   The arm name takes letters, digits and underscores only.
    Three runs per model and case show the spread. This repository does not
    include a runner; any agent or API that returns text will do.
 3. Grade the replies:
 
    ```bash
-   bun evals/docs-check/grade.ts <dir>/replies
+   bun evals/docs-check/grade.ts docs-check-run/replies
    ```
 
    A cell passes when every required check passes.
