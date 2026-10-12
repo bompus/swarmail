@@ -14,6 +14,8 @@ function fixture() {
     RedPond: "[codex:native-session]",
     GrayField: "unidentified",
     WhiteCloud: "[t3:bad/thread codex:malformed-session]",
+    TealMeadow:
+      "[t3:thread:delegated-task:command%3Amcp%3Aabc%3Adelegate-task%3Ax claude:child-session]",
   };
   for (const [name, task_description] of Object.entries(tags)) {
     tools.register_agent({ project_key, name, task_description, program: "codex", model: "test" });
@@ -80,6 +82,9 @@ test("default checks every recipient and preserves explicit, priority and acknow
       [{ to: ["RedPond"] }, "wake"],
       [{ to: ["GrayField"] }, "wake"],
       [{ to: ["WhiteCloud"] }, "wake"],
+      [{ to: ["TealMeadow"] }, "quiet"],
+      [{ to: ["GreenCastle"], cc: ["TealMeadow"] }, "quiet"],
+      [{ to: ["TealMeadow", "RedPond"] }, "wake"],
       [{ to: ["GreenCastle", "RedPond"] }, "wake"],
       [{ cc: ["RedPond"] }, "wake"],
       [{ bcc: ["GrayField"], importance: "low" }, "wake"],
