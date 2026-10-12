@@ -192,6 +192,13 @@ existing contracts. Historical bodies are not rewritten. Typed validation limits
 this path; it cannot establish the truth or relevance of a caller's identifiers.
 
 Follow the host's transport preference and send an event through one route.
+[Provider coverage](provider-coverage.md) says where a host's own messaging is
+enough (for example two running Claude Code or Codex sessions, or a session
+and its own subagents) and where
+Swarmail adds something (mail that must wait, be searched or acknowledged,
+sessions on different hosts, shared checkouts). Whether mail starts a turn in
+an idle session depends on the host and its wake route, so don't assume a
+recipient will answer promptly.
 If nobody needs to act or retain a requested record, send nothing. Quiet mail
 remains visible to explicit inbox/search reads, including an inbox read prompted
 by other actionable mail. Neither typed notices nor quiet delivery hide native
@@ -263,9 +270,10 @@ mail location snapshots do not establish historical sender-session identity.
 - Keep a handed-off task in your ledger until the receiving session explicitly
   accepts its scope in a reply. Stored, read and acknowledged mail do not prove
   task acceptance or completion. Report an unanswered handoff instead of dropping it.
-- Don't reply to a message that only thanks or acknowledges. Mail wakes idle
-  Claude Code and Cursor sessions, so each needless reply costs the recipient
-  a turn.
+- Don't reply to a message that only thanks or acknowledges. Wake delivery
+  can start a turn in an idle session (see
+  [provider coverage](provider-coverage.md) for which hosts), so each needless
+  reply can cost the recipient a turn.
 - Acknowledge `ack_required` mail with `acknowledge_message` once you have
   acted on it. If you won't act on it, or can't yet, reply to the sender with
   the reason so they don't wait on you.

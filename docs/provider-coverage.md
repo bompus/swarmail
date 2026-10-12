@@ -40,11 +40,14 @@ host's messaging. Its notice is one line telling the session to read its inbox.
 
 In the versions checked, no host documents any of these. Swarmail fills them.
 
-1. **Mail that waits.** A message to a session that is busy, closed or on
+1. **Mail that waits, in threads you can search.** A message to a session that is busy, closed or on
    another host stays stored, grouped in threads and searchable. Claude Code's
    same-machine messages need the recipient's live inbox socket, though a
    message held for approval waits (five minutes by default). Codex stores
-   queued messages but has no inbox, thread view or search.
+   queued messages but has no inbox, thread view or search. OpenCode keeps a
+   durable inbox of input not yet delivered to a session (`GET
+   /api/session/{sessionID}/inbox`). Its documentation shows no thread view,
+   search or receipts for it.
 2. **Receipts and priority.** No host documents a read or acknowledgement
    receipt, or a priority the sender sets. Claude Code tells the sender when a
    send is refused, and a mod's `$.session.send` reports whether the message was
@@ -66,9 +69,11 @@ In the versions checked, no host documents any of these. Swarmail fills them.
 6. **A way to wake hosts that other local sessions cannot wake.** Cursor and
    Devin document none. Antigravity's `send_message` did not wake an idle
    interactive session in the test below. OpenCode and Grok can be reached only
-   through the OpenCode prompt API or Grok's undocumented extension. Swarmail
-   uses hooks for Cursor, Devin and Antigravity, and opt-in bridges for
-   OpenCode and Grok.
+   through the OpenCode prompt API or Grok's undocumented extension. Swarmail's
+   hooks for Devin and Antigravity act during a turn or when it ends, and
+   cannot wake an idle session. Its Cursor hook holds the turn open and wakes
+   the session up to five times between prompts, for up to eight hours after a turn ends. Opt-in bridges reach OpenCode, Grok and T3 Code
+   threads.
 
 ## When a host's own feature is enough
 
@@ -189,6 +194,17 @@ checkout and need reservations.
   notice per session. It is the right path for Swarmail mail
   that should wake a Codex session. Messages between Codex sessions do not need
   Swarmail.
+- **The bridge on a terminal session (tested on codex-cli 0.162.1).** Two
+  interactive sessions on one throwaway daemon, each with its own bridge, and
+  sessions registered by hand, so the sessions could not read their inbox
+  themselves. An idle session took the notice and started a turn. While a
+  60-second shell command ran, the notice appeared in the running turn about
+  two seconds after the mail was sent, the model acknowledged it, and the
+  command finished normally. While an approval prompt was open, the bridge held
+  the notice and retried after 1, 2, 4, 8 and 16 seconds, and delivered it about
+  eight seconds after the approval, once the turn ended. A second mail sent
+  while the first notice was still unread produced no second notice for at
+  least three minutes, as the one-notice rule intends.
 
 ## Cursor
 
@@ -204,11 +220,19 @@ checkout and need reservations.
   `postToolUse` hook and a `sessionStart` hook, returned as `additional_context`,
   reached the model. With no hooks the model reported none. The IDE and SDK were
   not tested.
-- **Stop hook (documented).** `followup_message` submits a next message, capped
-  by `loop_limit`, which defaults to 5. The hooks page does not say which hooks
-  run in `cursor-agent`, and the stop hook was not tested.
+- **Stop hook (documented, and tested in the interactive `cursor-agent`
+  2026.10.01).** `followup_message` submits a next message, capped by
+  `loop_limit`, which defaults to 5; `null` removes the cap. In the test, a
+  session with Swarmail's stop hook woke for each of five mails sent one after
+  another, then did not wake for a sixth within three minutes, and no wake hook
+  was left running. After a prompt typed into the session, its stop hook
+  delivered the waiting sixth mail, and a seventh woke the session again.
+  Swarmail's installer leaves `loop_limit` at its default on purpose, so two
+  agents cannot wake each other without end. A session that receives more than
+  five mails with no prompt from a person in between sees the rest at the next
+  prompt.
 - **What Swarmail does here.** A wake hook after each turn, and context after
-  tool calls.
+  tool calls. It wakes an idle Cursor CLI session for up to eight hours after a turn ends, and up to five times between prompts.
 
 ## Devin
 
@@ -250,7 +274,8 @@ checkout and need reservations.
 All statements here are documented. None were tested.
 
 - **Messaging.** None between independent sessions. `POST /api/session/{id}/prompt`
-  admits input with `delivery` set to `steer`, the default, or `queue`. The
+  durably admits input with `delivery` set to `steer`, the default, or `queue`,
+  and `GET /api/session/{id}/inbox` lists work not yet delivered. The
   `opencode run --session` command, `opencode api`, the plugin call
   `ctx.session.prompt` and the `@opencode/client` package can also send into an
   existing session. The API reference describes itself as an "Experimental
@@ -313,7 +338,7 @@ All statements here are documented. None were tested.
 - Codex sessions hosted inside T3 Code, reached from a terminal `codex queue`.
 - How long a Codex daemon keeps a closed thread loaded.
 - Antigravity delivery to a recipient in the middle of a turn.
-- Cursor in the IDE and through the SDK, and the Cursor `stop` hook.
+- Cursor in the IDE and through the SDK.
 - Everything under OpenCode and Grok Build.
 
 ## Sources
