@@ -10,7 +10,7 @@ import { locations } from "./location.ts";
 import { identity, leadingTag, parseTag, sameSessionRow, tagOf, type Identity } from "./tag.ts";
 import { InvalidTimestamp, iso, nowUs, parseIso } from "./db.ts";
 import { lifecycleEligible, type Lifecycle } from "./lifecycle.ts";
-import { SESSION_RE } from "./wake.ts";
+import { SESSION_RE, T3_THREAD_RE } from "./wake.ts";
 import { reconcileNotices, linkNotice, PING_SUBJECT } from "./wake-notices.ts";
 import { admitRecipients } from "./availability.ts";
 
@@ -726,7 +726,7 @@ export class MailStore {
     if (
       !/^[\w-]+$/.test(host) ||
       !SESSION_RE.test(session) ||
-      (thread && !SESSION_RE.test(thread))
+      (thread && !T3_THREAD_RE.test(thread))
     ) {
       throw new ToolError("INVALID_ARGUMENT", "invalid host or session identity");
     }

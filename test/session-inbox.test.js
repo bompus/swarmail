@@ -127,6 +127,19 @@ test("T3 identity includes previous providers but excludes a conflicting T3 tag"
   ).toBe(1);
 });
 
+test("session inbox finds mail for a T3 child-task thread whose ID holds URL-encoded colons", async () => {
+  const f = fixture();
+  const thread =
+    "thread:delegated-task:command%3Amcp%3A0a308d85%3Adelegate-task%3Awake-test-claude";
+  await f.register("/fixture/a", "AzureWillow", `[t3:${thread} codex:current]`);
+  await f.send("/fixture/a", ["AzureWillow"]);
+  const rows = await f.inbox({ t3_thread: thread });
+  expect(rows.map((row) => row.agent_name)).toEqual(["AzureWillow"]);
+  expect(
+    f.db.query("SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL").get().n,
+  ).toBe(0);
+});
+
 test("preview revives returned retired identities and read marking covers only returned recipients", async () => {
   const f = fixture();
   await f.register("/fixture/a", "BlueLake", "[codex:current]");
