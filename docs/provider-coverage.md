@@ -44,7 +44,10 @@ In the versions checked, no host documents any of these. Swarmail fills them.
    another host stays stored, grouped in threads and searchable. Claude Code's
    same-machine messages need the recipient's live inbox socket, though a
    message held for approval waits (five minutes by default). Codex stores
-   queued messages but has no inbox, thread view or search.
+   queued messages but has no inbox, thread view or search. OpenCode keeps a
+   durable inbox of input not yet delivered to a session (`GET
+   /api/session/{sessionID}/inbox`). Its documentation shows no thread view,
+   search or receipts for it.
 2. **Receipts and priority.** No host documents a read or acknowledgement
    receipt, or a priority the sender sets. Claude Code tells the sender when a
    send is refused, and a mod's `$.session.send` reports whether the message was
@@ -66,9 +69,11 @@ In the versions checked, no host documents any of these. Swarmail fills them.
 6. **A way to wake hosts that other local sessions cannot wake.** Cursor and
    Devin document none. Antigravity's `send_message` did not wake an idle
    interactive session in the test below. OpenCode and Grok can be reached only
-   through the OpenCode prompt API or Grok's undocumented extension. Swarmail
-   uses hooks for Cursor, Devin and Antigravity, and opt-in bridges for
-   OpenCode and Grok.
+   through the OpenCode prompt API or Grok's undocumented extension. Swarmail's
+   hooks for Devin and Antigravity act during a turn or when it ends, and
+   cannot wake an idle session. Its Cursor hook relies on the `stop` hook,
+   which was not tested. Opt-in bridges reach OpenCode, Grok and T3 Code
+   threads.
 
 ## When a host's own feature is enough
 
@@ -250,7 +255,8 @@ checkout and need reservations.
 All statements here are documented. None were tested.
 
 - **Messaging.** None between independent sessions. `POST /api/session/{id}/prompt`
-  admits input with `delivery` set to `steer`, the default, or `queue`. The
+  durably admits input with `delivery` set to `steer`, the default, or `queue`,
+  and `GET /api/session/{id}/inbox` lists work not yet delivered. The
   `opencode run --session` command, `opencode api`, the plugin call
   `ctx.session.prompt` and the `@opencode/client` package can also send into an
   existing session. The API reference describes itself as an "Experimental
