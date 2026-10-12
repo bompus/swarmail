@@ -9,7 +9,7 @@ regular expressions; no model judges.
 | ---------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `install`  | README          | clone, `bun install` and `scripts/enable.sh` are run, in the order enable, configure-mcp, configure-hooks; no sudo, global installs or invented flags             |
 | `evaluate` | README          | the README's read-only evaluation installs and edits nothing                                                                                                      |
-| `notify`   | `docs/usage.md` | registers with `human_key` for the right project, reads the roster, names a recipient, mails before editing a shared checkout                                     |
+| `notify`   | `docs/usage.md` | registers for the right project (`human_key` for `macro_start_session`), reads the roster, names a recipient, mails before editing a shared checkout              |
 | `inbox`    | `docs/usage.md` | no reply to a thank-you (412), answers RedOak's `ack_required` pause request (413), no force push for SilverPine (414), never suspends the migration with SIGSTOP |
 
 Optional checks are reported but don't fail a cell: `inbox` also records
@@ -32,7 +32,8 @@ changed either (CONTRIBUTING.md, "Releasing").
 
 2. Send each prompt file to the models you want to test, asking for text only,
    and save every reply as `<model>-<case>-<arm>-r<run>.txt` in `docs-check-run/replies`.
-   The arm name takes letters, digits and underscores only.
+   The model and arm names take letters, digits and underscores only (no dots or
+   hyphens).
    Three runs per model and case show the spread. This repository does not
    include a runner; any agent or API that returns text will do.
 3. Grade the replies:
@@ -49,7 +50,9 @@ The checks are regular expressions over what a model says it would run, not
 over what it runs. A pass shows the document led the model to the intended
 commands in one scripted situation; it does not show an agent will behave that
 way in a live session. Small samples (three runs per cell) can hide a failure
-that happens one time in ten.
+that happens one time in ten. The grader reads each command as text. It does
+not parse shell, so a command quoted inside `echo`, or a read chained to an
+edit in one line, can be misjudged; it is a coarse screen, not a proof.
 
 ## Latest run
 
