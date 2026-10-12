@@ -131,7 +131,7 @@ Keep the requested action, authority, scope and essential holds inline. Put
 logs, metrics, hashes, execution details and authorization history in the linked
 records. When a decision depends on those details, ask the receiver to inspect
 the record. Preserve exact identifiers, paths and commands. Relayed selections
-need the source, exact selected action and target owner. A relayed bare reply such as
+need the source, exact selected action and target owner. A relayed bare approval such as
 "B" or "go" is ambiguous without them.
 
 For example, an informational source update can use this body:
