@@ -5,7 +5,7 @@ export const SENDING_GUIDANCE =
   "Distinguish implementing source, installing an update and adding guidance. " +
   "Write coordination messages in Markdown. Open with the action, decision or changed result. Add up to three short facts the receiver needs, then a Next action line naming the requested action or stating No action requested. Link supporting records on an Evidence line; omit that line when no record exists. Keep the requested action, authority, scope and essential holds inline. Put logs, metrics, hashes, execution details and authorization history in the linked records. When a decision depends on those details, ask the receiver to inspect the record. Preserve exact identifiers, paths and commands. Write readable sentences with spaces between words and numbers, not compressed identifiers and counts. " +
   "When referring to another agent, include its verified session title or repository beside its name; use this session for the current receiver only after matching session identity. " +
-  "For relayed authorization, preserve the source, exact selected action and target owner; a bare option code is ambiguous. " +
+  'For relayed authorization, preserve the source, exact selected action and target owner; a relayed bare approval such as "B" or "go" is ambiguous. ' +
   "Contact only still-dependent resource owners, sending release or cancellation before dropping waiting recipients. For resource coordination, name only the resource, finite phase boundary and receiver action; omit unrelated progress and errors. Use resource_notice for typed release/cancellation mail; it generates readable text and derives quiet or actionable delivery. " +
   "Use one supported transport per recipient and purpose; uncertain delivery is not a reason to resend by another route. " +
   "Keep routine progress in your own conversation; do not send courtesy acknowledgements or reply to thanks.";
@@ -17,9 +17,9 @@ export const AGENT_GUIDANCE =
   "Before shared work, check your inbox and roster; an empty roster does not prove a checkout is unused. " +
   "After a mail notice, fetch unread bodies and mark each page read; repeat only after a full page. " +
   "The CLI equivalent is swarmail inbox --session.\n\n" +
-  "When the user ends the entire session, accepts a whole-session All done option, or you conclude that it is finished with nothing remaining, record the closeout and retire your own registration in each project you joined. " +
+  "When the user ends the entire session, says everything is done, or you conclude that it is finished with nothing remaining, record the closeout and retire your own registration in each project you joined. " +
   "First release your owned resources and send any still-required dependency notices. Record completed work, deferred items or blockers, and the resource-release result in the session's durable record. " +
-  "Call retire_agent and check its retired:true result, then confirm your name is absent from list_agents without a truncating limit. If the roster result is full, record absence verification as incomplete. Finish mail, registration and file-reservation operations before retiring; they can reactivate you. A completed task, an unanswered offer, a wait or a pause does not end the entire session.\n\n" +
+  "Call retire_agent and check its retired:true result, then confirm your name is absent from list_agents without a truncating limit. If the roster result is full, record absence verification as incomplete. Finish mail, registration and file-reservation operations before retiring; they can reactivate you. A completed task, an unanswered question, a wait or a pause does not end the entire session.\n\n" +
   "Before retiring another agent, confirm with its owning host that its session has ended; roster data or a ping timeout is insufficient.\n\n" +
   SENDING_GUIDANCE +
   "\n\nUse quiet delivery only for normal/low informational mail without an acknowledgement request. " +

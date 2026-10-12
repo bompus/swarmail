@@ -58,8 +58,8 @@ checkout, unless a project already exists under that exact path.
 
 ## Ending the entire session
 
-Record the closeout when the user ends the entire session or accepts an option
-that closes it. Do the same when you conclude that the entire session is finished
+Record the closeout when the user ends the entire session or says everything is
+done. Do the same when you conclude that the entire session is finished
 with nothing remaining. Retire your own registration in every project you joined.
 Completing one task, waiting for an answer, pausing or deferring a
 candidate while continuing the session does not trigger retirement.
@@ -131,8 +131,8 @@ Keep the requested action, authority, scope and essential holds inline. Put
 logs, metrics, hashes, execution details and authorization history in the linked
 records. When a decision depends on those details, ask the receiver to inspect
 the record. Preserve exact identifiers, paths and commands. Relayed selections
-need the source, exact selected action and target owner. A bare option code
-does not establish authorization.
+need the source, exact selected action and target owner. A relayed bare approval such as
+"B" or "go" is ambiguous without them.
 
 For example, an informational source update can use this body:
 
