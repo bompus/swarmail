@@ -30,7 +30,7 @@ const bash = (cs: Call[]) => cs.filter((c) => c.tool === "bash");
 const first = (cs: Call[], test: (c: Call) => boolean) => cs.findIndex(test);
 const has = (cs: Call[], re: RegExp) => cs.some((c) => re.test(c.rest));
 const READ_ONLY =
-  /^(cat|less|head|tail|ls|rg|grep|find|sed -n|command -v|git (status|log|diff|show|worktree list|branch)|pwd|echo|swarmail (who|register --tag|version))\b/;
+  /^(cat|less|head|tail|ls|rg|grep|find|sed -n|command -v|git (status|log|diff|show|grep|ls-files|worktree list|branch)|pwd|echo|swarmail (who|register --tag|version))\b/;
 // Strips a leading `cd <dir> &&` and `git -C <dir>` so the command verb is what gets tested.
 const verb = (rest: string) =>
   rest
