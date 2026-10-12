@@ -111,7 +111,7 @@ export function buildSwarmail(
       // No --smol: measured 2026-09-28, it saved 7 MB under load but doubled p99 latency.
       "--compile",
       "--bytecode",
-      // Measured on Bun 1.4.3: 6% to 18% less memory in hook commands and 5% in the idle server, same speed.
+      // Measured on Bun 1.4.3: 5% to 18% less peak memory in hook commands (one host) and 5% in the idle server, same speed.
       ...(order ? [`--bytecode-order=${order}`] : []),
       // Stack traces name the source file, line and function; --minify saved 40 KB of 84 MB and no startup time.
       "--sourcemap",
