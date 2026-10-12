@@ -9,7 +9,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 - `docs/usage.md` no longer says mail wakes idle Cursor sessions, which no test showed, and links the provider coverage
   page for where a host's own messaging is enough. The coverage page no longer lists Devin as a host Swarmail wakes and
-  notes OpenCode's durable inbox of undelivered input.
+  notes OpenCode's durable inbox of undelivered input. It also records a test of Cursor's stop hook: an idle Cursor CLI
+  session woke for five mails in a row, and the sixth waited for the next prompt typed into the session.
 
 - Mail to a session in a T3 child-task thread defaults to quiet like mail to any other T3 session, as `docs/usage.md`
   says. It defaulted to wake, because the check refused the `%` in a child task's thread ID

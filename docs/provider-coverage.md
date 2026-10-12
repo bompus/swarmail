@@ -71,8 +71,8 @@ In the versions checked, no host documents any of these. Swarmail fills them.
    interactive session in the test below. OpenCode and Grok can be reached only
    through the OpenCode prompt API or Grok's undocumented extension. Swarmail's
    hooks for Devin and Antigravity act during a turn or when it ends, and
-   cannot wake an idle session. Its Cursor hook relies on the `stop` hook,
-   which was not tested. Opt-in bridges reach OpenCode, Grok and T3 Code
+   cannot wake an idle session. Its Cursor hook holds the turn open and wakes
+   the session up to five times between prompts. Opt-in bridges reach OpenCode, Grok and T3 Code
    threads.
 
 ## When a host's own feature is enough
@@ -209,11 +209,20 @@ checkout and need reservations.
   `postToolUse` hook and a `sessionStart` hook, returned as `additional_context`,
   reached the model. With no hooks the model reported none. The IDE and SDK were
   not tested.
-- **Stop hook (documented).** `followup_message` submits a next message, capped
-  by `loop_limit`, which defaults to 5. The hooks page does not say which hooks
-  run in `cursor-agent`, and the stop hook was not tested.
+- **Stop hook (documented, and tested in the interactive `cursor-agent`
+  2026.10.01).** `followup_message` submits a next message, capped by
+  `loop_limit`, which defaults to 5; `null` removes the cap. In the test, a
+  session with Swarmail's stop hook woke for each of five mails sent one after
+  another, then did not wake for a sixth within three minutes, and no wake hook
+  was left running. After a prompt typed into the session, its stop hook
+  delivered the waiting sixth mail, and a seventh woke the session again.
+  Swarmail's installer leaves `loop_limit` at its default on purpose, so two
+  agents cannot wake each other without end. A session that receives more than
+  five mails with no prompt from a person in between sees the rest at the next
+  prompt.
 - **What Swarmail does here.** A wake hook after each turn, and context after
-  tool calls.
+  tool calls. It wakes an idle Cursor CLI session up to five times between
+  prompts.
 
 ## Devin
 
@@ -319,7 +328,7 @@ All statements here are documented. None were tested.
 - Codex sessions hosted inside T3 Code, reached from a terminal `codex queue`.
 - How long a Codex daemon keeps a closed thread loaded.
 - Antigravity delivery to a recipient in the middle of a turn.
-- Cursor in the IDE and through the SDK, and the Cursor `stop` hook.
+- Cursor in the IDE and through the SDK.
 - Everything under OpenCode and Grok Build.
 
 ## Sources
