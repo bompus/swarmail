@@ -37,7 +37,7 @@ reviews:
           FAIL if a changed line adds or broadens a directive that silences a
           lint, type-check or formatter diagnostic (for example
           `oxlint-disable`, `eslint-disable`, `@ts-expect-error`, `@ts-ignore`,
-          or a new ignore entry in `.oxlintrc.json`, `.oxfmtrc.json` or
+          or a new ignore entry in `.oxlintrc.json`, `.oxfmtrc.jsonc` or
           `tsconfig.json`) without a comment on the same or the preceding line
           that says why. PASS otherwise, including when the pull request adds
           no such directive.
