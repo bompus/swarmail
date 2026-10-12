@@ -196,15 +196,15 @@ test("an ended session ranks below a live one even while its host process linger
 });
 
 test("resolves a bare repository name to the one project with that folder name", () => {
-  const keys = ["/home/u/toolbox", "/home/u/espn", "/srv/espn"];
+  const keys = ["/home/u/toolbox", "/home/u/example-app", "/srv/example-app"];
   const noRepo = () => null;
   expect(resolveProject("toolbox", keys, noRepo)).toBe("/home/u/toolbox");
   expect(resolveProject("/home/u/w/x", keys, () => "/home/u/x")).toBe("/home/u/x");
-  expect(() => resolveProject("espn", keys, noRepo)).toThrow(
-    "espn matches several projects; candidates: /home/u/espn, /srv/espn",
+  expect(() => resolveProject("example-app", keys, noRepo)).toThrow(
+    "example-app matches several projects; candidates: /home/u/example-app, /srv/example-app",
   );
   expect(() => resolveProject("nope", keys, noRepo)).toThrow(
-    "nope matches no project; candidates: espn, toolbox",
+    "nope matches no project; candidates: example-app, toolbox",
   );
   expect(() => resolveProject("./nope", keys, noRepo)).toThrow("is not inside a git repository");
 });
