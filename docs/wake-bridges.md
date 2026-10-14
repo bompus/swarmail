@@ -231,7 +231,8 @@ The configuration is the [bridge configuration](#configure-and-run) with these d
   name the verified T3 binary.
 - `enrollAfter` is required: an ISO time. Only sessions started or resumed after it enroll.
 
-`swarmail wake-auto-t3 <config.json> --check` validates the configuration and exits 0 without starting anything.
+`swarmail wake-auto-t3 <config.json> --check` validates the supervisor-specific fields and the URL syntax, then exits 0
+without starting anything; it does not check the credential file or whether T3 is available.
 
 A thread gets a bridge when T3's runtime records show a running Codex or Cursor thread (a V2 thread counts as running
 while its provider thread is idle or active; subagent threads, which V2 makes read-only, are skipped). It loses it when
