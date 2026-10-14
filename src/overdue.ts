@@ -192,6 +192,14 @@ export async function overdue(
   args: string[],
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<number> {
+  // A mistyped --dry-run must not turn into a live pass.
+  const unknown = args.filter((a) => a !== "--dry-run");
+  if (unknown.length > 0) {
+    console.error(
+      `swarmail overdue: unknown argument ${unknown.join(" ")}; usage: swarmail overdue [--dry-run]`,
+    );
+    return 2;
+  }
   const dbPath = databasePath(env);
   const statePath = join(stateHome(env), "swarmail-overdue", "state.json");
   const minutes = Number(env.SWARMAIL_OVERDUE_MINUTES || 30);

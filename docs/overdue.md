@@ -16,7 +16,8 @@ run it from a timer. Every 10 minutes works.
 swarmail overdue [--dry-run]
 ```
 
-`--dry-run` prints what the command would do and sends and records nothing.
+`--dry-run` prints what the command would do and sends and records nothing. Any other argument is an error (exit
+status 2), so a mistyped `--dry-run` cannot start a live pass.
 
 ## Settings
 
@@ -30,7 +31,8 @@ swarmail overdue [--dry-run]
 
 The command remembers what it has already sent in `$XDG_STATE_HOME/swarmail-overdue/state.json`
 (`~/.local/state/swarmail-overdue/state.json` by default), so a reminder and a report each go out once per message and
-recipient.
+recipient. A report is recorded only after its command exits with status 0; if the command fails, the report is sent
+again on the next run, even when the command had already delivered it.
 
 ## Operator reports
 

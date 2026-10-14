@@ -344,6 +344,23 @@ test("the overdue command prints what it would do for --dry-run and records noth
   }
 });
 
+test("the overdue command rejects an argument it does not know and does nothing", async () => {
+  const run = await overdueSetup("/w/typo");
+  try {
+    const cli = join(import.meta.dir, "../src/cli.ts");
+    const res = spawnSync(process.execPath, [cli, "overdue", "--dry-runn"], {
+      encoding: "utf8",
+      env: { ...process.env, ...run.env },
+    });
+    expect(res.status).toBe(2);
+    expect(res.stderr).toContain("--dry-runn");
+    expect(res.stdout).toBe("");
+    expect(existsSync(join(run.env.XDG_STATE_HOME, "swarmail-overdue", "state.json"))).toBe(false);
+  } finally {
+    run.stop();
+  }
+});
+
 test("a failing operator command is retried alone, and the rest of the pass is kept", async () => {
   const rows = [row({ id: 7 }), row({ id: 8 }), row({ id: 9 })];
   const t0 = 40 * 60_000;
