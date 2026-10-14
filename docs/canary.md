@@ -18,10 +18,11 @@ Each run appends one JSON line to `$XDG_STATE_HOME/swarmail-canary/results.jsonl
 to wake), `total_ms` and, for a miss, `error`. A miss prints the line to standard error and exits 1. The run waits up to
 10 seconds for the wake hint.
 
-| Variable         | Default                       | Effect                       |
-| ---------------- | ----------------------------- | ---------------------------- |
-| `SWARMAIL_URL`   | `http://127.0.0.1:18765/mcp/` | The server to test           |
-| `XDG_STATE_HOME` | `~/.local/state`              | Where the log and names live |
+| Variable            | Default                       | Effect                                                          |
+| ------------------- | ----------------------------- | --------------------------------------------------------------- |
+| `SWARMAIL_URL`      | `http://127.0.0.1:18765/mcp/` | The server that receives the mail                               |
+| `SWARMAIL_WAKE_URL` | `http://127.0.0.1:18765`      | Where the receiver waits for its wake hint, as a wake hook does |
+| `XDG_STATE_HOME`    | `~/.local/state`              | Where the log and names live                                    |
 
 ## Run it hourly with systemd
 
@@ -30,11 +31,11 @@ to wake), `total_ms` and, for a miss, `error`. A miss prints the line to standar
 ```ini
 [Unit]
 Description=Swarmail delivery canary
+# OnFailure=my-alert@%n.service
 
 [Service]
 Type=oneshot
 ExecStart=%h/.local/bin/swarmail canary
-# OnFailure=my-alert@%n.service
 ```
 
 `~/.config/systemd/user/swarmail-canary.timer`:
@@ -50,4 +51,4 @@ OnCalendar=hourly
 WantedBy=timers.target
 ```
 
-Then `systemctl --user enable --now swarmail-canary.timer`. Add an `OnFailure=` unit to be told when a run exits 1.
+Then `systemctl --user enable --now swarmail-canary.timer`. Uncomment `OnFailure=` and name a unit of yours to be told when a run exits 1.
