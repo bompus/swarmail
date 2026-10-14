@@ -34,6 +34,8 @@ export interface RegisterState {
   host?: HostProcess | null;
   /** When the host reported the session ended (SessionEnd); its next prompt or edit clears it. */
   ended?: string;
+  /** The T3 thread whose automatic bridge (wake-auto-t3.ts) owns this session's wake; set when its registration settles. */
+  wakeThread?: string;
 }
 
 /** The agent session a registration is for. */

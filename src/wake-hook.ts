@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { hostAlive, processIdentity, type HostProcess } from "./proc.ts";
 import { readWindowsProcess } from "./proc-win32.ts";
 import { openRegistry, registryDir } from "./registry.ts";
+import { parseTag } from "./tag.ts";
 
 interface Proc {
   ppid: number;
@@ -169,11 +170,55 @@ async function receiveHint(
   return hint;
 }
 
+/**
+ * True when the Cursor session is an enrolled T3 thread whose automatic bridge (wake-auto-t3.ts) delivers its mail:
+ * the registration is named, live, settled (no pending tag) and its tag names that same thread and Cursor session.
+ * A native Cursor session, or a registration that is pending, ended, malformed or mismatched, keeps the hook.
+ */
+function bridgeOwns(input: string, env: NodeJS.ProcessEnv): boolean {
+  try {
+    const sid: unknown = JSON.parse(input)?.conversation_id;
+    if (typeof sid !== "string" || !/^[\w-]+$/.test(sid)) {
+      return false;
+    }
+    const state = openRegistry(registryDir(env)).read(sid);
+    if (!state?.name || state.ended || !state.wakeThread) {
+      return false;
+    }
+    return state.projects.some((project) => {
+      const tag = parseTag(state.tags?.[project]);
+      return (
+        state.pending?.project !== project &&
+        state.tags?.[project]?.startsWith(`[t3:${state.wakeThread} cursor:${sid} `) === true &&
+        tag !== null &&
+        tag.t3 === state.wakeThread &&
+        tag.host === "cursor" &&
+        tag.sessionId === sid
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+
 export async function wakeHook(
   host: string | undefined,
   seconds?: number,
   input = "",
   env = process.env,
+): Promise<number> {
+  if (host === "cursor" && bridgeOwns(input, env)) {
+    console.log("{}");
+    return 0;
+  }
+  return waitForMail(host, seconds, input, env);
+}
+
+async function waitForMail(
+  host: string | undefined,
+  seconds: number | undefined,
+  input: string,
+  env: NodeJS.ProcessEnv,
 ): Promise<number> {
   const key = host === "claude" ? "session_id" : host === "cursor" ? "conversation_id" : null;
   if (!key) {
@@ -352,6 +397,10 @@ export async function contextHook(
         : host === "agy"
           ? "conversationId"
           : null;
+  if (host === "cursor" && !stop && bridgeOwns(input, env)) {
+    console.log("{}");
+    return 0;
+  }
   let hint = "";
   try {
     const payload = JSON.parse(input);
