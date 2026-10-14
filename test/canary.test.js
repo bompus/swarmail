@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { canary, httpWait, roundTrip } from "../src/canary.ts";
 import { call } from "../src/mail.ts";
 import { createServer } from "../src/server.ts";
+import { INBOX_NOTICE } from "../src/wake.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "swarmail-canary-"));
 const { server, db } = createServer(join(dir, "mail.sqlite3"), 0);
@@ -82,4 +83,48 @@ test("a trailing slash in SWARMAIL_WAKE_URL still reaches /wait", async () => {
   } finally {
     log.mockRestore();
   }
+});
+
+// A server stub that wakes the receiver and accepts every call, so each check after the wake can fail on its own.
+const stub = ({ inbox, receipt }) =>
+  roundTrip(
+    "/canary-stub",
+    {},
+    async (name, args) => {
+      if (name === "register_agent") {
+        return {
+          name: args.task_description.includes("swarmail-canary-rx") ? "receiver" : "sender",
+        };
+      }
+      if (name === "send_message") {
+        return { id: 7 };
+      }
+      if (name === "fetch_inbox") {
+        return inbox;
+      }
+      if (name === "acknowledge_message") {
+        return {};
+      }
+      return { recipients: [{ recipient: "receiver", ...receipt }] };
+    },
+    async () => INBOX_NOTICE,
+  );
+
+test("a wake without the sent message in the receiver's inbox fails the run", async () => {
+  const { result } = await stub({ inbox: [], receipt: { read_at: "t", acknowledged: true } });
+  expect(result.ok).toBe(false);
+  expect(result.error).toContain("missing from the receiver's inbox");
+});
+
+test("a receipt that is not both read and acknowledged fails the run", async () => {
+  for (const receipt of [
+    { read_at: null, acknowledged: true },
+    { read_at: "t", acknowledged: false },
+  ]) {
+    const { result } = await stub({ inbox: [{ id: 7 }], receipt });
+    expect(result.ok).toBe(false);
+    expect(result.error).toContain("not read and acknowledged");
+  }
+  const ok = await stub({ inbox: [{ id: 7 }], receipt: { read_at: "t", acknowledged: true } });
+  expect(ok.result.ok).toBe(true);
 });
