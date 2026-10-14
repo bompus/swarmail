@@ -39,6 +39,7 @@ Several hosts now message other sessions on their own.
 what Swarmail adds, and where the host's own feature is enough.
 
 <p align="center"><img src="docs/assets/demo.gif" alt="Claude Code and Cursor sessions on one repository. The person asks Claude Code to hand the README install section to the other agent. Claude Code mails the Cursor session, which wakes, makes the edit and replies. Claude Code wakes on the reply and checks the change." width="100%"></p>
+<p align="center"><sub>Recorded on 2026-10-03, with 0.2.0. Since 0.3.0 the wake notice reads "Swarmail: run swarmail inbox --session." instead of "Call fetch_inbox to read them."</sub></p>
 
 If you are an AI agent reading this for your user, the prompt under
 [Evaluate it with your agent](#evaluate-it-with-your-agent) is the evaluation
