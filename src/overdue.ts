@@ -1,7 +1,7 @@
 // `swarmail overdue [--dry-run]`, meant to run on a timer (every 10 minutes works): finds ack_required mail that a live
 // recipient has not acknowledged after the deadline. The recipient gets one automatic reminder in the thread, sent as
 // the original sender so a reply goes back to them; if the deadline passes again, the operator is told through the
-// command SWARMAIL_NOTIFY names, or the line is only printed when it is unset. State lives in
+// command SWARMAIL_NOTIFY names when it is set, and the line is always printed. State lives in
 // $XDG_STATE_HOME/swarmail-overdue/state.json. docs/overdue.md has the setup.
 import { Database } from "bun:sqlite";
 import { spawnSync } from "node:child_process";
@@ -40,13 +40,18 @@ export function overdueRows(
 ): Overdue[] {
   const db = new Database(dbPath, { readonly: true });
   try {
+    const version = db
+      .query<{ user_version: number }, []>("PRAGMA user_version")
+      .get()!.user_version;
+    // A withdrawn delivery no longer asks its recipient for anything; databases before schema 6 cannot withdraw.
+    const live = version >= 6 ? "AND r.withdrawn_ts IS NULL" : "";
     return db
       .query<Overdue, [number, number]>(
         `SELECT m.id, m.subject, p.human_key AS project, s.name AS sender, a.name AS recipient, m.created_ts,
                 s.retired_at IS NOT NULL AS sender_retired
            FROM message_recipients r JOIN messages m ON m.id = r.message_id JOIN agents a ON a.id = r.agent_id
            JOIN agents s ON s.id = m.sender_id JOIN projects p ON p.id = m.project_id
-          WHERE m.ack_required = 1 AND r.ack_ts IS NULL AND a.retired_at IS NULL
+          WHERE m.ack_required = 1 AND r.ack_ts IS NULL AND a.retired_at IS NULL ${live}
             AND m.created_ts < ?1 AND m.created_ts > ?2
           ORDER BY m.id`,
       )

@@ -8,7 +8,8 @@ deadline has passed, does two things:
 2. If the mail is still unacknowledged one deadline after the reminder, or no reminder could be sent, it reports the
    problem to the operator once.
 
-Retired recipients, acknowledged mail and mail older than the window are left alone. The command runs once and exits;
+Retired recipients, withdrawn deliveries, acknowledged mail and mail older than the window are left alone. Mail that
+passes the window's edge before its second deadline is not escalated. The command runs once and exits;
 run it from a timer. Every 10 minutes works.
 
 ```
@@ -33,9 +34,9 @@ recipient.
 
 ## Operator reports
 
-With `SWARMAIL_NOTIFY` unset, the command only prints the report as a line of output (`notify the operator: ...`) and
-records it as sent. Set `SWARMAIL_NOTIFY` to an executable to receive it. The command is run directly, without a shell,
-with these arguments:
+The command always prints each report as a line of output (`notify the operator: ...`) and records it as sent. With
+`SWARMAIL_NOTIFY` unset, that is all. Set `SWARMAIL_NOTIFY` to an executable to receive it as well. The command is run
+directly, without a shell, with these arguments:
 
 ```
 <command> --key KEY --title TITLE --body BODY --severity warn --source swarmail [--detail DETAIL]

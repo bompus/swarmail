@@ -101,6 +101,32 @@ test("overdue rows skip acknowledged and retired recipients and mail outside the
   expect(overdueRows(dbPath, 30, 24, Date.now() + 25 * 3_600_000)).toEqual([]); // older than the window
 });
 
+test("overdue rows skip a delivery the sender withdrew", async () => {
+  const P = "/w/withdrawn";
+  for (const name of ["BlueLake", "GreenCastle", "RedStone"]) {
+    await mcp("register_agent", { project_key: P, program: "t", model: "m", name });
+  }
+  const { id } = await mcp("send_message", {
+    project_key: P,
+    sender_name: "BlueLake",
+    to: ["GreenCastle", "RedStone"],
+    subject: "ack me",
+    body_md: "b",
+    ack_required: true,
+  });
+  db.run(
+    `UPDATE message_recipients SET withdrawn_ts = 1 WHERE message_id = ?1
+       AND agent_id = (SELECT a.id FROM agents a JOIN projects p ON p.id = a.project_id WHERE p.human_key = ?2 AND a.name = 'GreenCastle')`,
+    [id, P],
+  );
+  const later = Date.now() + 40 * 60_000;
+  expect(
+    overdueRows(dbPath, 30, 24, later)
+      .filter((r) => r.project === P)
+      .map((r) => [r.id, r.recipient]),
+  ).toEqual([[id, "RedStone"]]);
+});
+
 test("a reminder goes in the thread as the original sender, and a retired sender's goes to the operator instead", async () => {
   const P = "/w/gamma";
   for (const name of ["BlueLake", "GreenCastle", "PinkFox"]) {

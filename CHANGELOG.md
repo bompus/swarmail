@@ -6,8 +6,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 - `swarmail overdue [--dry-run]` reminds a recipient who has not acknowledged an `ack_required` message, then reports it
   to the operator once if it is still unacknowledged a deadline later. Run it from a timer; `docs/overdue.md` has the
-  settings and a systemd example. The operator report goes to the command `SWARMAIL_NOTIFY` names and is only printed
-  when it is unset.
+  settings and a systemd example. The command prints what it does; the operator report also goes to the command
+  `SWARMAIL_NOTIFY` names when it is set.
 
 - The MCP connection instructions and `docs/usage.md` no longer use the wording of one person's offer-and-reply
   conventions ("a whole-session All done option", "an unanswered offer", "a bare option code"). They say that the
