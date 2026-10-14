@@ -205,6 +205,9 @@ keeps one name across repositories.
 | `swarmail guard`                                                  | The git guard                                                                                                    |
 | `swarmail version`                                                | The source hash the binary was built from                                                                        |
 | `swarmail updates --session`                                      | Approved update targets and loaded-revision confirmations                                                        |
+| `swarmail overdue [--dry-run]`                                    | Remind recipients of unacknowledged `ack_required` mail, then the operator ([setup](docs/overdue.md))            |
+| `swarmail canary`                                                 | One send, wake and acknowledge round trip, logged for a timer ([setup](docs/canary.md))                          |
+| `swarmail pr-sessions <PR URL> --project <checkout>`              | T3 conversations and agents linked to a pull request ([details](docs/pr-sessions.md))                            |
 
 `swarmail --help` lists every subcommand and flag. A `--help` or `-h`
 anywhere prints usage and runs nothing.
@@ -347,7 +350,7 @@ wake an idle session.
 
 Measured on 2026-10-04 at
 [`67e187a`](https://github.com/bompus/swarmail/tree/67e187a6b4beb7319c6ab30466448742297e2a01).
-These results have not been remeasured for 0.4.0, 0.5.0, 0.5.1, 0.5.2 or 0.5.3.
+These results have not been remeasured for 0.4.0, 0.5.0, 0.5.1, 0.5.2, 0.5.3 or 0.6.0.
 The measurements used one machine with one small workload (40 agents, 250 seed messages,
 1,560 messages by the end). Each server started on empty storage. Startup is
 hyperfine's mean of 20 runs; every other number is the median of three rounds,
