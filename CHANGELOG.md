@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.6.0 - 2026-10-14
 
 - `swarmail pr-sessions <PR URL> --project <checkout>` prints, as JSON, which local T3 V2 conversations are linked to a
   GitHub pull request and which Swarmail agents carry their tags. It opens the T3 database read-only and never reads
