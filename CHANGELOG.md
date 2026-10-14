@@ -7,7 +7,7 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - `swarmail wake-auto-t3 <config.json> [--check | --retry-thread <id>]` is a built-in command: a supervisor that starts a
   wake bridge for every eligible T3 Codex thread, and every eligible Cursor thread under T3 Orchestrator V2, so they wake on mail
   without per-thread setup. `docs/wake-bridges.md` has the configuration, how a failed bridge is quarantined and how
-  to retry it.
+  to retry it. It runs on Linux only.
 - `swarmail hook wake cursor` and `swarmail hook context cursor` now return at once for a Cursor session whose settled
   automatic T3 registration belongs to a `wake-auto-t3` bridge, so the hook and the bridge do not both wait on that
   session.
@@ -24,7 +24,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   has the setup.
 
 - `swarmail overdue [--dry-run]` reminds a recipient who has not acknowledged an `ack_required` message, then reports it
-  to the operator once if it is still unacknowledged a deadline later. Run it from a timer; `docs/overdue.md` has the
+  to the operator once if it is still unacknowledged a deadline later, or at once when the sender has retired and no
+  reminder can be sent. Run it from a timer; `docs/overdue.md` has the
   settings and a systemd example. The command prints what it does; the operator report also goes to the command
   `SWARMAIL_NOTIFY` names when it is set.
 

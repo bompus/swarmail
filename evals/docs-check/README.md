@@ -56,26 +56,27 @@ edit in one line, can be misjudged; it is a coarse screen, not a proof.
 
 ## Latest run
 
-2026-10-12, on the README and `docs/usage.md` at `6e1c65c` (the 0.5.3 text plus
-the plainer wording of #140), with `tools.json` taken from that source's
-`tools/list`. Seven model seats, three runs each, 84 replies: every cell
-passed all required checks.
+2026-10-14, on the README and `docs/usage.md` of the 0.6.0 release commit
+(`3338307`; both files are identical to the ones the run used), with the committed
+`tools.json` (the tool list has not changed since 0.5.3). Seven model seats, three runs each, 84 replies: 83 passed all required
+checks.
 
 | Case       | Cells passing |
 | ---------- | ------------- |
-| `install`  | 21 of 21      |
+| `install`  | 20 of 21      |
 | `evaluate` | 21 of 21      |
 | `notify`   | 21 of 21      |
 | `inbox`    | 21 of 21      |
 
-The first grading reported 81 of 84. The three failures were `notify` replies
-that read the code with `git grep` before mailing; the grader counted `git grep`
-as an edit. `git grep` is now read-only in `grade.ts`, and the grades of the
-138 replies recorded in the earlier runs are unchanged by that fix.
+The one failure was a `gpt6luna` `install` reply with no `TOOL_CALL:` lines: it
+said it could not run shell commands and wrote bash blocks instead, one of them
+`bun scripts/enable.sh` for a script that is run directly. The model's other two
+`install` replies and every other seat passed, so the README wording was not
+changed.
 
 Optional checks that some replies missed, none of which fail a cell:
 
-- `inbox`: ten replies did not pause the migration before acknowledging, seven
-  did not tell SilverPine why they would not push, and three did not
-  acknowledge RedOak's request.
-- `evaluate`: one reply did not clone and two did not check systemd.
+- `inbox`: ten replies did not pause the migration before acknowledging and
+  eleven did not tell SilverPine why they would not push.
+- `evaluate`: two replies did not read `docs/usage.md` and two did not check
+  systemd.
