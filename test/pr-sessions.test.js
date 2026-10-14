@@ -407,11 +407,16 @@ test("malformed or unsupported recognized input fails visibly without reporting 
     url() + "?tab=files",
     url(9007199254740992),
   ]) {
-    expect(run(f, input).status).toBe(1);
+    const result = run(f, input);
+    expect(result.status).toBe(1);
+    expect(result.error).not.toContain("malformed metadata");
   }
   expect(run(f, url(), ["--project", f.project]).status).toBe(1);
   rmSync(f.file);
-  expect(run(f).status).toBe(1);
+  const missing = run(f);
+  expect(missing.status).toBe(1);
+  expect(missing.error).toContain("local T3 store is missing");
+  expect(missing.error).not.toContain("malformed metadata");
   expect(readdirSync(join(f.profile, "userdata"))).toEqual([]);
 });
 test("repeat invocation preserves store bytes and creates no sidecar or roster files", () => {

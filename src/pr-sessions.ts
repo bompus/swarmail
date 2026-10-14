@@ -66,6 +66,12 @@ function requireValue(condition: unknown, context: string): asserts condition {
     throw new Error(`Unsupported or malformed metadata: ${context}`);
   }
 }
+/** A problem with the command line or the machine, not with stored metadata. */
+function requireArgument(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
 function object(value: unknown, context: string): ObjectValue {
   requireValue(value && typeof value === "object" && !Array.isArray(value), context);
   return value as ObjectValue;
@@ -540,8 +546,13 @@ export async function prSessions(args: string[]): Promise<number> {
       console.log(usage);
       return 0;
     }
-    requireValue(args[0] && !args[0].startsWith("-"), usage);
-    const target = prUrl(args[0]);
+    requireArgument(args[0] && !args[0].startsWith("-"), usage);
+    let target: Pr;
+    try {
+      target = prUrl(args[0]);
+    } catch {
+      throw new Error("expected an exact https://github.com/owner/repository/pull/number URL");
+    }
     let scope: string | undefined;
     let profile: string | undefined;
     let includeHidden = false;
@@ -561,10 +572,10 @@ export async function prSessions(args: string[]): Promise<number> {
         throw new Error(usage);
       }
     }
-    requireValue(scope, "an explicit --project is required");
+    requireArgument(scope, "an explicit --project is required");
     const path = projectPath(scope);
     const file = t3StatePath(profile ? realpathSync(profile) : t3Home());
-    requireValue(existsSync(file), "local T3 store is missing");
+    requireArgument(existsSync(file), "local T3 store is missing");
     const db = new Database(file, { readonly: true });
     try {
       requireValue(isT3V2(db), "T3 V1 is unsupported");
@@ -584,7 +595,7 @@ export async function prSessions(args: string[]): Promise<number> {
             return false;
           }
         });
-      requireValue(projects.length > 0, "no local T3 project matches --project");
+      requireArgument(projects.length > 0, "no local T3 project matches --project");
       const room = roster(path);
       const matches = collectMatches(db, projects, target, includeHidden, room);
       db.run("COMMIT");
