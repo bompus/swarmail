@@ -8,6 +8,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   wake bridge for every eligible T3 Codex thread, and every eligible Cursor thread under T3 Orchestrator V2, so they wake on mail
   without per-thread setup. `docs/wake-bridges.md` has the configuration, how a failed bridge is quarantined and how
   to retry it.
+- `swarmail hook wake cursor` and `swarmail hook context cursor` now return at once for a Cursor session whose settled
+  automatic T3 registration belongs to a `wake-auto-t3` bridge, so the hook and the bridge do not both wait on that
+  session.
 
 ## 0.6.0 - 2026-10-14
 

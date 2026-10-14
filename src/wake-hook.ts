@@ -207,13 +207,22 @@ export async function wakeHook(
   input = "",
   env = process.env,
 ): Promise<number> {
+  if (host === "cursor" && bridgeOwns(input, env)) {
+    console.log("{}");
+    return 0;
+  }
+  return waitForMail(host, seconds, input, env);
+}
+
+async function waitForMail(
+  host: string | undefined,
+  seconds: number | undefined,
+  input: string,
+  env: NodeJS.ProcessEnv,
+): Promise<number> {
   const key = host === "claude" ? "session_id" : host === "cursor" ? "conversation_id" : null;
   if (!key) {
     console.error("usage: swarmail hook wake <claude|cursor> [seconds]");
-    return 0;
-  }
-  if (host === "cursor" && bridgeOwns(input, env)) {
-    console.log("{}");
     return 0;
   }
   const quiet = () => quietWake(host);

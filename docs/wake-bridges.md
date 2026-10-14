@@ -221,6 +221,9 @@ would wait on the same session ID as that hook; the server ends the older wait w
 because credential rotation needs Unix file permissions. Run it under a service manager; it has no forced shutdown
 deadline, and on SIGTERM or SIGINT its bridges stop polling at once while outstanding T3 calls finish.
 
+For a Cursor session that holds a settled automatic T3 registration, `swarmail hook wake cursor` and
+`swarmail hook context cursor` return at once, because that session's bridge already waits on its mail.
+
 The configuration is the [bridge configuration](#configure-and-run) with these differences:
 
 - Leave out `target.id`; each thread's bridge supplies its own.
