@@ -139,6 +139,15 @@ const COMMANDS: Record<string, Command> = {
       process.exit(await overdue(args));
     },
   },
+  canary: {
+    usage: [
+      "swarmail canary                                  one delivery round trip through the server, logged (canary.ts)",
+    ],
+    run: async () => {
+      const { canary } = await import("./canary.ts");
+      process.exit(await canary());
+    },
+  },
   ...Object.fromEntries([
     mail(
       "inbox",
