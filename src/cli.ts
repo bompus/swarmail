@@ -130,6 +130,15 @@ const COMMANDS: Record<string, Command> = {
       }
     },
   },
+  overdue: {
+    usage: [
+      "swarmail overdue [--dry-run]                     remind, then report, recipients of unacknowledged ack_required mail (overdue.ts)",
+    ],
+    run: async (args) => {
+      const { overdue } = await import("./overdue.ts");
+      process.exit(await overdue(args));
+    },
+  },
   ...Object.fromEntries([
     mail(
       "inbox",
