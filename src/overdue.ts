@@ -79,8 +79,9 @@ export async function checkOverdue({
   minutes: number;
   now?: number;
   dryRun?: boolean;
-}): Promise<{ actions: string[]; state: OverdueState }> {
+}): Promise<{ actions: string[]; state: OverdueState; failures: string[] }> {
   const actions: string[] = [];
+  const failures: string[] = [];
   const live = new Set(rows.map((r) => `${r.id}:${r.recipient}`));
   // Acknowledged, retired or aged-out entries leave the state.
   const next: OverdueState = {
@@ -93,14 +94,19 @@ export async function checkOverdue({
     }
     actions.push(`notify the operator: ${r.recipient} has not acknowledged #${r.id} ${why}`);
     if (!dryRun) {
-      notify({
-        key: `swarmail-overdue:${key}`,
-        title: `Unacknowledged: ${r.recipient} on "${r.subject}"`,
-        body: `${r.sender}'s message #${r.id} in ${basename(r.project)} is unacknowledged ${why}.`,
-        severity: "warn",
-        detail: `swarmail who ${r.project}`,
-      });
-      next.escalated.push(key);
+      // A failed report stays out of `escalated`, so the next pass sends it again; the rest of this pass still counts.
+      try {
+        notify({
+          key: `swarmail-overdue:${key}`,
+          title: `Unacknowledged: ${r.recipient} on "${r.subject}"`,
+          body: `${r.sender}'s message #${r.id} in ${basename(r.project)} is unacknowledged ${why}.`,
+          severity: "warn",
+          detail: `swarmail who ${r.project}`,
+        });
+        next.escalated.push(key);
+      } catch (e) {
+        failures.push(`${key}: ${(e as Error).message}`);
+      }
     }
   };
   for (const r of rows) {
@@ -150,7 +156,7 @@ export async function checkOverdue({
       );
     }
   }
-  return { actions, state: next };
+  return { actions, state: next, failures };
 }
 
 /**
@@ -170,7 +176,9 @@ export function notifyCommand(env: NodeJS.ProcessEnv): Notify {
     }
     const res = spawnSync(bin, args, { encoding: "utf8" });
     if (res.status !== 0) {
-      throw new Error(`SWARMAIL_NOTIFY command exited ${res.status}: ${res.stderr || res.error}`);
+      // Bun leaves stderr undefined when the command could not start.
+      const why = (res.stderr as string | undefined)?.trim() || res.error?.message || "no output";
+      throw new Error(`SWARMAIL_NOTIFY command exited ${res.status}: ${why}`);
     }
   };
 }
@@ -204,5 +212,8 @@ export async function overdue(
     mkdirSync(dirname(statePath), { recursive: true });
     writeFileSync(statePath, JSON.stringify(result.state) + "\n");
   }
-  return 0;
+  for (const failure of result.failures) {
+    console.error(`swarmail overdue: operator report failed for ${failure}`);
+  }
+  return result.failures.length > 0 ? 1 : 0;
 }

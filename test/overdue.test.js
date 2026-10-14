@@ -317,3 +317,65 @@ test("the overdue command prints what it would do for --dry-run and records noth
     run.stop();
   }
 });
+
+test("a failing operator command is retried alone, and the rest of the pass is kept", async () => {
+  const rows = [row({ id: 7 }), row({ id: 8 }), row({ id: 9 })];
+  const t0 = 40 * 60_000;
+  const calls = [];
+  let failing = true;
+  const pass = (state, now) =>
+    checkOverdue({
+      rows,
+      state,
+      minutes: 30,
+      now,
+      call: async (name, args) => calls.push(args.message_id),
+      notify: (note) => {
+        if (failing && note.key.endsWith("8:GreenCastle")) {
+          throw new Error("notifier down");
+        }
+      },
+    });
+  let { state } = await pass({ nudged: {}, escalated: [] }, t0);
+  expect(calls).toEqual([7, 8, 9]);
+  const second = await pass(state, t0 + 30 * 60_000);
+  // The failure is reported, not thrown, so the other two reports and the state still count.
+  expect(second.failures).toHaveLength(1);
+  expect(second.failures[0]).toContain("8:GreenCastle");
+  expect(second.state.escalated).toEqual(["7:GreenCastle", "9:GreenCastle"]);
+  expect(Object.keys(second.state.nudged).sort()).toEqual([
+    "7:GreenCastle",
+    "8:GreenCastle",
+    "9:GreenCastle",
+  ]);
+  failing = false;
+  const third = await pass(second.state, t0 + 40 * 60_000);
+  expect(third.failures).toEqual([]);
+  expect(third.state.escalated).toHaveLength(3);
+});
+
+test.skipIf(process.platform === "win32")(
+  "the command saves its state and exits 1 when the SWARMAIL_NOTIFY command fails",
+  async () => {
+    const run = await overdueSetup("/w/notify-fails");
+    try {
+      const script = join(run.root, "fail.sh");
+      writeFileSync(script, "#!/bin/sh\nexit 3\n");
+      chmodSync(script, 0o755);
+      const env = { ...run.env, SWARMAIL_NOTIFY: script };
+      expect(await quiet(() => overdue([], env))).toBe(0); // the reminder pass
+      expect(await quiet(() => overdue([], env))).toBe(1); // the report fails
+      // A command that cannot start is a failed report too, not a crash.
+      expect(
+        await quiet(() => overdue([], { ...env, SWARMAIL_NOTIFY: join(run.root, "missing") })),
+      ).toBe(1);
+      const state = JSON.parse(
+        readFileSync(join(env.XDG_STATE_HOME, "swarmail-overdue", "state.json"), "utf8"),
+      );
+      expect(Object.keys(state.nudged)).toEqual([`${run.id}:GreenCastle`]);
+      expect(state.escalated).toEqual([]);
+    } finally {
+      run.stop();
+    }
+  },
+);

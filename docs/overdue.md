@@ -42,8 +42,9 @@ with these arguments:
 ```
 
 `KEY` is stable for one message and recipient, so a command that deduplicates by key shows one card. `--detail` holds a
-`swarmail who` command that shows the recipient's session. A command that exits with a status other than 0 fails the
-run, and the report is sent again on the next run.
+`swarmail who` command that shows the recipient's session. A command that exits with a status other than 0 is a failed report: the
+command prints it to standard error, still saves everything else it did, exits 1 and sends only that report again on
+the next run.
 
 ## Run it every 10 minutes with systemd
 
