@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- `swarmail pr-sessions <PR URL> --project <checkout>` prints, as JSON, which local T3 V2 conversations are linked to a
+  GitHub pull request and which Swarmail agents carry their tags. It opens the T3 database read-only and never reads
+  conversation content; `docs/pr-sessions.md` lists the arguments, the output and its limits.
+
 - `swarmail canary` sends one message through the running server and follows it to an acknowledgement: it must wake a
   waiting receiver, appear in its inbox and show as read and acknowledged. It appends a line to
   `$XDG_STATE_HOME/swarmail-canary/results.jsonl` and exits 1 on a miss, so a timer can alert on it; `docs/canary.md`

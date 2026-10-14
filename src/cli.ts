@@ -148,6 +148,15 @@ const COMMANDS: Record<string, Command> = {
       process.exit(await canary());
     },
   },
+  "pr-sessions": {
+    usage: [
+      "swarmail pr-sessions <PR URL> --project <checkout> [--include-hidden] [--t3-home <local-profile>]  read local T3 V2 PR associations (pr-sessions.ts)",
+    ],
+    run: async (args) => {
+      const { prSessions } = await import("./pr-sessions.ts");
+      process.exit(await prSessions(args));
+    },
+  },
   ...Object.fromEntries([
     mail(
       "inbox",
