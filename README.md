@@ -188,26 +188,27 @@ keeps one name across repositories.
 
 ## Commands
 
-| Command                                                           | What it does                                                                                                     |
-| ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `swarmail serve`                                                  | Run the server                                                                                                   |
-| `swarmail who [repo]`                                             | Agent names, session titles and edit checkouts, live sessions first                                              |
-| `swarmail inbox`, `send`, `search`                                | Read, send or search mail as this session                                                                        |
-| `swarmail thread <id>`                                            | One thread's messages, oldest first                                                                              |
-| `swarmail inbox --session`                                        | Drain this session's unread mail across repositories                                                             |
-| `swarmail wake-bridge <config.json>`                              | Deliver notices to one explicitly configured local target                                                        |
-| `swarmail send <to> <subject> <body> --notification-policy quiet` | Store normal/low informational mail without an automatic inbox hint                                              |
-| `swarmail ping <agent>`                                           | Exit 0 if that agent's wake hook is waiting                                                                      |
-| `swarmail register`                                               | The register hook; `--tag` prints the tag for a manual registration; `--host <host>` selects the host explicitly |
-| `swarmail hook wake <host>`                                       | The Claude Code and Cursor wake hook                                                                             |
-| `swarmail hook context <cursor\|devin\|agy> [stop]`               | Check mail at a native context point without cancelling the task                                                 |
-| `swarmail hook rearm`                                             | The Claude Code re-arm on Windows, which has no POSIX shell to run the Linux one                                 |
-| `swarmail guard`                                                  | The git guard                                                                                                    |
-| `swarmail version`                                                | The source hash the binary was built from                                                                        |
-| `swarmail updates --session`                                      | Approved update targets and loaded-revision confirmations                                                        |
-| `swarmail overdue [--dry-run]`                                    | Remind recipients of unacknowledged `ack_required` mail; report to the operator ([setup](docs/overdue.md))       |
-| `swarmail canary`                                                 | One send, wake and acknowledge round trip, logged for a timer ([setup](docs/canary.md))                          |
-| `swarmail pr-sessions <PR URL> --project <checkout>`              | T3 conversations and agents linked to a pull request ([details](docs/pr-sessions.md))                            |
+| Command                                                                | What it does                                                                                                                             |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `swarmail serve`                                                       | Run the server                                                                                                                           |
+| `swarmail who [repo]`                                                  | Agent names, session titles and edit checkouts, live sessions first                                                                      |
+| `swarmail inbox`, `send`, `search`                                     | Read, send or search mail as this session                                                                                                |
+| `swarmail thread <id>`                                                 | One thread's messages, oldest first                                                                                                      |
+| `swarmail inbox --session`                                             | Drain this session's unread mail across repositories                                                                                     |
+| `swarmail wake-bridge <config.json>`                                   | Deliver notices to one explicitly configured local target                                                                                |
+| `swarmail send <to> <subject> <body> --notification-policy quiet`      | Store normal/low informational mail without an automatic inbox hint                                                                      |
+| `swarmail ping <agent>`                                                | Exit 0 if that agent's wake hook is waiting                                                                                              |
+| `swarmail register`                                                    | The register hook; `--tag` prints the tag for a manual registration; `--host <host>` selects the host explicitly                         |
+| `swarmail hook wake <host>`                                            | The Claude Code and Cursor wake hook                                                                                                     |
+| `swarmail hook context <cursor\|devin\|agy> [stop]`                    | Check mail at a native context point without cancelling the task                                                                         |
+| `swarmail hook rearm`                                                  | The Claude Code re-arm on Windows, which has no POSIX shell to run the Linux one                                                         |
+| `swarmail guard`                                                       | The git guard                                                                                                                            |
+| `swarmail version`                                                     | The source hash the binary was built from                                                                                                |
+| `swarmail updates --session`                                           | Approved update targets and loaded-revision confirmations                                                                                |
+| `swarmail overdue [--dry-run]`                                         | Remind recipients of unacknowledged `ack_required` mail; report to the operator ([setup](docs/overdue.md))                               |
+| `swarmail wake-auto-t3 <config.json> [--check \| --retry-thread <id>]` | Linux only: start a wake bridge for each eligible T3 Codex and Cursor thread ([setup](docs/wake-bridges.md#automatic-t3-bridge-startup)) |
+| `swarmail canary`                                                      | One send, wake and acknowledge round trip, logged for a timer ([setup](docs/canary.md))                                                  |
+| `swarmail pr-sessions <PR URL> --project <checkout>`                   | T3 conversations and agents linked to a pull request ([details](docs/pr-sessions.md))                                                    |
 
 `swarmail --help` lists every subcommand and flag. A `--help` or `-h`
 anywhere prints usage and runs nothing.

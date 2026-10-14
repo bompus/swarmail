@@ -212,6 +212,43 @@ T3 admission guard is required to close that gap. Standalone SessionEnd hooks
 keep their current behavior; automatic retirement needs verified activation
 and end-event ordering before it can be enabled.
 
+## Automatic T3 bridge startup
+
+`swarmail wake-auto-t3 <config.json>` is a long-running supervisor that starts one bridge for every eligible T3
+Codex thread, and for every Cursor thread under T3 Orchestrator V2, so they wake on mail without per-thread setup.
+Claude threads are left out: the Swarmail mod, or without it their stop hook, already wakes them in T3, and a bridge
+would wait on the same session ID as that hook; the server ends the older wait with a 409. It runs on Linux only,
+because credential rotation needs Unix file permissions. Run it under a service manager; it has no forced shutdown
+deadline, and on SIGTERM or SIGINT its bridges stop polling at once while outstanding T3 calls finish.
+
+The configuration is the [bridge configuration](#configure-and-run) with these differences:
+
+- Leave out `target.id`; each thread's bridge supplies its own.
+- `target.type` is `t3-v1-steer` or `t3-v2-queue`. `target.delivery` is optional and may only be `auto`, with `t3-v2-queue`.
+- `target.url` is optional. The supervisor reads the port T3 publishes in `<baseDir>/userdata/server-runtime.json` and
+  uses `target.url` only when that file is missing.
+- `rotation` is required: `verifyBackend` must be `true` and `baseDir` is T3's base directory. It enables the
+  [credential rotation](#optional-t3-reader-primitives) the bridges send with. With `verifyBackend`, T3's own binary
+  is used and any `executable` or `version` in the file is ignored.
+- `enrollAfter` is required: an ISO time. Only threads whose T3 runtime record was last updated after it enroll (a
+  window of recent activity also applies, whichever is later).
+
+`swarmail wake-auto-t3 <config.json> --check` validates the supervisor-specific fields and the URL syntax, then exits 0
+without starting anything; it does not check the credential file or whether T3 is available.
+
+A thread gets a bridge when T3's runtime records show a running Codex or Cursor thread (a V2 thread counts as running
+while its provider thread is idle or active; subagent threads, which V2 makes read-only, are skipped). It loses it when
+the thread is settled, or its session ends, is replaced, archived or deleted. Settling keeps the mailbox and pending
+journal, and reactivating the thread restores the bridge unless it is quarantined. Each bridge keeps its own mailbox
+lock and journal, as a manual `wake-bridge` does.
+
+A bridge that fails is quarantined with its reason in the supervisor state; healthy bridges continue. Restarting T3 or
+the supervisor, settling or reactivating the thread, and a backend port change do not retry it. After resolving the
+cause, stop the supervisor and run `swarmail wake-auto-t3 <config.json> --retry-thread <thread-id>`; this clears only
+that thread's quarantine and leaves its journal and pending command intact. A malformed failure record, an invalid
+shared configuration or a credential failure stops the supervisor. If T3 stays unreachable for five minutes, or a
+different program holds its port, the supervisor stops too.
+
 ## Optional T3 reader primitives
 
 Linux reader consumers can import `credentialService` and `wakeCredentials`
