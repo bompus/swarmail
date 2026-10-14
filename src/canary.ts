@@ -119,7 +119,9 @@ export async function roundTrip(
 /** GET /wait as a wake hook does: the hint, or null on 204. A server that stops answering fails the run after the wait time plus `graceMs`. */
 export function httpWait(base: string, graceMs = 5000): Wait {
   return async (session, seconds) => {
-    const res = await fetch(`${base}/wait?session=${session}&timeout=${seconds}`, {
+    const url = new URL("/wait", base); // As the wake hook builds it, so a trailing slash in the base does no harm.
+    url.search = new URLSearchParams({ session, timeout: String(seconds) }).toString();
+    const res = await fetch(url, {
       signal: AbortSignal.timeout(seconds * 1000 + graceMs),
     });
     if (res.status === 204) {

@@ -74,3 +74,12 @@ test("a wait that never answers is cut off after the wait time plus a grace peri
     silent.stop(true);
   }
 });
+
+test("a trailing slash in SWARMAIL_WAKE_URL still reaches /wait", async () => {
+  const log = spyOn(console, "log").mockImplementation(() => {});
+  try {
+    expect(await canary({ ...env, SWARMAIL_WAKE_URL: `${env.SWARMAIL_WAKE_URL}/` })).toBe(0);
+  } finally {
+    log.mockRestore();
+  }
+});
