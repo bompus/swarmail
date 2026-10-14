@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, test as bunTest } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { hostAlive } from "../src/proc.ts";
@@ -25,6 +25,9 @@ import {
 } from "../src/wake-auto-t3.ts";
 import { testScratch } from "./fixtures/test-scratch.js";
 import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.js";
+
+// The supervisor needs Unix file permissions for credential rotation and the tests use POSIX shell wrappers.
+const test = process.platform === "linux" ? bunTest : bunTest.skip;
 
 const scratch = testScratch("swarmail-auto-tests", "automatic T3 wake regression tests");
 

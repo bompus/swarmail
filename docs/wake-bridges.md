@@ -217,7 +217,7 @@ and end-event ordering before it can be enabled.
 `swarmail wake-auto-t3 <config.json>` is a long-running supervisor that starts one bridge for every eligible T3
 Codex thread, and for every Cursor thread under T3 Orchestrator V2, so they wake on mail without per-thread setup.
 Claude threads are left out: the Swarmail mod, or without it their stop hook, already wakes them in T3, and a bridge
-would send each hint twice. Run it under a service manager; it has no forced shutdown deadline, and on SIGTERM or
+would send each hint twice. It runs on Linux only, because credential rotation needs Unix file permissions. Run it under a service manager; it has no forced shutdown deadline, and on SIGTERM or
 SIGINT its bridges stop polling at once while outstanding T3 calls finish.
 
 The configuration is the [bridge configuration](#configure-and-run) with these differences:
