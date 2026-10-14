@@ -139,6 +139,15 @@ const COMMANDS: Record<string, Command> = {
       process.exit(await overdue(args));
     },
   },
+  "wake-auto-t3": {
+    usage: [
+      "swarmail wake-auto-t3 <config.json> [--check | --retry-thread <id>]  supervised automatic T3 Codex and Cursor bridge startup (wake-auto-t3.ts)",
+    ],
+    run: async (args) => {
+      const { wakeAutoT3 } = await import("./wake-auto-t3.ts");
+      process.exit(await wakeAutoT3(args));
+    },
+  },
   canary: {
     usage: [
       "swarmail canary                                  one delivery round trip through the server, logged (canary.ts)",

@@ -4,6 +4,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## 0.6.0 - 2026-10-14
 
+- `swarmail wake-auto-t3 <config.json> [--check | --retry-thread <id>]` is a built-in command: a supervisor that starts a
+  wake bridge for every eligible T3 Codex thread, and every Cursor thread under T3 Orchestrator V2, so they wake on mail
+  without per-thread setup. `docs/wake-bridges.md` has the configuration, how a failed bridge is quarantined and how
+  to retry it.
+
 - `swarmail pr-sessions <PR URL> --project <checkout>` prints, as JSON, which local T3 V2 conversations are linked to a
   GitHub pull request and which Swarmail agents carry their tags. It opens the T3 database read-only and never reads
   conversation content; `docs/pr-sessions.md` lists the arguments, the output and its limits.
