@@ -4,6 +4,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- `swarmail canary` sends one message through the running server and follows it to an acknowledgement: it must wake a
+  waiting receiver, appear in its inbox and show as read and acknowledged. It appends a line to
+  `$XDG_STATE_HOME/swarmail-canary/results.jsonl` and exits 1 on a miss, so a timer can alert on it; `docs/canary.md`
+  has the setup.
+
 - `swarmail overdue [--dry-run]` reminds a recipient who has not acknowledged an `ack_required` message, then reports it
   to the operator once if it is still unacknowledged a deadline later. Run it from a timer; `docs/overdue.md` has the
   settings and a systemd example. The command prints what it does; the operator report also goes to the command
