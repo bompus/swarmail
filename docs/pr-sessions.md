@@ -16,10 +16,11 @@ swarmail pr-sessions <https://github.com/owner/repo/pull/number> --project <chec
 
 ## Output
 
-`matches` holds one entry per T3 conversation linked to the pull request, with its associations, stacked-PR chains,
-the active provider conversation, the retained provider history and `swarmail.identities`: the Swarmail agents whose
-registration tags name that conversation (`status` is `matched`, `unknown` or `unavailable`). `coverage` names the
-databases read and states the limits.
+`matches` holds one entry per T3 conversation linked to the pull request, or whose branch T3 discovered the pull request
+from: `associations` lists the links the user or T3 recorded, and `branchDiscovery` is set when only the branch matched
+and no link exists. Each entry also has stacked-PR chains, the active provider conversation, the retained provider
+history and `swarmail.identities`: the Swarmail agents whose registration tags name that conversation (`status` is
+`matched`, `unknown` or `unavailable`). `coverage` names the databases read and states the limits.
 
 ## Limits
 
