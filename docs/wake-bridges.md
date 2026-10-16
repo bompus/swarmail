@@ -221,6 +221,13 @@ would wait on the same session ID as that hook; the server ends the older wait w
 because credential rotation needs Unix file permissions. Run it under a service manager; it has no forced shutdown
 deadline, and on SIGTERM or SIGINT its bridges stop polling at once while outstanding T3 calls finish.
 
+This command is experimental and opt-in: it does nothing without a configuration file. It drives T3 Code through
+T3's internal HTTP and WebSocket control plane, which T3 does not document, and it reads T3's database to find
+threads. It was written against T3 Code Orchestrator V2 in the 0.0.46 to 0.1.x releases, and a T3 Code update can
+break it. T3 Code now provides `t3_thread_send`, a server-side queue and webhook scheduled tasks natively, so Swarmail
+may remove this command if T3 Code covers waking threads (see
+[Provider coverage](provider-coverage.md#tracking-t3-code)).
+
 For a Cursor session that holds a settled automatic T3 registration, `swarmail hook wake cursor` and
 `swarmail hook context cursor` return at once, because that session's bridge already waits on its mail.
 

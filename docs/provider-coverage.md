@@ -2,7 +2,8 @@
 
 What each agent host already provides for sessions that talk to each other,
 where Swarmail adds to it, and where the host's own feature is enough. Checked
-on 2026-10-11 against the versions in the table below. Hosts change quickly, so
+on 2026-10-11 against the versions in the table below, except T3 Code, checked
+on 2026-10-16. Hosts change quickly, so
 recheck a limit before you depend on it.
 
 "Independent sessions" means sessions you started yourself, in separate
@@ -31,7 +32,7 @@ version show none. A test did not prove the absence.
 | Antigravity (agy 1.3.3)          | Yes, tested: `send_message` reaches a separate process | No for an idle interactive session, tested: delivered at next turn      | Context before each model call, and a continue at `Stop`                            |
 | OpenCode 2.0.26                  | No. A client can prompt a session through the HTTP API | Yes, through the prompt API (experimental)                              | An opt-in bridge on the prompt API. Without it, mail is seen at the next inbox read |
 | Grok Build 1.0.50                | No                                                     | Only in a session hosted by a leader, through an undocumented extension | An opt-in bridge on that extension. Without it, mail is seen at the next inbox read |
-| T3 Code 0.0.46-nightly.20261008  | Yes, between T3 threads                                | Yes                                                                     | An opt-in bridge                                                                    |
+| T3 Code (docs, 2026-10-16)       | Yes, between T3 threads                                | Yes                                                                     | An opt-in bridge                                                                    |
 
 Swarmail delivers through each host's own entry point. It does not replace the
 host's messaging. Its notice is one line telling the session to read its inbox.
@@ -314,15 +315,24 @@ All statements here are documented. None were tested.
 
 ## T3 Code
 
-- **Messaging (documented).** `t3_thread_send` reaches any thread in the
-  environment with `auto`, `queue`, `steer` or `restart`. The target's runtime
-  and interaction modes may not be broader than the caller's, and a thread
-  caller must be in a live run. `t3_thread_read` and `t3_thread_wait` read or
-  wait on other threads, and `t3_thread_list` and `t3_thread_search` cover one
-  project unless `projectId` is given. The queue tools cancel, edit, reorder and
-  promote queued runs. Outside agents that support OAuth, such as Claude Code
-  and Codex in a terminal, can use these tools through an MCP sign-in. Read only
-  is the default, and Supervised or above can message threads.
+- **Messaging (documented, checked 2026-10-16 against the T3 Code
+  documentation on `main`; the latest release is 0.1.0, and this page does not
+  separate what 0.1.0 ships from what only `main` documents).** `t3_thread_send` reaches any thread in the
+  environment with `auto` (start an idle thread, steer an active turn, or queue
+  behind it), `queue`, `steer` or `restart`, and repeats safely with the same
+  `clientRequestId`. The target's runtime and interaction modes may not be
+  broader than the caller's, and a thread caller must be in a live run.
+  `t3_thread_read` and `t3_thread_wait` read or wait on other threads, and
+  `t3_thread_list` (filters for status, title, settled and snoozed threads) and
+  `t3_thread_search` cover one project unless `projectId` is given. The queue
+  lives on the server and survives restarts; the queue tools cancel, edit,
+  reorder and promote queued runs. `delegate_task` starts a child task on any
+  provider and model, and a child's question wakes its parent. T3 Code also
+  offers `schedule_task` (interval, fixed-time or webhook triggers),
+  `watch_pull_request` and per-thread pull request links. Outside agents that
+  support OAuth, such as Claude Code and Codex in a terminal, can use these tools
+  through an MCP sign-in that lasts 30 days. Read only is the default, and
+  Supervised or above can message threads.
 - **Not provided (documented).** No per-message read or acknowledgement receipt
   and no priority. The sender gets a message ID, a run ID and a delivery
   outcome. Search is bounded and has no exhaustive-result guarantee. The

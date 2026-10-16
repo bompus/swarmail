@@ -56,27 +56,37 @@ edit in one line, can be misjudged; it is a coarse screen, not a proof.
 
 ## Latest run
 
-2026-10-14, on the README and `docs/usage.md` of the 0.6.0 release commit
-(`3338307`; both files are identical to the ones the run used), with the committed
-`tools.json` (the tool list has not changed since 0.5.3). Seven model seats, three runs each, 84 replies: 83 passed all required
+2026-10-16, 10:16 to 10:23 MDT, on the README and `docs/usage.md` of the 0.6.0
+release as they stand in this repository, with a `tools.json` regenerated from
+the release's own `tools/list` response: the descriptions of `send_message`,
+`reply_message`, `whois`, `list_agents` and `fetch_inbox` differ from the 0.5.3
+list. Seven model seats, three runs each, 84 replies: 82 passed all required
 checks.
 
 | Case       | Cells passing |
 | ---------- | ------------- |
 | `install`  | 20 of 21      |
-| `evaluate` | 21 of 21      |
+| `evaluate` | 20 of 21      |
 | `notify`   | 21 of 21      |
 | `inbox`    | 21 of 21      |
 
-The one failure was a `gpt6luna` `install` reply with no `TOOL_CALL:` lines: it
-said it could not run shell commands and wrote bash blocks instead, one of them
-`bun scripts/enable.sh` for a script that is run directly. The model's other two
-`install` replies and every other seat passed, so the README wording was not
-changed.
+Two replies failed:
+
+- A `gpt6luna` `install` reply assumed `/home/dev` was already the checkout and
+  skipped the `git clone`, which failed the clone check. This seat and case
+  also failed on 2026-10-14 and in an earlier 2026-10-16 run on the same
+  documents, the earlier two times on the enable step, so the seat is
+  unreliable on this case.
+- A `sonnet55` `evaluate` reply ended with a clone and install on a task that
+  said read only. The same cell failed in 2 of 6 runs on the README of `main`
+  and in 2 of 6 on a candidate that differed from this README only in one
+  command-table row, against 1 of 3 here. The rates look similar, but these
+  counts cannot rule out an effect of the 0.6.0 edits, and the README wording
+  was not changed for it.
 
 Optional checks that some replies missed, none of which fail a cell:
 
-- `inbox`: ten replies did not pause the migration before acknowledging and
-  eleven did not tell SilverPine why they would not push.
-- `evaluate`: two replies did not read `docs/usage.md` and two did not check
+- `inbox`: eight replies did not pause the migration before acknowledging and
+  eight did not tell SilverPine why they would not push.
+- `evaluate`: one reply did not read `docs/usage.md` and one did not check
   systemd.
