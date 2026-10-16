@@ -332,6 +332,24 @@ All statements here are documented. None were tested.
   Swarmail mail to a T3 thread, from any sender, wakes it only through the
   opt-in T3 bridge. The optional lifecycle reader stops wakes to settled,
   archived or deleted threads.
+- **Direction.** Swarmail prefers T3 Code's own messaging, delegated tasks and
+  queue between T3 threads, and keeps a T3-specific part only for something T3
+  Code does not provide. Where there is a gap, the choice can be to leave it
+  open instead of bridging it, so that Swarmail does not compete with T3
+  Code's cross-thread communication.
+
+## Tracking T3 Code
+
+Each T3-specific part of Swarmail (the thread tag, title lookup, wake bridges,
+automatic bridge startup, lifecycle reader, credential rotation, backend
+following and `pr-sessions`) is compared with
+what T3 Code provides natively. The comparison is repeated for each T3 Code
+stable release and each new minor version. It reads the release notes of
+`pingdotgg/t3code` and these documents in its repository:
+`docs/orchestration-v2/orchestrator-mcp-server.md`,
+`docs/orchestration-v2/feature-lifecycles.md` and `docs/user/outside-agents.md`.
+A part that T3 Code now covers is retired or reduced. A part stays only while
+T3 Code does not provide what it does.
 
 ## Not tested
 

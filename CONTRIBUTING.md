@@ -11,6 +11,15 @@ Swarmail stays a local server for one machine: no network transport, no
 accounts. Leave out names of private projects or repositories, local paths,
 home directories and credentials, including in test fixtures.
 
+Inside T3 Code, Swarmail prefers T3 Code's own thread messaging, delegated tasks
+and queue to a feature of its own. It keeps what T3 Code does not provide: mail
+that outlives a run and can be searched across sessions and hosts, read and
+acknowledgement receipts, file reservations, and sessions outside T3 Code. A gap is not always bridged. Leaving
+it open can be the better decision than a Swarmail feature that competes with
+T3 Code's cross-thread communication or orchestration. A pull request that adds
+or widens a T3 Code integration names the T3 Code feature that does not cover
+the need and says why the gap is not left open.
+
 When you change `docs/usage.md` or the tool descriptions, say in the pull
 request which agent behavior it changes and how you saw it, such as a quoted
 reply from an agent that read the old and the new text.
