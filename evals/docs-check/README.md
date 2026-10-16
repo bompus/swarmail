@@ -56,8 +56,10 @@ edit in one line, can be misjudged; it is a coarse screen, not a proof.
 
 ## Latest run
 
-2026-10-16, on the README and `docs/usage.md` of the 0.6.0 release (both files are
-identical to the ones the run used), with a `tools.json` regenerated from the
+2026-10-16, on the README and `docs/usage.md` of the 0.6.0 release (the run used
+the same files, except that the `wake-auto-t3` row of the README's command table
+was reworded afterwards to name the Orchestrator V2 requirement, and the run was
+not repeated for that wording), with a `tools.json` regenerated from the
 release's own `tools/list` response: the descriptions of `send_message`,
 `reply_message`, `whois`, `list_agents` and `fetch_inbox` differ from the 0.5.3
 list. Seven model seats, three runs each, 84 replies: 82 passed all required
