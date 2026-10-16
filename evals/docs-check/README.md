@@ -77,10 +77,11 @@ Two replies failed:
   enable and order checks. The same seat and case failed the same way on
   2026-10-14.
 - A `sonnet55` `evaluate` reply ended with a clone and install on a task that
-  said read only. Three more runs of that cell gave one more such reply, so six
-  runs on this README gave two. Six runs on the README on `main` before this
-  release's edits also gave two, so the failure does not come from this
-  release's edits, and the README wording was not changed.
+  said read only. Three more runs of that cell, beyond the three in the table,
+  gave one more such reply, so six runs on this README gave two. Six runs on the
+  README on `main` before this release's edits also gave two. The rates look
+  similar, but two in six on each side cannot rule out an effect of the edits,
+  and the README wording was not changed.
 
 Optional checks that some replies missed, none of which fail a cell:
 
