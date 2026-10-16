@@ -1,15 +1,23 @@
 <h1 align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.png">
-    <img src="docs/assets/banner-light.png" alt="Swarmail" width="100%">
+    <img src="docs/assets/banner-light.png" alt="Swarmail: Local mail between coding-agent sessions on one machine" width="100%">
   </picture>
 </h1>
 
 <p align="center">
   <a href="https://github.com/bompus/swarmail/actions/workflows/ci.yml"><img src="https://github.com/bompus/swarmail/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
-  <a href="https://github.com/bompus/swarmail/releases/latest"><img src="https://img.shields.io/github/v/release/bompus/swarmail" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/bompus/swarmail" alt="MIT license"></a>
+  <a href="https://github.com/bompus/swarmail/releases/latest"><img src="https://badgen.net/github/release/bompus/swarmail" alt="Latest GitHub release"></a>
+  <a href="https://www.npmjs.com/package/swarmail-mcp"><img src="https://badgen.net/npm/v/swarmail-mcp" alt="Latest swarmail-mcp version on npm"></a>
+  <a href="LICENSE"><img src="https://badgen.net/badge/license/MIT/blue" alt="MIT license"></a>
   <a href="https://glama.ai/mcp/servers/bompus/swarmail"><img src="https://glama.ai/mcp/servers/bompus/swarmail/badges/score.svg" alt="Swarmail on Glama"></a>
+</p>
+
+<p align="center">
+  <a href="#how-agents-use-it">MCP server</a> ·
+  <a href="docs/usage.md#reading-mail">Threaded inbox and search</a> ·
+  <a href="docs/usage.md#file-reservations">File reservations</a> ·
+  <a href="#waking-sessions">Wake on mail</a>
 </p>
 
 Swarmail lets coding-agent sessions on one machine send each other mail. Each
