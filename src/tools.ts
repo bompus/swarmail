@@ -287,7 +287,7 @@ export const TOOLS: Tool[] = [
   {
     name: "whois",
     description:
-      "Return one agent's profile: program, model, task description, and first and last " +
+      "Return one agent's profile: program, model, task description, T3 thread (t3_thread, null outside T3) and first and last " +
       "activity times. An unknown name fails with NOT_FOUND, naming recently active agents. " +
       "Profile metadata and activity do not prove the session or model is currently running. " +
       "To see every agent in a project, use list_agents.",
@@ -300,7 +300,7 @@ export const TOOLS: Tool[] = [
     name: "list_agents",
     description:
       "Return an array of non-retired agents in a project, most recently active first, with " +
-      "program, model, task and session details. Use it to find who to message; whois returns " +
+      "program, model, task and session details, including t3_thread for a T3 link. Use it to find who to message; whois returns " +
       "one agent. active_within_days filters recent activity, not whether a session is running. " +
       "Metadata and activity do not prove current session or model liveness. " +
       "limit caps this single result; there is no continuation cursor, so a full result may omit " +
@@ -533,6 +533,7 @@ export const TOOLS: Tool[] = [
       "include_bodies:true and mark_read:true. Stop when fewer than limit messages return " +
       "(default 20, capped at 1000); repeat only after a full page. For a metadata " +
       "preview, set mark_read:false; include_bodies defaults to false and mark_read to true. " +
+      "Each entry's sender_t3_thread is the sender's T3 thread id (null outside T3). " +
       "Filters combine, so omit optional filters when draining all unread mail. Use " +
       "search_messages for project-wide text matching, or mark_message_read or " +
       "acknowledge_message for one message.",

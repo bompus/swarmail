@@ -25,12 +25,16 @@ interface Message {
   body_md?: string;
   excerpt?: string;
   sender_location?: Location | null;
+  sender_t3_thread?: string | null;
 }
 
 /** Prefer send-time labels; older views can use the current roster without changing stored mail. */
 function senderLabels(env: NodeJS.ProcessEnv) {
   const rosters = new Map<string, Map<string, Location | null>>();
-  return async (project: string, message: Pick<Message, "from" | "sender_location">) => {
+  return async (
+    project: string,
+    message: Pick<Message, "from" | "sender_location" | "sender_t3_thread">,
+  ) => {
     let location = message.sender_location;
     if (!location) {
       if (!rosters.has(project)) {
@@ -53,7 +57,9 @@ function senderLabels(env: NodeJS.ProcessEnv) {
     const label = [location?.title, location?.repo, location?.worktree]
       .map((value) => value?.replace(/\s+/g, " ").trim())
       .find(Boolean);
-    return label ? `${message.from} (${label})` : message.from;
+    const name = label ? `${message.from} (${label})` : message.from;
+    // Under T3 the thread link, not the registered name, is how an agent refers to the sender.
+    return message.sender_t3_thread ? `${name} [t3-thread://v1/${message.sender_t3_thread}]` : name;
   };
 }
 
