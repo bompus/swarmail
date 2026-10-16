@@ -36,6 +36,7 @@ export const inboxOut = (m: Row, includeBody: boolean) => ({
   revision: m.revision,
   ack_required: !!m.ack_required,
   from: m.from,
+  sender_t3_thread: m.sender_t3_thread ?? null,
   sender_location: m.sender_location ? JSON.parse(m.sender_location) : null,
   created_ts: iso(m.created_ts),
   // Omit unset read_ts and ack_ts.

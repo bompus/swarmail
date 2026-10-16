@@ -52,6 +52,12 @@ checkout, unless a project already exists under that exact path.
   The hook refreshes the checkout when an edit moves. Manual registrations can pass
   `worktree`, an absolute checkout path in the same project; omitting it keeps
   the recorded location. Names and launch `cwd` stay unchanged.
+- `whois`, `register_agent`, `macro_start_session` and `list_agents` return the agent's `t3_thread`, and each
+  `fetch_inbox` entry carries the sender's `sender_t3_thread` (null outside T3). Under T3 Code, refer to another agent
+  by its thread link, `[title](t3-thread://v1/<t3_thread>)` with the exact thread id (T3 shows the thread's current
+  title), not its registered name. Use the registered name only when the user asks for it, when no thread id is known
+  or when T3 messaging fails. `swarmail inbox` prints the link target after the sender: `Name (title) [t3-thread://v1/<id>]`.
+  Names stay in the `to`, `cc`, `bcc` and `sender_name` fields. Outside T3 nothing changes.
 - New messages include `sender_location`, saved when sent. A sender moving
   later does not change old inbox entries. Messages predating this field have
   a null location.

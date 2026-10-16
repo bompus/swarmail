@@ -213,6 +213,7 @@ export const agentOut = (a: Agent) => ({
   program: a.program,
   model: a.model,
   task_description: a.task_description,
+  t3_thread: a.t3_thread ?? null,
   inception_ts: iso(a.inception_ts),
   last_active_ts: iso(a.last_active_ts),
   project_id: a.project_id,
@@ -688,7 +689,7 @@ export class MailStore {
     const rows = this.db
       .query<Row, any[]>(
         `SELECT m.id, m.project_id, m.sender_id, m.thread_id, m.topic, m.subject, m.importance, m.notification_policy, m.revision, m.ack_required,
-              s.name AS "from", m.sender_location, m.created_ts, r.read_ts, r.ack_ts, r.kind, ${this.bodyColumn(a)}
+              s.name AS "from", s.t3_thread AS sender_t3_thread, m.sender_location, m.created_ts, r.read_ts, r.ack_ts, r.kind, ${this.bodyColumn(a)}
        FROM message_recipients r JOIN messages m ON m.id = r.message_id JOIN agents s ON s.id = m.sender_id
        WHERE r.agent_id = ?1 AND r.withdrawn_ts IS NULL AND (?2 = 0 OR r.read_ts IS NULL) AND (?3 = 0 OR m.importance IN ('high', 'urgent'))
          AND r.created_ts > ?4 AND (?5 IS NULL OR m.topic = ?5)
@@ -734,7 +735,7 @@ export class MailStore {
     const rows = this.db
       .query<Row, any[]>(`
       SELECT m.id, m.thread_id, m.subject, m.importance, m.notification_policy, m.revision,
-             m.ack_required, m.created_ts, ${this.bodyColumn(a)}, s.name AS "from",
+             m.ack_required, m.created_ts, ${this.bodyColumn(a)}, s.name AS "from", s.t3_thread AS sender_t3_thread,
              r.read_ts, r.ack_ts, a.id AS recipient_id, a.name AS agent_name,
              p.human_key AS project_key
       FROM agents a JOIN projects p ON p.id = a.project_id
@@ -772,6 +773,7 @@ export class MailStore {
       revision: row.revision,
       ack_required: !!row.ack_required,
       from: row.from,
+      sender_t3_thread: row.sender_t3_thread ?? null,
       created_ts: iso(row.created_ts),
       ...(row.read_ts != null && { read_ts: iso(row.read_ts) }),
       ...(row.ack_ts != null && { ack_ts: iso(row.ack_ts) }),

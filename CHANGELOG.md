@@ -4,6 +4,14 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Under T3 Code, agents are told to refer to another agent by its T3 thread link,
+  `[title](t3-thread://v1/<t3_thread>)`, instead of its registered name, and to use the name only when the user asks,
+  no thread id is known or T3 messaging fails. `whois`, `register_agent` and `macro_start_session` now return the
+  agent's `t3_thread`, `fetch_inbox` and `fetch_session_inbox` entries carry the sender's `sender_t3_thread`, and
+  `swarmail inbox` prints `[t3-thread://v1/<id>]` after a T3 sender. Outside T3 these fields are null and the guidance
+  is unchanged. The connection instructions drop "Quiet mail can appear on an explicit inbox read; it is not hidden
+  context" and shorten two other sentences to stay under the 4096 characters a host shows.
+
 - `swarmail wake-auto-t3 <config.json> [--check | --retry-thread <id>]` is a built-in command: a supervisor that starts a
   wake bridge for every eligible T3 Codex thread, and every eligible Cursor thread under T3 Orchestrator V2, so they wake on mail
   without per-thread setup. `docs/wake-bridges.md` has the configuration, how a failed bridge is quarantined and how
