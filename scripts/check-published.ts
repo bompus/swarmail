@@ -41,10 +41,16 @@ const channels: [string, string, (body: any) => string[]][] = [
   [
     `MCP registry ${server.name}`,
     registryUrl,
-    (body) => [
-      body.server.version,
-      ...body.server.packages.map((pkg: { version: string }) => pkg.version),
-    ],
+    (body) => {
+      const pkg = (body.server.packages ?? []).find(
+        (entry: { registryType: string; identifier: string }) =>
+          entry.registryType === "npm" && entry.identifier === relay.name,
+      );
+      if (!pkg) {
+        throw new Error(`it lists no npm package ${relay.name}`);
+      }
+      return [body.server.version, pkg.version];
+    },
   ],
 ];
 

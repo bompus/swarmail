@@ -107,7 +107,7 @@ fails until every folder in `packages/` is named in this section.
   (step 3).
 - [Glama](https://glama.ai/mcp/servers/bompus/swarmail): details come from the
   GitHub repository and `glama.json`. Auto-Release builds each release
-  (step 4). Edit the build spec and details on the admin page.
+  (step 5). Edit the build spec and details on the admin page.
 - [MCPRush](https://mcprush.com/aaron-queen/swarmail-mcp): an owner-claimed
   listing of the npm package. It is not known whether it follows new npm
   releases, so check the version it shows. Edit it while signed in as its

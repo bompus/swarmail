@@ -38,11 +38,17 @@ const manifest = (file) => JSON.parse(readFileSync(new URL(`../${file}`, import.
 const repoVersion = manifest("package.json").version;
 const npmName = manifest("packages/mcp-relay/package.json").name;
 
+const relayPackage = (version, identifier = npmName) => ({
+  registryType: "npm",
+  identifier,
+  version,
+});
+
 function everythingPublished(version = repoVersion) {
   return {
     "/github/latest": { tag_name: `v${version}` },
     [`/npm/${npmName}/latest`]: { version },
-    "/registry/latest": { server: { version, packages: [{ version }] } },
+    "/registry/latest": { server: { version, packages: [relayPackage(version)] } },
   };
 }
 
@@ -83,12 +89,12 @@ test.each([
   [
     "MCP registry",
     "/registry/latest",
-    () => ({ server: { version: repoVersion, packages: [{ version: "0.0.1" }] } }),
+    () => ({ server: { version: repoVersion, packages: [relayPackage("0.0.1")] } }),
   ],
   [
     "MCP registry",
     "/registry/latest",
-    () => ({ server: { version: "0.0.1", packages: [{ version: repoVersion }] } }),
+    () => ({ server: { version: "0.0.1", packages: [relayPackage(repoVersion)] } }),
   ],
 ])("fails and names %s when it shows an older version", async (channel, path, stale) => {
   shown = everythingPublished();
@@ -102,7 +108,7 @@ test.each([
 test("a GitHub-only release is reported as incomplete, with each missing channel named", async () => {
   shown = everythingPublished();
   shown[`/npm/${npmName}/latest`] = { version: "0.0.1" };
-  shown["/registry/latest"] = { server: { version: "0.0.1", packages: [{ version: "0.0.1" }] } };
+  shown["/registry/latest"] = { server: { version: "0.0.1", packages: [relayPackage("0.0.1")] } };
   const result = await check();
   expect(result.code).toBe(1);
   expect(result.err).toContain(`npm ${npmName}: shows 0.0.1`);
@@ -116,6 +122,22 @@ test("a channel that cannot be read fails the check instead of passing it", asyn
   const result = await check();
   expect(result.code).toBe(1);
   expect(result.err).toContain(`npm ${npmName}: could not be read`);
+});
+
+test.each([
+  ["lists no packages", []],
+  ["lists only a different package", [relayPackage(repoVersion, "some-other-package")]],
+  [
+    "lists the package under another registry",
+    [{ ...relayPackage(repoVersion), registryType: "pypi" }],
+  ],
+])("fails when the MCP registry %s", async (_, packages) => {
+  shown = everythingPublished();
+  shown["/registry/latest"] = { server: { version: repoVersion, packages } };
+  const result = await check();
+  expect(result.code).toBe(1);
+  expect(result.err).toContain(`MCP registry`);
+  expect(result.err).toContain(`lists no npm package ${npmName}`);
 });
 
 test("lists the channels no script can read, so a pass is not read as everything done", async () => {
@@ -138,6 +160,7 @@ test("asks npm about the package named in packages/mcp-relay/package.json", asyn
   try {
     shown = everythingPublished();
     shown["/npm/renamed-relay/latest"] = { version: repoVersion };
+    shown["/registry/latest"].server.packages = [relayPackage(repoVersion, "renamed-relay")];
     expect((await check()).code).toBe(0);
   } finally {
     writeFileSync(path, original);
