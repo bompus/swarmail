@@ -53,7 +53,8 @@ checkout, unless a project already exists under that exact path.
   `worktree`, an absolute checkout path in the same project; omitting it keeps
   the recorded location. Names and launch `cwd` stay unchanged.
 - `whois`, `register_agent`, `macro_start_session` and `list_agents` return the agent's `t3_thread`, and each
-  `fetch_inbox` entry carries the sender's `sender_t3_thread` (null outside T3). Under T3 Code, refer to another agent
+  `fetch_inbox` and `fetch_session_inbox` entry carries the sender's current `sender_t3_thread` (null outside T3; unlike
+  `sender_location` it is not a send-time snapshot). Under T3 Code, refer to another agent
   by its thread link, `[title](t3-thread://v1/<t3_thread>)` with the exact thread id (T3 shows the thread's current
   title), not its registered name. Use the registered name only when the user asks for it, when no thread id is known
   or when T3 messaging fails. `swarmail inbox` prints the link target after the sender: `Name (title) [t3-thread://v1/<id>]`.
@@ -210,7 +211,8 @@ remains visible to explicit inbox/search reads, including an inbox read prompted
 by other actionable mail. Neither typed notices nor quiet delivery hide native
 host messages or tool output in a conversation UI.
 
-When referring to an agent in a message or summary, include its verified
+When referring to an agent in a message or summary under T3 Code, use its thread
+link in place of its name (see Registering). Elsewhere, include its verified
 session title or repository beside its name, such as `BlueLake (API cleanup)`.
 Use `this session` for the current receiver after matching its session identity;
 an alias or checkout alone does not establish that match. Keep registered names
