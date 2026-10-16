@@ -76,7 +76,12 @@ an older result with the version it was measured on.
    metadata for each release. Run
    `npm publish` in `packages/mcp-relay/` and `mcp-publisher publish` in the
    repository root.
-4. Check that Glama's admin Releases page lists `X.Y.Z`. With Auto-Release
+4. Run `bun run check:published`. It asks GitHub, npm and the MCP registry
+   which version each shows as latest and exits 1 unless all three show
+   `X.Y.Z`. Until it exits 0 the release is incomplete, whatever is already on
+   GitHub: say so, and do not announce it. The script cannot read Glama or the
+   other listings; steps 5 and 6 cover them.
+5. Check that Glama's admin Releases page lists `X.Y.Z`. With Auto-Release
    enabled, Glama builds and publishes it after the GitHub release. Its public
    listing and scores can update later. If Auto-Release is off, use the
    [admin page](https://glama.ai/mcp/servers/bompus/swarmail/admin/dockerfile)
@@ -84,7 +89,7 @@ an older result with the version it was measured on.
    and enter `X.Y.Z`. The saved build spec (build steps
    `["npm install -g bun@1.4.2"]`, CMD `["bun", "scripts/glama.ts"]`) needs a
    change only when the Bun version CI uses or `scripts/glama.ts` changes.
-5. Check every accepted listing in the next section. Update by hand any that
+6. Check every accepted listing in the next section. Update by hand any that
    still shows an older version or outdated details.
 
 ## Listings
