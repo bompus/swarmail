@@ -9,8 +9,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   no thread id is known or T3 messaging fails. `whois`, `register_agent` and `macro_start_session` now return the
   agent's `t3_thread`, `fetch_inbox` and `fetch_session_inbox` entries carry the sender's `sender_t3_thread`, and
   `swarmail inbox` prints `[t3-thread://v1/<id>]` after a T3 sender. Outside T3 these fields are null and the guidance
-  is unchanged. The connection instructions drop "Quiet mail can appear on an explicit inbox read; it is not hidden
-  context" and shorten three other sentences, dropping "Reservations are advisory", to stay under the 4096 characters a host shows.
+  is unchanged. Several sentences of the connection instructions are shortened to stay under the 4096
+  characters a host shows; "Reservations are advisory" is dropped (the opening line still says "advisory file
+  reservations").
 
 - `swarmail wake-auto-t3 <config.json> [--check | --retry-thread <id>]` is a built-in command: a supervisor that starts a
   wake bridge for every eligible T3 Codex thread, and every eligible Cursor thread under T3 Orchestrator V2, so they wake on mail
