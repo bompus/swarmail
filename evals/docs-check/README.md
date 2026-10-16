@@ -56,27 +56,35 @@ edit in one line, can be misjudged; it is a coarse screen, not a proof.
 
 ## Latest run
 
-2026-10-14, on the README and `docs/usage.md` of the 0.6.0 release commit
-(`3338307`; both files are identical to the ones the run used), with the committed
-`tools.json` (the tool list has not changed since 0.5.3). Seven model seats, three runs each, 84 replies: 83 passed all required
+2026-10-16, on the README and `docs/usage.md` of the 0.6.0 release (both files are
+identical to the ones the run used), with a `tools.json` regenerated from the
+release's own `tools/list` response: the descriptions of `send_message`,
+`reply_message`, `whois`, `list_agents` and `fetch_inbox` differ from the 0.5.3
+list. Seven model seats, three runs each, 84 replies: 82 passed all required
 checks.
 
 | Case       | Cells passing |
 | ---------- | ------------- |
 | `install`  | 20 of 21      |
-| `evaluate` | 21 of 21      |
+| `evaluate` | 20 of 21      |
 | `notify`   | 21 of 21      |
 | `inbox`    | 21 of 21      |
 
-The one failure was a `gpt6luna` `install` reply with no `TOOL_CALL:` lines: it
-said it could not run shell commands and wrote bash blocks instead, one of them
-`bun scripts/enable.sh` for a script that is run directly. The model's other two
-`install` replies and every other seat passed, so the README wording was not
-changed.
+Two replies failed:
+
+- A `gpt6luna` `install` reply said it could not run commands and wrote
+  `bun scripts/enable.sh` for a script that is run directly, which failed the
+  enable and order checks. The same seat and case failed the same way on
+  2026-10-14.
+- A `sonnet55` `evaluate` reply ended with a clone and install on a task that
+  said read only. Three more runs of that cell gave one more such reply, so six
+  runs on this README gave two. Six runs on the README on `main` before this
+  release's edits also gave two, so the failure does not come from this
+  release's edits, and the README wording was not changed.
 
 Optional checks that some replies missed, none of which fail a cell:
 
 - `inbox`: ten replies did not pause the migration before acknowledging and
-  eleven did not tell SilverPine why they would not push.
-- `evaluate`: two replies did not read `docs/usage.md` and two did not check
+  nine did not tell SilverPine why they would not push.
+- `evaluate`: two replies did not read `docs/usage.md` and three did not check
   systemd.

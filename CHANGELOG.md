@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.6.0 - 2026-10-16
 
 - Under T3 Code, agents are told to refer to another agent by its T3 thread link,
   `[title](t3-thread://v1/<t3_thread>)`, instead of its registered name, and to use the name only when the user asks,
@@ -16,12 +16,14 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - `swarmail wake-auto-t3 <config.json> [--check | --retry-thread <id>]` is a built-in command: a supervisor that starts a
   wake bridge for every eligible T3 Codex thread, and every eligible Cursor thread under T3 Orchestrator V2, so they wake on mail
   without per-thread setup. `docs/wake-bridges.md` has the configuration, how a failed bridge is quarantined and how
-  to retry it. It runs on Linux only.
+  to retry it. It runs on Linux only. It is experimental and opt-in (it does nothing without a configuration file): it drives T3 Code through T3's undocumented internal control plane, was written against T3 Code Orchestrator V2 in the 0.0.46 to 0.1.x releases, and a T3 Code update can break it. It may be removed if T3 Code covers waking threads natively.
 - `swarmail hook wake cursor` and `swarmail hook context cursor` now return at once for a Cursor session whose settled
   automatic T3 registration belongs to a `wake-auto-t3` bridge, so the hook and the bridge do not both wait on that
   session.
 
-## 0.6.0 - 2026-10-14
+- `docs/provider-coverage.md` and `CONTRIBUTING.md` state the direction toward T3 Code: Swarmail prefers T3 Code's own
+  messaging, delegated tasks and queue, keeps only what T3 Code does not provide, and may leave a gap open instead of
+  bridging it. The T3 Code section is refreshed to T3 Code 0.1.0 and lists what is rechecked for each T3 Code release.
 
 - `swarmail pr-sessions <PR URL> --project <checkout>` prints, as JSON, which local T3 V2 conversations are linked to a
   GitHub pull request and which Swarmail agents carry their tags. It opens the T3 database read-only and never reads

@@ -207,7 +207,7 @@ keeps one name across repositories.
 | `swarmail version`                                                     | The source hash the binary was built from                                                                                                |
 | `swarmail updates --session`                                           | Approved update targets and loaded-revision confirmations                                                                                |
 | `swarmail overdue [--dry-run]`                                         | Remind recipients of unacknowledged `ack_required` mail; report to the operator ([setup](docs/overdue.md))                               |
-| `swarmail wake-auto-t3 <config.json> [--check \| --retry-thread <id>]` | Linux only: start a wake bridge for each eligible T3 Codex and Cursor thread ([setup](docs/wake-bridges.md#automatic-t3-bridge-startup)) |
+| `swarmail wake-auto-t3 <config.json> [--check \| --retry-thread <id>]` | Experimental, Linux only: wake bridges for eligible T3 Codex, Cursor threads ([setup](docs/wake-bridges.md#automatic-t3-bridge-startup)) |
 | `swarmail canary`                                                      | One send, wake and acknowledge round trip, logged for a timer ([setup](docs/canary.md))                                                  |
 | `swarmail pr-sessions <PR URL> --project <checkout>`                   | T3 conversations and agents linked to a pull request ([details](docs/pr-sessions.md))                                                    |
 
