@@ -13,8 +13,8 @@ home directories and credentials, including in test fixtures.
 
 Inside T3 Code, Swarmail prefers T3 Code's own thread messaging, delegated tasks
 and queue to a feature of its own. It keeps what T3 Code does not provide: mail
-that waits and can be searched, read and acknowledgement receipts, file
-reservations, and sessions outside T3 Code. A gap is not always bridged. Leaving
+that outlives a run and can be searched across sessions and hosts, read and
+acknowledgement receipts, file reservations, and sessions outside T3 Code. A gap is not always bridged. Leaving
 it open can be the better decision than a Swarmail feature that competes with
 T3 Code's cross-thread communication or orchestration. A pull request that adds
 or widens a T3 Code integration names the T3 Code feature that does not cover

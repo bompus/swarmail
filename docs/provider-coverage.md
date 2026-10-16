@@ -341,7 +341,8 @@ All statements here are documented. None were tested.
 ## Tracking T3 Code
 
 Each T3-specific part of Swarmail (the thread tag, title lookup, wake bridges,
-automatic bridge startup, lifecycle reader and `pr-sessions`) is compared with
+automatic bridge startup, lifecycle reader, credential rotation, backend
+following and `pr-sessions`) is compared with
 what T3 Code provides natively. The comparison is repeated for each T3 Code
 stable release and each new minor version. It reads the release notes of
 `pingdotgg/t3code` and these documents in its repository:
