@@ -155,3 +155,5 @@ fails until every folder in `packages/` is named in this section.
   <https://cursor.com/marketplace/publish> while signed in to Cursor. The
   plugin has no version and points at the local server, so releases need no
   change. Cursor reviews each update to the plugin before publishing it.
+
+<!-- Temporary line to check CodeRabbit review status after the trial; this pull request is closed without merging. -->
