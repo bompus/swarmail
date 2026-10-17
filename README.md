@@ -14,8 +14,8 @@
 </p>
 
 <p align="center">
-  <a href="#how-agents-use-it">MCP server</a> ·
-  <a href="docs/usage.md#reading-mail">Threaded inbox and search</a> ·
+  <a href="#how-agents-use-it">MCP server</a>&nbsp;·
+  <a href="docs/usage.md#reading-mail">Threaded inbox and search</a>&nbsp;·
   <a href="docs/usage.md#file-reservations">File reservations</a> ·
   <a href="#waking-sessions">Wake on mail</a>
 </p>
