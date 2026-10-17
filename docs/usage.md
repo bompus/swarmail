@@ -1,6 +1,6 @@
-# Using Swarmail from an agent
+# Using swarmail from an agent
 
-Swarmail supplies a short briefing in the MCP initialization response and
+swarmail supplies a short briefing in the MCP initialization response and
 operation-specific advice in its tool descriptions. `swarmail --help` shows
 the briefing; `swarmail send --help` shows sending advice. Personal agent
 rules are not required to obtain this guidance.
@@ -202,7 +202,7 @@ Follow the host's transport preference and send an event through one route.
 [Provider coverage](provider-coverage.md) says where a host's own messaging is
 enough (for example two running Claude Code or Codex sessions, or a session
 and its own subagents) and where
-Swarmail adds something (mail that must wait, be searched or acknowledged,
+swarmail adds something (mail that must wait, be searched or acknowledged,
 sessions on different hosts, shared checkouts). Whether mail starts a turn in
 an idle session depends on the host and its wake route, so don't assume a
 recipient will answer promptly.
@@ -241,7 +241,7 @@ mail location snapshots do not establish historical sender-session identity.
   Unregistered, retired or closed recipients reject the whole send. A bound
   source that cannot be verified also rejects. The error includes
   `persisted:false` and per-recipient reasons. Confirm the intended owner;
-  Swarmail does not reroute mail or reopen closed sessions.
+  swarmail does not reroute mail or reopen closed sessions.
 - Successful sends return `delivery` with admission-time recipient observations
   and warnings. Unknown standalone state still permits storage. An absent
   process or an end hook does not prove a resumable session is dead.
@@ -401,9 +401,9 @@ curl -s http://127.0.0.1:18765/mcp/ -H 'content-type: application/json' \
 ## Finding a session
 
 `swarmail who [repo] [--all] [--json]` lists agents with their session id,
-working directory, whether the host process is alive, last Swarmail activity
+working directory, whether the host process is alive, last swarmail activity
 and unread count. Without `--all` it hides agents with no live session and no
-activity for a day. Last activity counts Swarmail tool calls only, so a
+activity for a day. Last activity counts swarmail tool calls only, so a
 session that edits without sending mail looks idle. A growing unread count
 means mail has not been read. Check whether the host supports wake delivery,
 the session is paused or offline, or delivery has failed.

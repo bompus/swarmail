@@ -1,7 +1,7 @@
 # Provider coverage
 
 What each agent host already provides for sessions that talk to each other,
-where Swarmail adds to it, and where the host's own feature is enough. Checked
+where swarmail adds to it, and where the host's own feature is enough. Checked
 on 2026-10-11 against the versions in the table below, except T3 Code, checked
 on 2026-10-16. Hosts change quickly, so
 recheck a limit before you depend on it.
@@ -23,9 +23,9 @@ version show none. A test did not prove the absence.
 
 ## Summary
 
-| Host (version checked)           | Messages another independent local session             | Starts a turn in an idle session                                        | Swarmail delivers its notice through                                                |
+| Host (version checked)           | Messages another independent local session             | Starts a turn in an idle session                                        | swarmail delivers its notice through                                                |
 | -------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Claude Code 2.1.296              | Yes, to live sessions on the same machine              | Yes                                                                     | The Swarmail mod, or the wake hook                                                  |
+| Claude Code 2.1.296              | Yes, to live sessions on the same machine              | Yes                                                                     | The swarmail mod, or the wake hook                                                  |
 | Codex CLI 0.162.1                | Yes, for sessions on the shared app-server daemon      | Yes, tested                                                             | An opt-in bridge on the app-server queue API                                        |
 | Cursor (cursor-agent 2026.10.01) | No                                                     | No for local sessions. A cloud agent takes a follow-up                  | The wake hook, and context after tool calls                                         |
 | Devin CLI 3000.11.3              | No, except cloud sessions through the API              | No                                                                      | Context after tool calls, and a continue at `Stop`                                  |
@@ -34,12 +34,12 @@ version show none. A test did not prove the absence.
 | Grok Build 1.0.50                | No                                                     | Only in a session hosted by a leader, through an undocumented extension | An opt-in bridge on that extension. Without it, mail is seen at the next inbox read |
 | T3 Code (docs, 2026-10-16)       | Yes, between T3 threads                                | Yes                                                                     | An opt-in bridge                                                                    |
 
-Swarmail delivers through each host's own entry point. It does not replace the
+swarmail delivers through each host's own entry point. It does not replace the
 host's messaging. Its notice is one line telling the session to read its inbox.
 
 ## What no host provides
 
-In the versions checked, no host documents any of these. Swarmail fills them.
+In the versions checked, no host documents any of these. swarmail fills them.
 
 1. **Mail that waits, in threads you can search.** A message to a session that is busy, closed or on
    another host stays stored, grouped in threads and searchable. Claude Code's
@@ -70,7 +70,7 @@ In the versions checked, no host documents any of these. Swarmail fills them.
 6. **A way to wake hosts that other local sessions cannot wake.** Cursor and
    Devin document none. Antigravity's `send_message` did not wake an idle
    interactive session in the test below. OpenCode and Grok can be reached only
-   through the OpenCode prompt API or Grok's undocumented extension. Swarmail's
+   through the OpenCode prompt API or Grok's undocumented extension. swarmail's
    hooks for Devin and Antigravity act during a turn or when it ends, and
    cannot wake an idle session. Its Cursor hook holds the turn open and wakes
    the session up to five times between prompts, for up to eight hours after a turn ends. Opt-in bridges reach OpenCode, Grok and T3 Code
@@ -89,8 +89,8 @@ In the versions checked, no host documents any of these. Swarmail fills them.
 - A session handing work to its own subagent: always the host's delegation.
 
 If every session you run is on one of these hosts, and a message only needs to
-reach a session that is running now, you do not need Swarmail for messaging.
-Swarmail starts to matter when a message has to survive, be searched or be
+reach a session that is running now, you do not need swarmail for messaging.
+swarmail starts to matter when a message has to survive, be searched or be
 acknowledged, when sessions run on different hosts, or when sessions share a
 checkout and need reservations.
 
@@ -136,13 +136,13 @@ checkout and need reservations.
   and a session has one team that other sessions cannot join.
 - **Socket access (documented).** The documentation says other sessions
   deliver to a session's socket. It describes the wire format only as far as the
-  authentication line, and does not document the message format. Swarmail does
+  authentication line, and does not document the message format. swarmail does
   not use the socket.
-- **What Swarmail does here.** The Swarmail mod long-polls the Swarmail server
+- **What swarmail does here.** The swarmail mod long-polls the swarmail server
   and starts a turn with `$.prompt.submit`. It does not touch native
   messaging, so the two do not interfere. A session ends up with a Claude Code
-  name (`/rename`) and a Swarmail name (such as `BlueLake`). The tag in the
-  Swarmail registration links the two.
+  name (`/rename`) and a swarmail name (such as `BlueLake`). The tag in the
+  swarmail registration links the two.
 
 ## Codex CLI
 
@@ -187,14 +187,14 @@ checkout and need reservations.
   daemon, with no grouping by repository or branch. `codex app-server` and the
   daemon are marked experimental. Both commands appear in `codex --help` and the
   release notes, but not on the CLI reference page.
-- **What Swarmail does here.** The opt-in `codex-queue` bridge talks to the same
+- **What swarmail does here.** The opt-in `codex-queue` bridge talks to the same
   app-server API: `thread/queue/add`, or `turn/start` when steering. It adds a
   stable command ID that correlates each notice with Codex's admission of it
   (Codex can run a resent ID twice, so the bridge never resends an uncertain
   one), a read-back check that Codex admitted the message, and one outstanding
-  notice per session. It is the right path for Swarmail mail
+  notice per session. It is the right path for swarmail mail
   that should wake a Codex session. Messages between Codex sessions do not need
-  Swarmail.
+  swarmail.
 - **The bridge on a terminal session (tested on codex-cli 0.162.1).** Two
   interactive sessions on one throwaway daemon, each with its own bridge, and
   sessions registered by hand, so the sessions could not read their inbox
@@ -224,15 +224,15 @@ checkout and need reservations.
 - **Stop hook (documented, and tested in the interactive `cursor-agent`
   2026.10.01).** `followup_message` submits a next message, capped by
   `loop_limit`, which defaults to 5; `null` removes the cap. In the test, a
-  session with Swarmail's stop hook woke for each of five mails sent one after
+  session with swarmail's stop hook woke for each of five mails sent one after
   another, then did not wake for a sixth within three minutes, and no wake hook
   was left running. After a prompt typed into the session, its stop hook
   delivered the waiting sixth mail, and a seventh woke the session again.
-  Swarmail's installer leaves `loop_limit` at its default on purpose, so two
+  swarmail's installer leaves `loop_limit` at its default on purpose, so two
   agents cannot wake each other without end. A session that receives more than
   five mails with no prompt from a person in between sees the rest at the next
   prompt.
-- **What Swarmail does here.** A wake hook after each turn, and context after
+- **What swarmail does here.** A wake hook after each turn, and context after
   tool calls. It wakes an idle Cursor CLI session for up to eight hours after a turn ends, and up to five times between prompts.
 
 ## Devin
@@ -245,7 +245,7 @@ checkout and need reservations.
   which can resume a finished one with a new prompt.
 - **Hooks (documented).** `UserPromptSubmit`, `SessionStart` and `PostToolUse`
   accept `additionalContext`. A `Stop` hook can block to keep the agent going.
-- **What Swarmail does here.** Context after tool calls (`PostToolUse`), and a
+- **What swarmail does here.** Context after tool calls (`PostToolUse`), and a
   continue at `Stop` when mail is already waiting.
 
 ## Antigravity
@@ -267,7 +267,7 @@ checkout and need reservations.
   sidecars, and it also exists in the agy 1.3.3 CLI, though not in `agy --help`.
 - **Hooks (documented).** `PreInvocation` and `PostInvocation` can inject steps,
   including a user message. `PostToolUse` cannot inject. `Stop` can continue.
-- **What Swarmail does here.** A `PreInvocation` user message when mail is
+- **What swarmail does here.** A `PreInvocation` user message when mail is
   waiting, and a continue at `Stop`. It cannot wake an idle session.
 
 ## OpenCode
@@ -289,7 +289,7 @@ All statements here are documented. None were tested.
   session, and `--standalone` gives a private server. T3 Code starts its own
   `opencode serve` by default, so its sessions are not on the shared service. It
   can instead be pointed at an existing server URL.
-- **What Swarmail does here.** The opt-in `opencode-v2-queue` bridge posts to the
+- **What swarmail does here.** The opt-in `opencode-v2-queue` bridge posts to the
   prompt API of an OpenCode 2 HTTP server, given by loopback URL, with steering.
   The endpoint and the `delivery` field exist in 2.x only.
 
@@ -304,11 +304,11 @@ All statements here are documented. None were tested.
 - **Shared backends.** Leader mode, which is off by default, lets more than one
   client share a backend. `grok agent serve` (ACP over WebSocket) keeps state
   across client reconnects. The documentation gives no recipe for one session to
-  message another. The `x.ai/interject` method that Swarmail's bridge calls
+  message another. The `x.ai/interject` method that swarmail's bridge calls
   exists in the
   [public source](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-shell/src/extensions/interject.rs)
   but not in the user documentation, so Grok can change it without notice.
-- **What Swarmail does here.** The opt-in `grok-queue` bridge connects to the
+- **What swarmail does here.** The opt-in `grok-queue` bridge connects to the
   leader socket and uses that extension. It needs the session to run with leader
   mode, which is refused while a sandbox profile is active, and it works only on
   Unix.
@@ -338,19 +338,19 @@ All statements here are documented. None were tested.
   outcome. Search is bounded and has no exhaustive-result guarantee. The
   documentation describes no way for a thread to message a plain terminal
   session.
-- **What Swarmail does here.** Between T3 threads, the T3 tools are enough.
-  Swarmail mail to a T3 thread, from any sender, wakes it only through the
+- **What swarmail does here.** Between T3 threads, the T3 tools are enough.
+  swarmail mail to a T3 thread, from any sender, wakes it only through the
   opt-in T3 bridge. The optional lifecycle reader stops wakes to settled,
   archived or deleted threads.
-- **Direction.** Swarmail prefers T3 Code's own messaging, delegated tasks and
+- **Direction.** swarmail prefers T3 Code's own messaging, delegated tasks and
   queue between T3 threads, and keeps a T3-specific part only for something T3
   Code does not provide. Where there is a gap, the choice can be to leave it
-  open instead of bridging it, so that Swarmail does not compete with T3
+  open instead of bridging it, so that swarmail does not compete with T3
   Code's cross-thread communication.
 
 ## Tracking T3 Code
 
-Each T3-specific part of Swarmail (the thread tag, title lookup, wake bridges,
+Each T3-specific part of swarmail (the thread tag, title lookup, wake bridges,
 automatic bridge startup, lifecycle reader, credential rotation, backend
 following and `pr-sessions`) is compared with
 what T3 Code provides natively. The comparison is repeated for each T3 Code
