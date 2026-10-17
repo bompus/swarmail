@@ -4,13 +4,13 @@ The MCP connection briefing and `swarmail --help` point to
 `swarmail updates --help` for the caller workflow below.
 
 An optional local manifest names approved installed or deployed targets.
-Swarmail checks it at supported context hooks without sending mail, starting
+swarmail checks it at supported context hooks without sending mail, starting
 idle turns, installing software or restarting a provider. New upstream commits
 are not approved targets. The host publishing the manifest owns deployment
 qualification and refresh instructions.
 
 Set `SWARMAIL_UPDATE_TARGETS` to an absolute JSON file path for the processes
-running Swarmail hooks and commands. Publish complete files atomically. Without
+running swarmail hooks and commands. Publish complete files atomically. Without
 this variable, checks emit nothing and create no update state.
 
 ```json
@@ -95,4 +95,4 @@ exactly-once delivery guarantee or recurring reminder.
 `JSON.stringify(tools)` from the corresponding `tools/list` response. The
 default protocol is 2025-11-25; unsupported versions fail with HTTP 400. This
 read-only endpoint identifies running code and definitions, not the catalog
-already loaded by an agent. Swarmail still advertises `tools.listChanged:false`.
+already loaded by an agent. swarmail still advertises `tools.listChanged:false`.

@@ -2,7 +2,7 @@
 
 `swarmail wake-bridge <config.json>` delivers mail notices to one explicitly
 configured local session. It runs in the foreground until stopped. Installing
-Swarmail does not start bridges or enroll sessions automatically.
+swarmail does not start bridges or enroll sessions automatically.
 
 Use the host's orchestration tools for delegation. A bridge delivers inbox
 information to an existing session; it does not assign tasks or manage agents.
@@ -59,14 +59,14 @@ by a private parent directory or the adapter's socket permission checks.
 `timeoutMs` defaults to `60000`; accepted values are `1000` through `300000`.
 Codex socket paths also exclude whitespace and URL delimiter characters.
 
-Run the bridge after its target and the Swarmail server are available:
+Run the bridge after its target and the swarmail server are available:
 
 ```bash
 swarmail wake-bridge config.json
 ```
 
 Choose a native session ID, or a T3 thread ID, matching the recipient's
-registration tag. Keep one bridge per Swarmail origin and target ID. A second
+registration tag. Keep one bridge per swarmail origin and target ID. A second
 process for that pair is refused by the journal's owner lock. Stop the process
 with SIGINT or SIGTERM. A permanent target rejection exits with status `1`;
 connection failures and other retryable errors retain the offer and retry.
@@ -129,7 +129,7 @@ The recipient decides whether an authorized request warrants pausing its work.
 ## Retained state and retries
 
 Bridge state lives under `XDG_STATE_HOME/swarmail-bridge`, or
-`~/.local/state/swarmail-bridge`. Each Swarmail origin and target ID has a
+`~/.local/state/swarmail-bridge`. Each swarmail origin and target ID has a
 SQLite journal and a separate SQLite owner lock. The journal records the wake
 cursor, complete pending command and optional notice context.
 
@@ -175,7 +175,7 @@ and their metadata watermark must commit in the same source transaction.
 Startup requires a readable initial snapshot. Later reconciliation reads
 lifecycle flags, the applied watermark and the prior history anchor in one
 read-only source transaction. Source cursor and changed identities commit
-together in Swarmail. Unrelated app events update only the cursor.
+together in swarmail. Unrelated app events update only the cursor.
 
 An existing supervisor can call `POST /lifecycle/reconcile` with an empty body
 at its scan boundary. The response is `{ "status": "ready", "changed": 0 }`
@@ -216,7 +216,7 @@ and end-event ordering before it can be enabled.
 
 `swarmail wake-auto-t3 <config.json>` is a long-running supervisor that starts one bridge for every eligible T3
 Codex thread, and for every Cursor thread under T3 Orchestrator V2, so they wake on mail without per-thread setup.
-Claude threads are left out: the Swarmail mod, or without it their stop hook, already wakes them in T3, and a bridge
+Claude threads are left out: the swarmail mod, or without it their stop hook, already wakes them in T3, and a bridge
 would wait on the same session ID as that hook; the server ends the older wait with a 409. It runs on Linux only,
 because credential rotation needs Unix file permissions. Run it under a service manager; it has no forced shutdown
 deadline, and on SIGTERM or SIGINT its bridges stop polling at once while outstanding T3 calls finish.
@@ -224,7 +224,7 @@ deadline, and on SIGTERM or SIGINT its bridges stop polling at once while outsta
 This command is experimental and opt-in: it does nothing without a configuration file. It drives T3 Code through
 T3's internal HTTP and WebSocket control plane, which T3 does not document, and it reads T3's database to find
 threads. It was written against T3 Code Orchestrator V2 in the 0.0.46 to 0.1.x releases, and a T3 Code update can
-break it. T3 Code now provides `t3_thread_send`, a server-side queue and webhook scheduled tasks natively, so Swarmail
+break it. T3 Code now provides `t3_thread_send`, a server-side queue and webhook scheduled tasks natively, so swarmail
 may remove this command if T3 Code covers waking threads (see
 [Provider coverage](provider-coverage.md#tracking-t3-code)).
 
@@ -263,7 +263,7 @@ different program holds its port, the supervisor stops too.
 
 Linux reader consumers can import `credentialService` and `wakeCredentials`
 from `src/wake-credentials.ts`, backend identity checks from `src/wake-backend.ts`,
-and `followT3Backend` from `src/wake-t3-backend.ts`. The normal Swarmail CLI does
+and `followT3Backend` from `src/wake-t3-backend.ts`. The normal swarmail CLI does
 not enable these primitives or expose a new credential command. A consumer can
 use the existing extra-command interface for its explicit credential operation.
 
@@ -289,4 +289,4 @@ clean session check has a transport failure, losing retry eligibility before
 verified readiness stops the follower without renewal.
 It never enrolls a session, delivers mail, clears quarantine or changes a
 pending delivery journal. Consumers must adopt the module explicitly;
-installing Swarmail does not restore a stopped reader.
+installing swarmail does not restore a stopped reader.
