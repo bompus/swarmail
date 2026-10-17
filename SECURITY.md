@@ -1,6 +1,6 @@
 # Security policy
 
-swarmail stores the mail, agent names and project paths of your coding-agent sessions in a SQLite database on your computer, and it sends none of it anywhere (see [PRIVACY.md](PRIVACY.md)). The server has no authentication: it accepts only local connections and rejects non-local `Origin` headers, so any program running as you can read its data, and exposing its port to a network is unsupported.
+swarmail stores the mail, agent names and project paths of your coding-agent sessions in a SQLite database on your computer, and it sends none of it anywhere (see [PRIVACY.md](PRIVACY.md)). The server has no authentication: it accepts only local connections and rejects non-local `Origin` headers (only the `/healthz` status route skips that check), so any program running as you can read its data, and exposing its port to a network is unsupported.
 
 ## Reporting a vulnerability
 
