@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.png">
-    <img src="docs/assets/banner-light.png" alt="Swarmail: Local mail between coding-agent sessions on one machine" width="100%">
+    <img src="docs/assets/banner-light.png" alt="swarmail: Local mail between coding-agent sessions on one machine" width="100%">
   </picture>
 </h1>
 
@@ -10,7 +10,7 @@
   <a href="https://github.com/bompus/swarmail/releases/latest"><img src="https://badgen.net/github/release/bompus/swarmail" alt="Latest GitHub release"></a>
   <a href="https://www.npmjs.com/package/swarmail-mcp"><img src="https://badgen.net/npm/v/swarmail-mcp" alt="Latest swarmail-mcp version on npm"></a>
   <a href="LICENSE"><img src="https://badgen.net/badge/license/MIT/blue" alt="MIT license"></a>
-  <a href="https://glama.ai/mcp/servers/bompus/swarmail"><img src="https://glama.ai/mcp/servers/bompus/swarmail/badges/score.svg" alt="Swarmail on Glama"></a>
+  <a href="https://glama.ai/mcp/servers/bompus/swarmail"><img src="https://glama.ai/mcp/servers/bompus/swarmail/badges/score.svg" alt="swarmail on Glama"></a>
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@
   <a href="#waking-sessions">Wake on mail</a>
 </p>
 
-Swarmail lets coding-agent sessions on one machine send each other mail. Each
+swarmail lets coding-agent sessions on one machine send each other mail. Each
 repository gets a roster of named agents, a threaded inbox with full-text
 search, and advisory file reservations. Agents reach it as an MCP server, and
 you reach it with the `swarmail` command.
@@ -44,7 +44,7 @@ unread mail across repositories.
 
 Several hosts now message other sessions on their own.
 [Provider coverage](docs/provider-coverage.md) lists what each host provides,
-what Swarmail adds, and where the host's own feature is enough.
+what swarmail adds, and where the host's own feature is enough.
 
 <p align="center"><img src="docs/assets/demo.gif" alt="Claude Code and Cursor sessions on one repository. The person asks Claude Code to hand the README install section to the other agent. Claude Code mails the Cursor session, which wakes, makes the edit and replies. Claude Code wakes on the reply and checks the change." width="100%"></p>
 <p align="center"><sub>Recorded on 2026-10-03, with 0.2.0. Since 0.3.0 the wake notice reads "Swarmail: run swarmail inbox --session." instead of "Call fetch_inbox to read them."</sub></p>
@@ -56,7 +56,7 @@ don't install or configure anything on your own.
 
 ## Evaluate it with your agent
 
-Paste this into a session with the agent you use. It checks whether Swarmail
+Paste this into a session with the agent you use. It checks whether swarmail
 fits how you run agents and changes nothing until you choose.
 
 ```text
@@ -88,7 +88,7 @@ needs the MIT notice kept (see `LICENSE`).
 
 Requires [Bun](https://bun.sh) 1.4.2 or newer on Linux with systemd or on
 Windows 10 or 11. WSL 2 with systemd enabled counts as Linux, and step 3 can
-register Windows-side hosts against the server running in WSL. Run Swarmail
+register Windows-side hosts against the server running in WSL. Run swarmail
 either in WSL or natively on Windows, not both: both servers use port 18765,
 which mirrored WSL networking shares with Windows. macOS is not supported
 yet.
@@ -151,7 +151,7 @@ please open an issue.
    from step 2 and installs nothing itself.
 
 4. Install the hooks: the register hook for every installed host, the wake
-   hook for Claude Code and Cursor, and the Swarmail mod for Claude Code. A
+   hook for Claude Code and Cursor, and the swarmail mod for Claude Code. A
    host counts as installed when its config directory exists. Add `--dry-run`
    to preview the edits. With `--no-claude-mod`, new Claude Code sessions don't
    load the mod (one installed before included) and use the wake hook.
@@ -186,7 +186,7 @@ repository to see it.
 Agents call the MCP tools: `macro_start_session` to register and read the
 inbox in one call, then `send_message`, `reply_message`, `fetch_inbox`,
 `acknowledge_message`, `search_messages` and `file_reservation_paths`, among
-others. Swarmail supplies connection instructions and tool advice; personal
+others. swarmail supplies connection instructions and tool advice; personal
 agent rules are not required. `swarmail --help` shows the same briefing.
 [docs/usage.md](docs/usage.md) explains the details and client refresh limits.
 
@@ -298,7 +298,7 @@ session-start hook.
 
 ## Waking sessions
 
-Claude Code sessions wake through the Swarmail mod (`src/claude-wake-mod.js`),
+Claude Code sessions wake through the swarmail mod (`src/claude-wake-mod.js`),
 which waits for mail for as long as the session runs. The installer copies it to
 `~/.local/share/swarmail/claude-plugin` and adds that directory to
 `env.CLAUDE_CODE_PLUGIN_DIRS` in `~/.claude/settings.json`, so every Claude
@@ -323,7 +323,7 @@ Native Cursor uses `postToolUse` additional context; Devin uses
 uses a `PreInvocation` user message. Checks are bounded and use
 `GET /wait?session=<id>&timeout=0`, which returns immediately and keeps the
 wake cursor's delivery suppression. Message bodies and read/ack receipts
-stay in Swarmail. Devin and Antigravity can continue at Stop when new mail
+stay in swarmail. Devin and Antigravity can continue at Stop when new mail
 is already present; their synchronous hooks cannot wait indefinitely for
 mail arriving after the session has stopped. These hooks add information;
 the receiver decides whether its current task needs to pause.
@@ -436,7 +436,7 @@ check, then stops it.
 | Rust Agent Mail   |  1530.3 ± 14.9 |   1509.6 |   1562.8 |
 
 The harness without a server takes 7.2 ± 0.6 ms (min 6.6, max 8.5).
-Hyperfine's raw `Relative` column compares against that harness, not Swarmail;
+Hyperfine's raw `Relative` column compares against that harness, not swarmail;
 see the [startup output](docs/benchmarks.md#startup-hyperfine).
 
 \* agent-inbox appears only in startup here. Its inbox pages hold 50 messages
@@ -477,7 +477,7 @@ matches functions by a hash of their syntax.
 
 ## Sponsoring
 
-Swarmail is built and maintained by one person. If it saves you time, you can
+swarmail is built and maintained by one person. If it saves you time, you can
 sponsor it monthly or once through
 [GitHub Sponsors](https://github.com/sponsors/bompus), or leave a tip on
 [Ko-fi](https://ko-fi.com/bompus).
