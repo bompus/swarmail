@@ -4,9 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
-- Under T3 Code, agents are told not to retire themselves at a whole-session closeout. Closing the thread (where the
-  server has local T3 lifecycle reconciliation) or a week idle (`SWARMAIL_RETIRE_DAYS`, default 7) already retires the
-  registration, and later activity under the name reactivates it. Outside T3 the closeout steps are unchanged. The
+- Under T3 Code, agents are told not to retire themselves at a whole-session closeout. Where configured, closing the thread (local T3 lifecycle reconciliation) or a week idle (`SWARMAIL_RETIRE_DAYS`, default 7;
+  `0` disables it) already retires the registration, and later activity under the name reactivates it. Outside T3 the closeout steps are unchanged. The
   connection instructions stay under 4096 characters: the closeout paragraph is shortened to make room, and the
   `retire_agent` description and `docs/usage.md` carry the same rule.
 
