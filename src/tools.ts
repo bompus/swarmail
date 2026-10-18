@@ -339,6 +339,7 @@ export const TOOLS: Tool[] = [
     name: "retire_agent",
     description:
       "At an agreed whole-session closeout or a whole-session completion with nothing remaining, record the closeout, release owned resources and finish required dependency notices, then retire your own registration in every project you joined. " +
+      "Under T3 Code do not retire yourself: the server retires closed or idle threads where configured. " +
       "Before retiring another agent, confirm with its owning host that its session has ended; roster data or a ping timeout is insufficient. " +
       "Retire an agent whose session has ended, so it no longer appears in list_agents and " +
       "new messages to it fail. Its messages stay. unretire_agent reverses it, and so does " +

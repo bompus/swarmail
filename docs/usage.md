@@ -89,6 +89,17 @@ the registration.
 Retirement retains existing messages and rejects new mail to that registration;
 it does not archive the host conversation or delete its checkout.
 
+Under T3 Code, stop after step 2 and do not retire yourself. Closing the thread
+retires the registration where the server has
+[local T3 lifecycle reconciliation](wake-bridges.md#local-t3-lifecycle), and the
+server retires any registration idle for `SWARMAIL_RETIRE_DAYS` (default 7).
+A turn or task ending is not a closeout. If you retire early, registering,
+sending or reading mail, or reserving files as yourself can reactivate your
+registration; lookups such as `whois` and `list_agents` do not. Mail to a retired
+name is not read. An install with neither lifecycle reconciliation nor
+`SWARMAIL_RETIRE_DAYS` above zero retires nothing by itself: its operator retires
+ended sessions, after confirming with the host that each has ended.
+
 ## Status evidence
 
 `list_agents` and `whois` return recorded metadata and activity timestamps.
