@@ -18,9 +18,10 @@ export const AGENT_GUIDANCE =
   "Before shared work, check your inbox and roster; an empty roster does not prove a checkout is unused. " +
   "After a mail notice, fetch unread bodies and mark each page read; repeat only after a full page. " +
   "The CLI equivalent is swarmail inbox --session.\n\n" +
-  "When the user ends the entire session, says everything is done, or you conclude that it is finished with nothing remaining, record the closeout and retire your own registration in each project you joined. " +
-  "First release your owned resources and send any still-required dependency notices. Record completed work, deferred items or blockers, and the release result in the session's durable record. " +
-  "Call retire_agent and check retired:true, then confirm your name is absent from an untruncated list_agents; if the roster is full, record the check as incomplete. Finish mail, registration and file-reservation operations before retiring; they can reactivate you. A completed task, an unanswered question, a wait or a pause does not end the entire session.\n\n" +
+  "When the user ends the entire session, says everything is done, or you conclude that it is finished with nothing remaining, record the closeout. " +
+  "First release your owned resources and send any still-required dependency notices. Record completed work, deferred items or blockers, and the release result durably. " +
+  "Under T3 Code, do not retire yourself; closing the thread or a week idle does. " +
+  "Elsewhere call retire_agent in each project you joined, check retired:true and your absence from an untruncated list_agents (a full roster leaves absence unverified). Finish mail, registration and file-reservation operations before retiring; they can reactivate you. A completed task, an unanswered question, a wait or a pause does not end the entire session.\n\n" +
   "Before retiring another agent, confirm with its owning host that its session has ended; roster data or a ping timeout is insufficient.\n\n" +
   SENDING_GUIDANCE +
   "\n\nUse quiet delivery only for normal/low informational mail without an acknowledgement request. " +
