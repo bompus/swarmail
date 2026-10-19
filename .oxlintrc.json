@@ -5,13 +5,13 @@
   },
   "rules": {
     "no-unused-vars": [
-      "warn",
+      "error",
       {
         "ignoreRestSiblings": true
       }
     ],
     "no-unused-expressions": [
-      "warn",
+      "error",
       {
         "allowTernary": true,
         "allowShortCircuit": true
@@ -28,8 +28,8 @@
         "null": "ignore"
       }
     ],
-    "eslint/no-var": "warn",
-    "unicorn/prefer-string-slice": "warn",
+    "eslint/no-var": "error",
+    "unicorn/prefer-string-slice": "off",
     "eslint/no-throw-literal": "error",
     "eslint/no-unsafe-optional-chaining": [
       "error",
@@ -80,26 +80,9 @@
         "skipComments": false
       }
     ],
-    "max-depth": [
-      "warn",
-      {
-        "max": 4
-      }
-    ],
-    "max-lines-per-function": [
-      "warn",
-      {
-        "max": 100,
-        "skipBlankLines": true,
-        "skipComments": true
-      }
-    ],
-    "max-params": [
-      "warn",
-      {
-        "max": 5
-      }
-    ]
+    "max-depth": "off",
+    "max-lines-per-function": "off",
+    "max-params": "off"
   },
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "promise"],
   "overrides": [
@@ -113,7 +96,6 @@
         "**/__tests__/**"
       ],
       "rules": {
-        "max-lines-per-function": "off",
         "max-lines": "off",
         "typescript/no-explicit-any": "off",
         "typescript/no-non-null-assertion": "off",
