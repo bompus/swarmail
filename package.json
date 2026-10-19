@@ -8,11 +8,11 @@
   "scripts": {
     "build": "bun scripts/build.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun scripts/typecheck.ts",
     "lint": "oxlint --deny-warnings .",
     "fmt": "oxfmt",
     "check:published": "bun scripts/check-published.ts",
-    "check": "bun scripts/check-release.ts && oxfmt --check && oxlint --deny-warnings . && tsc --noEmit -p tsconfig.json && bun run check:shell",
+    "check": "bun scripts/check-release.ts && oxfmt --check && oxlint --deny-warnings . && bun run typecheck && bun run check:shell",
     "check:shell": "bun scripts/check-shell.ts"
   },
   "devDependencies": {
