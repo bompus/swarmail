@@ -8,7 +8,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   engine: it keeps its data in `statev2.sqlite` and no longer has the HTTP dispatch route or turn-start command those
   bridges sent, so a `t3-v1-steer` bridge failed its thread check and delivered nothing. A `wake-bridge`, `wake-auto-t3`
   or credential rotation configuration that still names `t3-v1-steer` now fails at startup with
-  `target type t3-v1-steer was removed`; change its `target.type` to `t3-v2-queue`. The register hook, `who`, agent
+  `target type t3-v1-steer was removed`; change its `target.type` to `t3-v2-queue`. The old bridge's saved state is
+  bound to the `t3-v1-steer` destination, so the switched bridge refuses it with `saved mailbox binding differs`: stop
+  the old bridge, reconcile or discard its pending delivery as `docs/wake-bridges.md` describes for bridge state, then
+  remove that journal before starting the `t3-v2-queue` bridge. The register hook, `who`, agent
   locations, automatic wake and `pr-sessions` read only `statev2.sqlite`. While it is missing, or T3 Code is still
   creating it, they find no T3 threads, and `pr-sessions` exits with an error.
 
