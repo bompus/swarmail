@@ -49,6 +49,8 @@
     "import/no-duplicates": "error",
     "import/no-self-import": "error",
     "promise/no-return-in-finally": "error",
+    // Two correctness rules are off as noise: this one flags deliberate callback bridges, and
+    // no-floating-promises catches real misuse; the next one is style only.
     "promise/no-callback-in-promise": "off",
     "typescript/no-useless-default-assignment": "off",
     "typescript/no-extra-non-null-assertion": "error",
@@ -63,6 +65,8 @@
     "unicorn/prefer-optional-catch-binding": "error",
     "unicorn/prefer-structured-clone": "error",
     "typescript/await-thenable": "error",
+    // node:test awaits the promises of its own top-level calls, so only those are exempt;
+    // every other floating promise still fails, in test files too.
     "typescript/no-floating-promises": [
       "error",
       {
