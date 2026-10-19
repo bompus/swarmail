@@ -30,8 +30,9 @@ Find Swarmail on [Glama](https://glama.ai/mcp/servers/bompus/swarmail) and
 
 It is one Bun binary with a SQLite database, listening on `127.0.0.1:18765`.
 There are no runtime dependencies.
-A send takes 0.46 ms and a search 0.65 ms at the median, it starts in 38 ms
-and it idles at 32 MiB. See [how it compares](#performance).
+Measured before the 0.2.0 release, a send took 0.46 ms and a search 0.65 ms
+at the median, it started in 38 ms and it idled at 32 MiB. See
+[how it compares](#performance).
 
 Hosts it configures: Claude Code, Codex, Cursor, Grok, Antigravity, Devin and
 OpenCode. Claude Code and Cursor sessions can also wake up when mail arrives.
