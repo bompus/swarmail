@@ -29,6 +29,8 @@
       }
     ],
     "eslint/no-var": "error",
+    // Style only: substring and slice both work. The shared baseline has no warn-level rules,
+    // so each former warn rule is an error when it catches bugs and off when it is only style.
     "unicorn/prefer-string-slice": "off",
     "eslint/no-throw-literal": "error",
     "eslint/no-unsafe-optional-chaining": [
@@ -80,6 +82,8 @@
         "skipComments": false
       }
     ],
+    // Size limits are style, not bug checks, so they are off for the same reason;
+    // max-lines above stays an error.
     "max-depth": "off",
     "max-lines-per-function": "off",
     "max-params": "off"
@@ -87,6 +91,9 @@
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "promise"],
   "overrides": [
     {
+      // Tests build mocks and loose test data, so the type-strictness rules below are off there,
+      // along with the file-length limit. The bug checks (floating promises, unnecessary
+      // conditions and the rest) stay on.
       "files": [
         "**/*.test.ts",
         "**/*.test.tsx",
