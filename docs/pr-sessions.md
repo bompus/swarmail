@@ -8,11 +8,11 @@ content. It prints one JSON document and exits 0; any problem prints `pr-session
 swarmail pr-sessions <https://github.com/owner/repo/pull/number> --project <checkout> [--include-hidden] [--t3-home <local-profile>]
 ```
 
-| Argument           | Effect                                                                                |
-| ------------------ | ------------------------------------------------------------------------------------- |
-| `--project`        | Required. The checkout a T3 project is rooted at; the lookup covers only that project |
-| `--include-hidden` | Also lists links the user dismissed in T3 (`hiddenAssociations`, `hiddenLinks`)       |
-| `--t3-home`        | A T3 profile directory to read instead of `~/.t3`                                     |
+| Argument           | Effect                                                                                 |
+| ------------------ | -------------------------------------------------------------------------------------- |
+| `--project`        | Required. The checkout a T3 project is rooted at; the lookup covers only that project  |
+| `--include-hidden` | Also lists links the user dismissed in T3 (`hiddenAssociations`, `hiddenLinks`)        |
+| `--t3-home`        | A T3 profile directory to read instead of `T3CODE_HOME`, or `~/.t3` when that is unset |
 
 ## Output
 
