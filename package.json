@@ -8,7 +8,7 @@
   "scripts": {
     "build": "bun scripts/build.ts",
     "test": "bun test",
-    "typecheck": "bun scripts/typecheck.ts",
+    "typecheck": "bun --check --tsconfig-override tsconfig.json",
     "lint": "oxlint --deny-warnings .",
     "fmt": "oxfmt",
     "check:published": "bun scripts/check-published.ts",
