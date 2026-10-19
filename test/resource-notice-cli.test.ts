@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../src/server.ts";
+import type { Args } from "../src/store.ts";
 import { createTools } from "../src/tools.ts";
 import { mail } from "../src/mail.ts";
 
@@ -17,12 +18,15 @@ const env = {
   SWARMAIL_AGENT: "BlueLake",
   XDG_STATE_HOME: join(repo, "state"),
 };
-const tools = createTools(db, { databasePath: ":memory:" });
+const tools = createTools(db, { databasePath: ":memory:" }) as Record<
+  "register_agent",
+  (a: Args) => unknown
+>;
 for (const name of ["BlueLake", "GreenCastle"]) {
   tools.register_agent({ project_key: repo, name, program: "test", model: "test" });
 }
-afterAll(() => {
-  server.stop(true);
+afterAll(async () => {
+  await server.stop(true);
   db.close();
   rmSync(dir, { recursive: true, force: true });
 });
@@ -46,18 +50,18 @@ test("CLI JSON stdin sends a quiet typed notice, retries once and displays reada
       "--json",
     ];
     expect(await mail(args, async () => JSON.stringify(payload), env, repo)).toBe(0);
-    const first = JSON.parse(log.mock.calls.at(-1)[0]);
+    const first = JSON.parse(log.mock.calls.at(-1)![0]);
     expect(first).toMatchObject({
       subject: "Resource released",
       body_md: "Resource `heavy-local-work` was released by phase `suite-42`. No action requested.",
       notification_policy: "quiet",
     });
     expect(await mail(args, async () => JSON.stringify(payload), env, repo)).toBe(0);
-    expect(JSON.parse(log.mock.calls.at(-1)[0])).toMatchObject({
+    expect(JSON.parse(log.mock.calls.at(-1)![0])).toMatchObject({
       id: first.id,
       idempotent_replay: true,
     });
-    expect(db.query("SELECT count(*) AS n FROM messages").get().n).toBe(1);
+    expect((db.query("SELECT count(*) AS n FROM messages").get() as { n: number }).n).toBe(1);
     log.mockClear();
     expect(await mail(["inbox", "--peek", "--as", "GreenCastle"], async () => "", env, repo)).toBe(
       0,
@@ -76,7 +80,7 @@ test("CLI malformed notices and mixed text or delivery options fail before any n
   const err = spyOn(console, "error").mockImplementation(() => {});
   try {
     const base = ["send", "GreenCastle", "--resource-notice", "--idempotency-key", "invalid-cli"];
-    const cases = [
+    const cases: [string[], string][] = [
       [base, "{"],
       [base, "null"],
       [base, JSON.stringify({ ...payload, details: "unrelated compiler errors" })],

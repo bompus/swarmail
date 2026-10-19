@@ -16,7 +16,7 @@ import { configureSwarmailMcp } from "../scripts/configure-mcp.ts";
 
 const managedUrl = "http://127.0.0.1:18765/mcp/";
 const windows = process.platform === "win32";
-const roots = [];
+const roots: string[] = [];
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "swarmail-mcp-"));
   roots.push(root);
@@ -26,7 +26,7 @@ function fixture() {
   return { home, bin };
 }
 /** Creates each host's config directory, as installing the seven hosts would. */
-function installHosts(home) {
+function installHosts(home: string) {
   for (const dir of [
     ".claude",
     ".codex",
@@ -39,7 +39,7 @@ function installHosts(home) {
     mkdirSync(join(home, dir), { recursive: true });
   }
 }
-function write(home, relative, contents) {
+function write(home: string, relative: string, contents: string) {
   const path = join(home, relative);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, contents);
@@ -74,7 +74,10 @@ test("registers all seven clients over HTTP, preserves settings and is byte-stab
   expect(results).toHaveLength(7);
   expect(results.filter((r) => r.status === "added")).toHaveLength(7);
   expect(readFileSync(codex, "utf8")).toStartWith('# keep this comment\nmodel = "keep"');
-  expect(Bun.TOML.parse(readFileSync(codex, "utf8")).mcp_servers.codegraph.command).toBe("custom");
+  const toml = Bun.TOML.parse(readFileSync(codex, "utf8")) as {
+    mcp_servers: Record<string, { command: string }>;
+  };
+  expect(toml.mcp_servers.codegraph!.command).toBe("custom");
   expect(JSON.parse(readFileSync(claude, "utf8")).oauthAccount).toEqual({ keep: true });
   expect(JSON.parse(readFileSync(opencode, "utf8")).mcp.servers.other.url).toBe(
     "https://example.com",
@@ -127,8 +130,8 @@ test("retains an explicitly disabled or custom swarmail server verbatim", () => 
   const customPath = write(home, ".grok/config.toml", custom);
   const results = configureSwarmailMcp(home);
   const grok = results.find((r) => r.client === "grok");
-  expect(results.find((r) => r.client === "codex").status).toBe("preserved-disabled");
-  expect(grok.status).toBe("preserved-existing");
+  expect(results.find((r) => r.client === "codex")!.status).toBe("preserved-disabled");
+  expect(grok!.status).toBe("preserved-existing");
   expect(readFileSync(disabledPath, "utf8")).toBe(disabled);
   expect(readFileSync(customPath, "utf8")).toBe(custom);
 });
@@ -153,7 +156,7 @@ test("updates only the Swarmail entry and preserves project and secondary settin
   });
   const settings = write(home, ".gemini/settings.json", secondary);
   const result = configureSwarmailMcp(home).find((r) => r.client === "claude");
-  expect(result.status).toBe("updated");
+  expect(result!.status).toBe("updated");
   const parsed = JSON.parse(readFileSync(claude, "utf8"));
   expect(parsed.projects).toEqual(projects);
   expect(parsed.mcpServers.other).toEqual({ command: "keep" });
@@ -182,7 +185,7 @@ test("registers Claude when its ~/.claude directory exists", () => {
   const { home } = fixture();
   mkdirSync(join(home, ".claude"));
   const claude = configureSwarmailMcp(home).find((r) => r.client === "claude");
-  expect(claude.status).toBe("added");
+  expect(claude!.status).toBe("added");
   expect(JSON.parse(readFileSync(join(home, ".claude.json"), "utf8")).mcpServers.swarmail).toEqual({
     type: "http",
     url: managedUrl,
@@ -193,7 +196,7 @@ test("the CLI prints usage for --help and refuses unknown arguments before writi
   const { home } = fixture();
   mkdirSync(join(home, ".claude"));
   const script = Bun.fileURLToPath(new URL("../scripts/configure-mcp.ts", import.meta.url));
-  const run = (args) =>
+  const run = (args: string[]) =>
     Bun.spawnSync([process.execPath, script, ...args], {
       env: { ...process.env, HOME: home, USERPROFILE: home },
     });
@@ -270,7 +273,7 @@ test.each([".cursor", ".config", ".gemini/config"])(
     // Behind a symlinked .config, Devin's directory makes the host count as installed.
     mkdirSync(join(home, relative === ".config" ? ".config/devin" : relative), { recursive: true });
     expect(() => configureSwarmailMcp(home)).toThrow("Expected a real directory");
-    const files = readdirSync(outside, { recursive: true }).filter((f) =>
+    const files = readdirSync(outside, { recursive: true, encoding: "utf8" }).filter((f) =>
       statSync(join(outside, f)).isFile(),
     );
     expect(files).toEqual([]);

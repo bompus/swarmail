@@ -6,6 +6,11 @@ import { processIdentity } from "../src/proc.ts";
 import { createServer } from "../src/server.ts";
 import { createWaiters } from "../src/wake.ts";
 
+type WakeOffer = Exclude<
+  Awaited<ReturnType<ReturnType<typeof createWaiters>["wait"]>>,
+  null | false
+>;
+
 // Run from a session that has the Claude Code mod, the hooks spawned here would inherit this and stand down.
 delete process.env.SWARMAIL_WAKE_MOD;
 
@@ -15,8 +20,11 @@ const HOST = join(import.meta.dir, "fixtures/wake-host.ts");
 const HOOKS = {
   "swarmail hook wake": [process.execPath, join(import.meta.dir, "../src/cli.ts"), "hook", "wake"],
 };
-let dir, server, db, base;
-let previousState;
+let dir: string,
+  server: ReturnType<typeof createServer>["server"],
+  db: ReturnType<typeof createServer>["db"],
+  base: string;
+let previousState: string | undefined;
 
 beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "swarmail-wake-"));
@@ -57,18 +65,18 @@ beforeEach(async () => {
   });
   await call("fetch_session_inbox", { host: "cursor", session_id: "c-1", limit: 1000 });
 });
-afterAll(() => {
+afterAll(async () => {
   if (previousState === undefined) {
     delete process.env.XDG_STATE_HOME;
   } else {
     process.env.XDG_STATE_HOME = previousState;
   }
-  server.stop(true);
+  await server.stop(true);
   db.close();
   rmSync(dir, { recursive: true, force: true });
 });
 
-async function call(name, args) {
+async function call(name: string, args: Record<string, unknown>): Promise<any> {
   const res = await fetch(`${base}/mcp/`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -79,9 +87,10 @@ async function call(name, args) {
       params: { name, arguments: args },
     }),
   });
-  return JSON.parse((await res.json()).result.content[0].text);
+  const answer = (await res.json()) as { result: { content: { text: string }[] } };
+  return JSON.parse(answer.result.content[0]!.text);
 }
-const send = (to) =>
+const send = (to: string) =>
   call("send_message", {
     project_key: P,
     sender_name: "BlueLake",
@@ -94,11 +103,12 @@ const send = (to) =>
  * The PID in the Claude hook's PID file for session s-1 once it names `pid` (or any PID), or 0 after 5 s. On Windows
  * the hook reads its host's command line through PowerShell before it waits, which takes about half a second.
  */
-async function waiting(pid) {
+async function waiting(pid?: number) {
   for (let i = 0; i < 50; i++) {
     const found = parseInt(
-      existsSync(join(dir, "state/swarmail-wake/s-1")) &&
-        readFileSync(join(dir, "state/swarmail-wake/s-1"), "utf8"),
+      existsSync(join(dir, "state/swarmail-wake/s-1"))
+        ? readFileSync(join(dir, "state/swarmail-wake/s-1"), "utf8")
+        : "",
     );
     if (found && (pid === undefined || found === pid)) {
       return found;
@@ -107,7 +117,8 @@ async function waiting(pid) {
   }
   return 0;
 }
-const wait = (session, timeout = 5) => fetch(`${base}/wait?session=${session}&timeout=${timeout}`);
+const wait = (session: string, timeout = 5) =>
+  fetch(`${base}/wait?session=${session}&timeout=${timeout}`);
 
 test("wakes a session for unread mail to its tagged agent only with one inbox instruction", async () => {
   await send("GreenCastle"); // unread before the session's first wait: announced at once
@@ -142,7 +153,7 @@ test("a retried wait gets a lost hint again, and a restarted server does not re-
   // A second server on the same database stands in for a restart.
   const other = createServer(join(dir, "mail.sqlite3"), 0, { wakePollMs: 20 });
   try {
-    const waitOther = (timeout) =>
+    const waitOther = (timeout: number) =>
       fetch(`http://127.0.0.1:${other.server.port}/wait?session=s-1&timeout=${timeout}`);
     expect((await waitOther(1)).status).toBe(204);
     await call("fetch_session_inbox", {
@@ -156,7 +167,7 @@ test("a retried wait gets a lost hint again, and a restarted server does not re-
     await send("GreenCastle");
     expect(await (await pending).text()).toBe("Swarmail: run swarmail inbox --session.\n");
   } finally {
-    other.server.stop(true);
+    await other.server.stop(true);
     other.db.close();
   }
 });
@@ -212,21 +223,21 @@ test("a ping is answered while the hook waits and wakes no one", async () => {
   });
   expect((await pending).status).toBe(204);
   const pong = db
-    .query(
+    .query<{ sender: string; recipient: string; read_ts: number | null }, []>(
       `SELECT s.name AS sender, a.name AS recipient, r.read_ts FROM messages m
        JOIN agents s ON s.id = m.sender_id JOIN message_recipients r ON r.message_id = m.id
        JOIN agents a ON a.id = r.agent_id WHERE m.thread_id = 'ping-t' AND m.subject = 'swarmail pong'`,
     )
     .get();
   expect(pong).toMatchObject({ sender: "GreenCastle", recipient: "BlueLake" });
-  expect(pong.read_ts).not.toBeNull();
+  expect(pong!.read_ts).not.toBeNull();
   const unread = await call("fetch_inbox", {
     project_key: P,
     agent_name: "GreenCastle",
     unread_only: true,
     mark_read: false,
   });
-  expect(unread.some((m) => m.subject === "swarmail ping")).toBe(false);
+  expect(unread.some((m: { subject: string }) => m.subject === "swarmail ping")).toBe(false);
 });
 
 test("the shell-free re-arm starts a wait only for a registered session with no live waiter", async () => {
@@ -243,13 +254,13 @@ test("the shell-free re-arm starts a wait only for a registered session with no 
     transcript_path: "/h/.claude/projects/w/s-1.jsonl",
   });
   const cli = join(import.meta.dir, "../src/cli.ts");
-  const rearm = (extra = {}, args = ["rearm"]) =>
+  const rearm = (extra: Record<string, string> = {}, args = ["rearm"]) =>
     Bun.spawn([process.execPath, cli, "hook", ...args], {
       stdin: new Blob([input]),
       env: { ...env, ...extra },
       stderr: "pipe",
     });
-  const skips = async (extra) => {
+  const skips = async (extra?: Record<string, string>) => {
     const started = Date.now();
     expect(await rearm(extra).exited).toBe(0);
     expect(Date.now() - started).toBeLessThan(3000);
@@ -261,7 +272,7 @@ test("the shell-free re-arm starts a wait only for a registered session with no 
   await skips({ CLAUDE_CODE_SESSION_ID: "" });
   await skips({ SWARMAIL_WAKE_MOD: "1" }); // the Swarmail mod waits instead
   mkdirSync(join(state, "swarmail-wake"));
-  writeFileSync(pidFile, `${process.pid}\n${processIdentity(process.pid).start}\n`);
+  writeFileSync(pidFile, `${process.pid}\n${processIdentity(process.pid)!.start}\n`);
   await skips(); // a live waiter
   expect(await rearm({}, ["wake", "claude", "soon"]).exited).toBe(64);
   // The waiter exited without cleaning up, and a live process now holds its PID: the start time differs.
@@ -290,7 +301,7 @@ for (const [name, hook] of Object.entries(HOOKS)) {
         CLAUDE_PID: String(process.pid),
         XDG_STATE_HOME: join(dir, "state"),
       };
-      const run = (host, input) =>
+      const run = (host: string, input: object) =>
         Bun.spawn([...hook, host, "5"], {
           stdin: new Blob([JSON.stringify(input)]),
           env,
@@ -332,10 +343,10 @@ for (const [name, hook] of Object.entries(HOOKS)) {
       // Claude holds `claude -p` open, and a one-prompt SDK process ~30 s, while an async hook runs.
       const unrelated = Bun.spawn([process.execPath, "-e", "await Bun.sleep(30000)"]);
       const env = { ...process.env, SWARMAIL_WAKE_URL: base, XDG_STATE_HOME: join(dir, "state") };
-      const input = (session, transcript = `/h/.claude/projects/w/${session}.jsonl`) =>
+      const input = (session: string, transcript = `/h/.claude/projects/w/${session}.jsonl`) =>
         JSON.stringify({ session_id: session, transcript_path: transcript });
       // The host stands in for Claude: CLAUDE_PID names it, and its command line ends in the flag.
-      const underClaude = (flag, session, transcript) => ({
+      const underClaude = (flag: string, session: string, transcript?: string) => ({
         cmd: [process.execPath, HOST, flag],
         host: {
           HOST_HOOK: JSON.stringify([...hook, "claude", "5"]),
@@ -346,7 +357,13 @@ for (const [name, hook] of Object.entries(HOOKS)) {
         join(dir, "state/swarmail-register/s-ended.json"),
         JSON.stringify({ name: null, projects: [], ended: "2026-09-30T23:00:00Z" }),
       );
-      const cases = [
+      const cases: {
+        cmd: string[];
+        host?: Record<string, string>;
+        CLAUDE_PID?: string;
+        session?: string;
+        extra?: Record<string, string>;
+      }[] = [
         underClaude("--resume", "s-ended"), // End record before any registration.
         underClaude("-p", "s-1"), // `claude -p`
         underClaude("--resume", "s-unregistered"), // no register-hook state
@@ -464,7 +481,7 @@ for (const [name, hook] of Object.entries(HOOKS)) {
 
     test("the hook waits again when the server ends a wait before the hook's own time is up", async () => {
       // The server ends each /wait after at most a day, and Claude's hook waits about 23 days.
-      const waits = [];
+      const waits: (string | null)[] = [];
       const fake = Bun.serve({
         port: 0,
         fetch(req) {
@@ -499,21 +516,21 @@ for (const [name, hook] of Object.entries(HOOKS)) {
         expect(waits).toHaveLength(2);
       } finally {
         waiting.kill();
-        fake.stop(true);
+        await fake.stop(true);
       }
     }, 20000);
 
     test("the hook reconnects after a server restart and still gets the hint", async () => {
       const first = createServer(join(dir, "mail.sqlite3"), 0, { wakePollMs: 20 });
-      const port = first.server.port;
+      const port = first.server.port!;
       const waiting = Bun.spawn([...hook, "cursor", "15"], {
         stdin: new Blob(['{"conversation_id":"c-1"}']),
         env: { ...process.env, SWARMAIL_WAKE_URL: `http://127.0.0.1:${port}` },
       });
-      let second;
+      let second: ReturnType<typeof createServer> | undefined;
       try {
         await Bun.sleep(300);
-        first.server.stop(true);
+        await first.server.stop(true);
         first.db.close();
         second = createServer(join(dir, "mail.sqlite3"), port, { wakePollMs: 20 });
         await send("PinkFox");
@@ -523,7 +540,7 @@ for (const [name, hook] of Object.entries(HOOKS)) {
         );
       } finally {
         waiting.kill();
-        second?.server.stop(true);
+        await second?.server.stop(true);
         second?.db.close();
       }
     }, 20000);
@@ -614,7 +631,11 @@ describe("read-only unread mailbox peek", () => {
     );
     expect(accepted.status).toBe(204);
     expect(
-      db.query("SELECT announced FROM wake_cursors WHERE session = ?").get(session).announced,
+      db
+        .query<{ announced: number }, [string]>(
+          "SELECT announced FROM wake_cursors WHERE session = ?",
+        )
+        .get(session)!.announced,
     ).toBeGreaterThan(0);
     const afterOffer = snapshot();
     expect(await (await peek()).json()).toEqual(expected);
@@ -652,29 +673,29 @@ describe("read-only unread mailbox peek", () => {
     expect(waiters.peek(id)).toEqual({ mailboxes: [] });
     await send("WhiteOwl");
     waiters.notify();
-    expect((await polling).hint).toBe("Swarmail: run swarmail inbox --session.");
+    expect(((await polling) as WakeOffer).hint).toBe("Swarmail: run swarmail inbox --session.");
     expect(waiters.peek(id).mailboxes).toEqual([{ recipient: "WhiteOwl", project: P }]);
   });
 
   test("rejects an oversized snapshot instead of returning a partial mailbox set", async () => {
     const project = db
-      .query(
+      .query<{ id: number }, [string]>(
         "INSERT INTO projects(slug, human_key, created_at) VALUES ('peek-limit', ?, 1) RETURNING id",
       )
       .get("/w/peek-limit");
-    const insertAgent = db.query(
+    const insertAgent = db.query<{ id: number }, [number, string]>(
       "INSERT INTO agents(project_id, name, program, model, inception_ts, last_active_ts, session_id) VALUES (?, ?, 'codex', 'm', 1, 1, 'peek-limit') RETURNING id",
     );
-    const insertMail = db.query(
+    const insertMail = db.query<{ id: number }, [number, number]>(
       "INSERT INTO messages(project_id, sender_id, subject, body_md, created_ts, recipients_json) VALUES (?, ?, 's', 'b', 1, '{}') RETURNING id",
     );
-    const insertReceipt = db.query(
+    const insertReceipt = db.query<unknown, [number, number]>(
       "INSERT INTO message_recipients(message_id, agent_id, created_ts) VALUES (?, ?, 1)",
     );
     db.transaction(() => {
       for (let i = 0; i < 1001; i++) {
-        const agent = insertAgent.get(project.id, `Limit${i}`);
-        const message = insertMail.get(project.id, agent.id);
+        const agent = insertAgent.get(project!.id, `Limit${i}`)!;
+        const message = insertMail.get(project!.id, agent.id)!;
         insertReceipt.run(message.id, agent.id);
       }
     })();

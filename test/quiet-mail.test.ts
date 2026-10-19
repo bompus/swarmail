@@ -1,15 +1,31 @@
 import { expect, test } from "bun:test";
 import { openDatabase } from "../src/db.ts";
+import type { Args } from "../src/store.ts";
 import { createTools } from "../src/tools.ts";
 import { createWaiters } from "../src/wake.ts";
 import { join } from "node:path";
 import { testScratch } from "./fixtures/test-scratch.ts";
 import { isMessageResult } from "../src/message-validation.ts";
 
+type WakeOffer = Exclude<
+  Awaited<ReturnType<ReturnType<typeof createWaiters>["wait"]>>,
+  null | false
+>;
+
 const scratch = testScratch();
 function fixture(path = ":memory:") {
   const db = openDatabase(path);
-  const tools = createTools(db, { databasePath: ":memory:", mutationsEnabled: true });
+  const tools = createTools(db, { databasePath: ":memory:", mutationsEnabled: true }) as Record<
+    | "register_agent"
+    | "send_message"
+    | "fetch_inbox"
+    | "fetch_session_inbox"
+    | "search_messages"
+    | "mark_message_read"
+    | "reply_message"
+    | "set_message_importance",
+    (a: Args) => any
+  >;
   const project_key = "/quiet/repo";
   for (const name of ["BlueLake", "GreenCastle"]) {
     tools.register_agent({
@@ -27,7 +43,7 @@ function fixture(path = ":memory:") {
     db,
     tools,
     common,
-    send: (extra = {}) =>
+    send: (extra: Args = {}) =>
       tools.send_message({
         ...common,
         to: ["GreenCastle"],
@@ -36,7 +52,7 @@ function fixture(path = ":memory:") {
         notification_policy: "wake",
         ...extra,
       }),
-    inbox: (extra = {}) =>
+    inbox: (extra: Args = {}) =>
       tools.fetch_inbox({
         project_key,
         agent_name: "GreenCastle",
@@ -86,7 +102,7 @@ test("quiet mail stays readable and searchable without offers, cursors or mailbo
     expect(await f.wait()).toBeNull();
     const wake = f.send();
     expect(wake.notification_policy).toBe("wake");
-    expect((await f.wait()).eventId).toBe(wake.id);
+    expect(((await f.wait()) as WakeOffer).eventId).toBe(wake.id);
     expect(f.peek().mailboxes).toHaveLength(1);
   } finally {
     f.db.close();
@@ -97,11 +113,12 @@ test("unread quiet remainder cannot retain an admitted notice or suppress the ne
   const f = fixture();
   try {
     const wake = f.send();
-    const first = await f.wait();
+    const first = (await f.wait()) as WakeOffer;
     const quiet = f.send({ notification_policy: "quiet" });
-    expect(f.db.query("SELECT covered_through FROM wake_notices").get().covered_through).toBe(
-      wake.id,
-    );
+    expect(
+      f.db.query<{ covered_through: number }, []>("SELECT covered_through FROM wake_notices").get()!
+        .covered_through,
+    ).toBe(wake.id);
     f.tools.mark_message_read({
       project_key: f.common.project_key,
       agent_name: "GreenCastle",
@@ -113,7 +130,7 @@ test("unread quiet remainder cannot retain an admitted notice or suppress the ne
     expect(await f.wait(first.eventId)).toBeNull();
     expect(f.inbox({ unread_only: true })).toMatchObject([{ id: quiet.id }]);
     const next = f.send({ importance: "urgent", ack_required: true });
-    expect((await f.wait(first.eventId)).eventId).toBe(next.id);
+    expect(((await f.wait(first.eventId)) as WakeOffer).eventId).toBe(next.id);
   } finally {
     f.db.close();
   }
@@ -135,7 +152,7 @@ test("quiet rejects urgent or acknowledgement requests before storage, including
     for (const notification_policy of [null, "silent", true]) {
       expect(() => f.send({ notification_policy })).toThrow("notification_policy must be");
     }
-    expect(f.db.query("SELECT count(*) AS n FROM messages").get().n).toBe(0);
+    expect(f.db.query<{ n: number }, []>("SELECT count(*) AS n FROM messages").get()!.n).toBe(0);
     const quiet = f.send({ notification_policy: "quiet", importance: "low" });
     const replyArgs = {
       project_key: f.common.project_key,
@@ -181,7 +198,7 @@ test("quiet rejects urgent or acknowledgement requests before storage, including
       expected_revision: 0,
       idempotency_key: "normal",
     });
-    expect(f.inbox().find((m) => m.id === quiet.id)).toMatchObject({
+    expect(f.inbox().find((m: { id: number }) => m.id === quiet.id)).toMatchObject({
       notification_policy: "quiet",
       revision: 1,
     });
@@ -198,7 +215,9 @@ test("schema-six migration preserves mail and makes existing deliveries wake by 
   f.db.close();
   const db = openDatabase(path);
   try {
-    expect(db.query("PRAGMA user_version").get().user_version).toBe(7);
+    expect(db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(
+      7,
+    );
     expect(db.query("SELECT id,body_md,notification_policy FROM messages").all()).toEqual([
       { id: sent.id, body_md: "retained evidence", notification_policy: "wake" },
     ]);

@@ -1,26 +1,27 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { openWakeState, peekUnreadMailboxes } from "../src/wake-state.ts";
+import { openWakeState, peekUnreadMailboxes, type Pending } from "../src/wake-state.ts";
 import { t3NoticeAdapter } from "../src/wake-t3-notice.ts";
+import type { T3ControlProjection, WakeTarget } from "../src/wake-target.ts";
 import { createServer } from "../src/server.ts";
 import { testScratch } from "./fixtures/test-scratch.ts";
 
 const scratch = testScratch();
 const savedHome = process.env.XDG_STATE_HOME;
-const cleanups = [];
-function cleanupFixtures() {
+const cleanups: (() => unknown)[] = [];
+async function cleanupFixtures() {
   for (const cleanup of cleanups.splice(0).reverse()) {
-    cleanup();
+    await cleanup();
   }
 }
-afterEach(() => {
-  cleanupFixtures();
+afterEach(async () => {
+  await cleanupFixtures();
   process.env.XDG_STATE_HOME = savedHome;
 });
 
 // Bun 1.4.2 on Windows reenters socket dispatch inside expect().rejects.
-async function rejected(promise) {
+async function rejected(promise: Promise<unknown>) {
   try {
     await promise;
   } catch (error) {
@@ -29,13 +30,13 @@ async function rejected(promise) {
   throw new Error("expected the promise to reject");
 }
 
-function fixture(swarmailUrl) {
+function fixture(swarmailUrl?: string) {
   const dir = mkdtempSync(join(scratch, "case-"));
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   process.env.XDG_STATE_HOME = dir;
   const id = "thread-notice";
-  const unread = new Set();
-  let snapshotResponse;
+  const unread = new Set<string>();
+  let snapshotResponse: (() => Response) | undefined;
   if (!swarmailUrl) {
     const mail = Bun.serve({
       hostname: "127.0.0.1",
@@ -58,8 +59,7 @@ function fixture(swarmailUrl) {
     cleanups.push(() => mail.stop(true));
     swarmailUrl = `http://127.0.0.1:${mail.port}`;
   }
-  /** @type {import("../src/wake-target.ts").T3ControlProjection} */
-  const projection = {
+  const projection: T3ControlProjection = {
     thread: { id, settledAt: null, settledOverride: null },
     runs: [],
     messages: [],
@@ -79,11 +79,11 @@ function fixture(swarmailUrl) {
     ],
     providerTurns: [],
   };
-  const received = [];
-  const receipts = new Map();
-  let loseReply = false;
+  const received: any[] = [];
+  const receipts = new Map<string, boolean>();
+  let loseReply: boolean | string = false;
   let endPromotionTarget = false;
-  let raceOperation;
+  let raceOperation: string | undefined;
   let finishTurnBeforeDispatch = false;
   let providerTurnRunning = true;
   let peakQueued = 0;
@@ -109,7 +109,7 @@ function fixture(swarmailUrl) {
         projection.providerTurns = projection.runs
           .filter((run) => run.status === "running")
           .map((run) => ({
-            runAttemptId: run.activeAttemptId,
+            runAttemptId: run.activeAttemptId as string | null,
             status: providerTurnRunning ? "running" : "completed",
           }));
         return Response.json({ projection });
@@ -121,7 +121,7 @@ function fixture(swarmailUrl) {
     },
     websocket: {
       message(ws, raw) {
-        const frame = JSON.parse(raw);
+        const frame = JSON.parse(String(raw));
         const command = frame.payload;
         received.push(command);
         let success = receipts.get(command.commandId);
@@ -132,7 +132,7 @@ function fixture(swarmailUrl) {
           );
           if (raceOperation === command.type) {
             raceOperation = undefined;
-            run.status = "running";
+            run!.status = "running";
           }
           if (command.type === "message.dispatch") {
             let active = projection.runs.find((candidate) =>
@@ -171,12 +171,12 @@ function fixture(swarmailUrl) {
             success =
               run?.status === "queued" && active?.status === "running" && providerTurnRunning;
             if (success) {
-              run.status = "cancelled";
+              run!.status = "cancelled";
             }
           } else if (run?.status !== "queued") {
             success = false;
           } else if (command.type === "queued-run.edit") {
-            projection.messages.find((message) => message.id === run.userMessageId).text =
+            projection.messages.find((message) => message.id === run.userMessageId)!.text =
               command.text;
           } else if (command.type === "queued-run.cancel") {
             run.status = "cancelled";
@@ -207,7 +207,7 @@ function fixture(swarmailUrl) {
   cleanups.push(() => target.stop(true));
   const authorizationFile = join(dir, "authorization");
   writeFileSync(authorizationFile, "Bearer fixture-token", { mode: 0o600 });
-  const config = {
+  const config: { swarmailUrl: string; target: WakeTarget } = {
     swarmailUrl,
     target: {
       type: "t3-v2-queue",
@@ -223,10 +223,10 @@ function fixture(swarmailUrl) {
   const queued = () =>
     projection.runs
       .filter((run) => run.status === "queued")
-      .map((run) => projection.messages.find((message) => message.id === run.userMessageId));
-  const legacy = async (eventId, hint) => {
+      .map((run) => projection.messages.find((message) => message.id === run.userMessageId)!);
+  const legacy = async (eventId: number, hint: string) => {
     const a = adapter();
-    const command = a.prepare({ eventId, hint });
+    const command = a.prepare({ eventId, hint }) as Record<string, any>;
     command.operation = {
       type: "message.dispatch",
       commandId: crypto.randomUUID(),
@@ -249,20 +249,20 @@ function fixture(swarmailUrl) {
     state.accept(eventId);
     return command.messageId;
   };
-  const seenOffers = new Set();
-  const deliver = async (eventId, hint) => {
+  const seenOffers = new Set<number>();
+  const deliver = async (eventId: number, hint: string) => {
     // Synthetic mail events update only the boundary fixture. Real-server cases use their own inbox.
     const match = / in (repo-[ab]) from /.exec(hint);
     if (match && !seenOffers.has(eventId)) {
-      unread.add(match[1]);
+      unread.add(match[1]!);
     }
     seenOffers.add(eventId);
     const a = adapter();
     if (!state.pending) {
-      state.savePending({ eventId, command: a.prepare({ eventId, hint }) });
+      state.savePending({ eventId, command: a.prepare({ eventId, hint }) as Pending["command"] });
     }
-    await a.deliver(state.pending, () => state.markAttempted(), new AbortController().signal);
-    state.accept(state.pending.eventId);
+    await a.deliver(state.pending!, () => state.markAttempted(), new AbortController().signal);
+    state.accept(state.pending!.eventId);
   };
   const restart = () => {
     state.close();
@@ -272,11 +272,11 @@ function fixture(swarmailUrl) {
     projection,
     legacy,
     unread,
-    arrive: (eventId, mailbox) => {
+    arrive: (eventId: number, mailbox: string) => {
       seenOffers.add(eventId);
       unread.add(mailbox);
     },
-    snapshot: (response) => {
+    snapshot: (response: () => Response) => {
       snapshotResponse = response;
     },
     received,
@@ -290,7 +290,7 @@ function fixture(swarmailUrl) {
     get peakQueued() {
       return peakQueued;
     },
-    lose: (type = true) => {
+    lose: (type: boolean | string = true) => {
       loseReply = type;
     },
     race: () => {
@@ -311,24 +311,24 @@ function fixture(swarmailUrl) {
   };
 }
 
-const mailboxHint = (mailbox) =>
+const mailboxHint = (mailbox: string) =>
   `Swarmail: unread mail for BlueLake in ${JSON.stringify(mailbox)}.`;
 
-const hint = (mailbox) =>
+const hint = (mailbox: string) =>
   `Swarmail: 1 new message for BlueLake in ${mailbox} from GoldMoose. Call fetch_inbox to read it.`;
 
 test("successive mail steers the active run across restart and retains every mailbox", async () => {
   const f = fixture();
   await f.deliver(1, hint("repo-a"));
-  const runId = f.projection.runs[0].id;
+  const runId = f.projection.runs[0]!.id;
   f.restart();
   await f.deliver(2, hint("repo-b"));
   expect(f.queued()).toHaveLength(0);
   expect(f.projection.runs.filter((run) => run.status === "running").map((run) => run.id)).toEqual([
     runId,
   ]);
-  expect(f.projection.messages.at(-1).text).toBe("Swarmail: run swarmail inbox --session.");
-  expect(f.state.readContext().hints).toEqual([mailboxHint("repo-a"), mailboxHint("repo-b")]);
+  expect(f.projection.messages.at(-1)!.text).toBe("Swarmail: run swarmail inbox --session.");
+  expect(f.state.readContext()!.hints).toEqual([mailboxHint("repo-a"), mailboxHint("repo-b")]);
   expect(f.received.every((command) => command.deliveryIntent === "steer")).toBe(true);
   expect(f.state.acknowledged).toBe(2);
 });
@@ -347,13 +347,13 @@ test("coalescing wake offers leaves all Swarmail messages unread in the durable 
   const dir = mkdtempSync(join(scratch, "mail-"));
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const mail = createServer(join(dir, "mail.sqlite"), 0);
-  cleanups.push(() => {
-    mail.server.stop(true);
+  cleanups.push(async () => {
+    await mail.server.stop(true);
     mail.db.close();
   });
   const base = `http://127.0.0.1:${mail.server.port}`;
   const f = fixture(base);
-  const call = async (name, args) => {
+  const call = async (name: string, args: Record<string, unknown>): Promise<any> => {
     const response = await fetch(base + "/mcp", {
       method: "POST",
       body: JSON.stringify({
@@ -363,8 +363,8 @@ test("coalescing wake offers leaves all Swarmail messages unread in the durable 
         params: { name, arguments: args },
       }),
     });
-    const result = await response.json();
-    return JSON.parse(result.result.content[0].text);
+    const result = (await response.json()) as { result: { content: { text: string }[] } };
+    return JSON.parse(result.result.content[0]!.text);
   };
   for (const name of ["GoldMoose", "BlueLake"]) {
     await call("register_agent", {
@@ -401,8 +401,11 @@ test("coalescing wake offers leaves all Swarmail messages unread in the durable 
     mark_read: false,
     include_bodies: true,
   });
-  expect(inbox.map((message) => message.id).sort()).toEqual(ids.sort());
-  expect(inbox.map((message) => message.body_md).sort()).toEqual(["body-0", "body-1"]);
+  expect(inbox.map((message: { id: number }) => message.id).sort()).toEqual(ids.sort());
+  expect(inbox.map((message: { body_md: string }) => message.body_md).sort()).toEqual([
+    "body-0",
+    "body-1",
+  ]);
   expect(f.queued()).toHaveLength(0);
   expect(f.received).toHaveLength(1);
   await call("fetch_inbox", {
@@ -411,13 +414,15 @@ test("coalescing wake offers leaves all Swarmail messages unread in the durable 
     unread_only: true,
   });
   expect(f.projection.runs.filter((run) => run.status === "running")).toHaveLength(1);
-  expect(mail.db.query("SELECT count(*) AS total FROM messages").get().total).toBe(2);
+  expect(
+    mail.db.query<{ total: number }, []>("SELECT count(*) AS total FROM messages").get()!.total,
+  ).toBe(2);
 });
 
 test("lost admission reply replays an immutable command after reopening the journal", async () => {
   const f = fixture();
   f.lose();
-  await expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("closed before admission");
+  expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("closed before admission");
   const original = structuredClone(f.received[0]);
   expect(f.state.acknowledged).toBe(0);
   f.restart();
@@ -434,8 +439,8 @@ test("a queued notice starting during edit replans with a new id and preserves b
   f.race();
   await f.deliver(2, hint("repo-b"));
   expect(f.queued()).toHaveLength(0);
-  expect(f.projection.messages.at(-1).text).toBe("Swarmail: run swarmail inbox --session.");
-  expect(f.state.readContext().hints).toEqual([mailboxHint("repo-a"), mailboxHint("repo-b")]);
+  expect(f.projection.messages.at(-1)!.text).toBe("Swarmail: run swarmail inbox --session.");
+  expect(f.state.readContext()!.hints).toEqual([mailboxHint("repo-a"), mailboxHint("repo-b")]);
   expect(f.received.at(-1).type).toBe("message.dispatch");
   expect(f.received.at(-1).commandId).not.toBe(f.received.at(-2).commandId);
 });
@@ -449,7 +454,7 @@ test("legacy duplicate queues compact without changing user prompts or automatic
     ["b", hint("repo-b"), "agent"],
     ["user", hint("user-text"), "user"],
     ["notification", hint("notification"), "agent", {}],
-  ]) {
+  ] as [string, string, string, object?][]) {
     f.projection.messages.push({ id, text, createdBy, creationSource: "server", notification });
     f.projection.runs.push({ id: `run-${id}`, userMessageId: id, status: "queued" });
   }
@@ -457,13 +462,13 @@ test("legacy duplicate queues compact without changing user prompts or automatic
   f.unread.add("repo-b");
   const a = f.adapter();
   const offer = await a.wait(f.state.acknowledged, new AbortController().signal);
-  expect(offer.eventId).toBe(1);
-  await f.deliver(offer.eventId, offer.hint);
+  expect(offer!.eventId).toBe(1);
+  await f.deliver(offer!.eventId, offer!.hint);
   expect(f.queued().map((message) => message.id)).toEqual(["user", "notification"]);
-  expect(f.projection.messages.find((message) => message.id === "a").text).toBe(
+  expect(f.projection.messages.find((message) => message.id === "a")!.text).toBe(
     "Swarmail: run swarmail inbox --session.",
   );
-  expect(f.state.readContext().hints).toEqual([mailboxHint("repo-a"), mailboxHint("repo-b")]);
+  expect(f.state.readContext()!.hints).toEqual([mailboxHint("repo-a"), mailboxHint("repo-b")]);
   expect(f.state.acknowledged).toBe(1);
 });
 
@@ -478,7 +483,7 @@ for (const kind of [
   test(`pending ${kind} holds both new and previously journaled notices`, async () => {
     const f = fixture();
     f.projection.runtimeRequests.push({ status: "pending", kind });
-    await expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("operator response");
+    expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("operator response");
     expect(f.received).toHaveLength(0);
     expect(f.state.acknowledged).toBe(0);
     f.state.savePending({
@@ -494,9 +499,9 @@ for (const kind of [
         dispatchMode: { type: "queue_after_active" },
       },
     });
-    await expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("operator response");
+    expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("operator response");
     expect(f.received).toHaveLength(0);
-    f.projection.runtimeRequests[0].status = "resolved";
+    f.projection.runtimeRequests[0]!.status = "resolved";
     await f.deliver(1, hint("repo-a"));
     expect(f.received[0].commandId).toBe("legacy");
     expect(f.state.acknowledged).toBe(1);
@@ -512,13 +517,13 @@ test("an incompatible projection retains the offer without dispatching", async (
     ["runs", { id: "run", userMessageId: "message" }],
     ["runs", { id: "run", userMessageId: "message", status: "queued" }],
     ["messages", { id: "message", createdBy: "agent", creationSource: "server" }],
-  ];
+  ] as ["runtimeRequests" | "runs" | "messages", unknown][];
   for (const [field, entry] of cases) {
     const f = fixture();
-    f.projection[field].push(entry);
-    await expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("control projection");
+    (f.projection[field] as unknown[]).push(entry);
+    expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("control projection");
     expect(f.received).toHaveLength(0);
-    expect(f.state.pending.eventId).toBe(1);
+    expect(f.state.pending!.eventId).toBe(1);
     expect(f.state.acknowledged).toBe(0);
   }
 });
@@ -538,9 +543,9 @@ test("read mail disappears from a queued notice while other unread mail remains"
   f.projection.runs.push({ id: "human-active", status: "running", userMessageId: null });
   f.unread.clear();
   await f.deliver(2, hint("repo-b"));
-  expect(f.state.readContext().hints).toEqual([mailboxHint("repo-b")]);
+  expect(f.state.readContext()!.hints).toEqual([mailboxHint("repo-b")]);
   expect(
-    f.projection.messages.find((message) => message.id === f.state.readContext().messageId).text,
+    f.projection.messages.find((message) => message.id === f.state.readContext()!.messageId)!.text,
   ).toBe("Swarmail: run swarmail inbox --session.");
 });
 
@@ -556,7 +561,7 @@ test("an empty current inbox cancels only queued mail notices", async () => {
   f.projection.runs.push({ id: "human-run", userMessageId: "human", status: "queued" });
   f.unread.clear();
   const offer = await f.adapter().wait(1, new AbortController().signal);
-  await f.deliver(offer.eventId, offer.hint);
+  await f.deliver(offer!.eventId, offer!.hint);
   expect(f.queued().map((m) => m.id)).toEqual(["human"]);
   expect(f.state.readContext()).toBeNull();
   expect(f.state.acknowledged).toBe(1);
@@ -565,14 +570,14 @@ test("an empty current inbox cancels only queued mail notices", async () => {
 test("a lost steer reply replays unchanged for mail read during restart", async () => {
   const f = fixture();
   f.lose();
-  await expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("closed before admission");
+  expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("closed before admission");
   const original = structuredClone(f.received[0]);
   f.unread.clear();
   f.restart();
   await f.deliver(1, hint("repo-a"));
   expect(f.received[1]).toEqual(original);
   expect(f.received).toHaveLength(2);
-  expect(f.projection.runs[0].status).toBe("running");
+  expect(f.projection.runs[0]!.status).toBe("running");
   expect(f.queued()).toHaveLength(0);
   expect(f.state.acknowledged).toBe(1);
 });
@@ -585,7 +590,7 @@ test("a notice starting during stale cancellation remains active", async () => {
   f.raceCancel();
   await f.deliver(1, hint("repo-a"));
   expect(f.queued()).toHaveLength(0);
-  expect(f.projection.runs[0].status).toBe("running");
+  expect(f.projection.runs[0]!.status).toBe("running");
   expect(f.projection.messages[0]).toEqual(original);
   expect(f.received.map((command) => command.type)).toEqual([
     "message.dispatch",
@@ -615,7 +620,7 @@ test("human requests and settlement hold obsolete notice cancellation across res
     f.projection.thread.settledOverride = null;
     await f.deliver(1, hint("repo-a"));
     expect(f.queued()).toHaveLength(0);
-    cleanupFixtures();
+    await cleanupFixtures();
   }
 });
 
@@ -645,13 +650,13 @@ test("unavailable or malformed snapshots retain the pending offer and queued not
     expect(f.received).toHaveLength(1);
     expect(f.queued()).toEqual(original);
     expect(f.state.acknowledged).toBe(1);
-    expect(f.state.pending.eventId).toBe(2);
-    cleanupFixtures();
+    expect(f.state.pending!.eventId).toBe(2);
+    await cleanupFixtures();
   }
 });
 
 test("an older core rejects snapshots without entering its mutating wait route", async () => {
-  const waits = [];
+  const waits: string[] = [];
   const legacy = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -691,14 +696,14 @@ test("matching owned user/server queue is promoted without touching an unrelated
   });
   f.projection.runs.push({ id: "unrelated-run", status: "queued", userMessageId: "unrelated" });
   const offer = await f.adapter().wait(1, new AbortController().signal);
-  await f.deliver(offer.eventId, offer.hint);
+  await f.deliver(offer!.eventId, offer!.hint);
   expect(f.received.at(-1)).toMatchObject({
     type: "queued-message.promote-to-steer",
     queuedRunId: `run-${id}`,
     targetRunId: "human-active",
   });
   expect(f.queued().map((message) => message.id)).toEqual(["unrelated"]);
-  expect(f.projection.messages.find((message) => message.id === id).createdBy).toBe("user");
+  expect(f.projection.messages.find((message) => message.id === id)!.createdBy).toBe("user");
 });
 
 for (const status of ["preparing", "starting", "waiting"]) {
@@ -707,8 +712,8 @@ for (const status of ["preparing", "starting", "waiting"]) {
     f.projection.runs.push({ id: "active", status, userMessageId: null });
     expect(await rejected(f.deliver(1, hint("repo-a")))).toMatchObject({ retryable: true });
     expect(f.received).toHaveLength(0);
-    expect(f.state.pending.command.operation).toBeUndefined();
-    f.projection.runs[0].status = "running";
+    expect(f.state.pending!.command.operation).toBeUndefined();
+    f.projection.runs[0]!.status = "running";
     f.restart();
     await f.deliver(1, hint("repo-a"));
     expect(f.queued()).toHaveLength(0);
@@ -719,8 +724,8 @@ for (const status of ["preparing", "starting", "waiting"]) {
 test("unsupported steering holds the offer rather than silently queueing", async () => {
   const f = fixture();
   f.projection.runs.push({ id: "active", status: "running", userMessageId: null });
-  f.projection.providerSessions[0].capabilities.turns.supportsActiveSteering = false;
-  f.projection.providerSessions[0].capabilities.turns.supportsSteeringByInterruptRestart = false;
+  f.projection.providerSessions![0]!.capabilities.turns.supportsActiveSteering = false;
+  f.projection.providerSessions![0]!.capabilities.turns.supportsSteeringByInterruptRestart = false;
   expect(await rejected(f.deliver(1, hint("repo-a")))).toMatchObject({ retryable: true });
   expect(f.received).toHaveLength(0);
   expect(f.state.acknowledged).toBe(0);
@@ -742,10 +747,10 @@ const sequences = events.flatMap((first) =>
 );
 for (const sequence of sequences) {
   test(`mail queue ordering: ${sequence.join(" -> ")}`, async () => {
-    const failures = [];
+    const failures: string[] = [];
     const f = fixture();
-    const outstanding = new Set();
-    const offers = [];
+    const outstanding = new Set<string>();
+    const offers: { eventId: number; mailbox: string }[] = [];
     let cursor = 0;
     let held = false;
     let needsReconciliation = false;
@@ -759,7 +764,8 @@ for (const sequence of sequences) {
         const mailbox = `repo-${event.slice(-1)}`;
         const context = f.state.readContext();
         needsReconciliation ||= Boolean(
-          context?.hints.includes(mailboxHint(mailbox)) &&
+          context &&
+          (context.hints as string[]).includes(mailboxHint(mailbox)) &&
           f.queued().some((message) => message.id === context.messageId),
         );
         f.unread.delete(mailbox);
@@ -782,14 +788,14 @@ for (const sequence of sequences) {
       }
       const before = { received: f.received.length, acknowledged: f.state.acknowledged };
       if (held && offers.length) {
-        expect(await rejected(f.deliver(offers[0].eventId, hint(offers[0].mailbox)))).toMatchObject(
-          {
-            retryable: true,
-          },
-        );
+        expect(
+          await rejected(f.deliver(offers[0]!.eventId, hint(offers[0]!.mailbox))),
+        ).toMatchObject({
+          retryable: true,
+        });
       } else {
         while (offers.length) {
-          const offer = offers[0];
+          const offer = offers[0]!;
           await f.deliver(offer.eventId, hint(offer.mailbox));
           offers.shift();
           needsReconciliation = false;
@@ -798,8 +804,8 @@ for (const sequence of sequences) {
           const reconciliation = await f
             .adapter()
             .wait(f.state.acknowledged, new AbortController().signal);
-          expect(reconciliation.eventId).toBe(f.state.acknowledged);
-          await f.deliver(reconciliation.eventId, reconciliation.hint);
+          expect(reconciliation!.eventId).toBe(f.state.acknowledged);
+          await f.deliver(reconciliation!.eventId, reconciliation!.hint);
           needsReconciliation = false;
         }
       }
@@ -810,7 +816,8 @@ for (const sequence of sequences) {
         [...outstanding].some(
           (mailbox) =>
             !(
-              f.state.readContext()?.hints.includes(mailboxHint(mailbox)) &&
+              f.state.readContext() &&
+              (f.state.readContext()!.hints as string[]).includes(mailboxHint(mailbox)) &&
               f.projection.messages.some(
                 (message) => message.id === f.state.readContext()?.messageId,
               )
@@ -829,27 +836,30 @@ for (const sequence of sequences) {
 
 // A supervisor scan can lag settlement after an offer was durably saved.
 test("settlement holds a journaled notice across restart until reactivation", async () => {
-  for (const field of ["settledAt", "settledOverride"]) {
+  for (const field of ["settledAt", "settledOverride"] as const) {
     const f = fixture();
     const a = f.adapter();
-    f.state.savePending({ eventId: 1, command: a.prepare({ eventId: 1, hint: hint("repo-a") }) });
+    f.state.savePending({
+      eventId: 1,
+      command: a.prepare({ eventId: 1, hint: hint("repo-a") }) as Pending["command"],
+    });
     // A saved operation must also stay untouched while settled.
-    f.state.pending.command.operation = {
+    f.state.pending!.command.operation = {
       type: "message.dispatch",
       commandId: "saved-command",
       threadId: "thread-notice",
-      messageId: f.state.pending.command.messageId,
+      messageId: f.state.pending!.command.messageId,
       text: hint("repo-a"),
       attachments: [],
       createdBy: "agent",
       creationSource: "server",
       dispatchMode: { type: "queue_after_active" },
     };
-    f.state.savePending(f.state.pending);
+    f.state.savePending(f.state.pending!);
     const original = structuredClone(f.state.pending);
     f.projection.thread[field] = field === "settledAt" ? "2026-10-03T03:00:00Z" : "settled";
     f.restart();
-    await expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("settled");
+    expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("settled");
     expect(f.received).toHaveLength(0);
     expect(f.state.acknowledged).toBe(0);
     expect(f.state.pending).toEqual(original);
@@ -857,7 +867,7 @@ test("settlement holds a journaled notice across restart until reactivation", as
     f.projection.thread.settledOverride = "active";
     f.projection.runs.push({ id: "human-active", userMessageId: null, status: "running" });
     await f.deliver(1, hint("repo-a"));
-    expect(f.received[0]).toEqual(original.command.operation);
+    expect(f.received[0]).toEqual(original!.command.operation);
     expect(f.state.acknowledged).toBe(1);
     expect(f.state.pending).toBeNull();
   }
@@ -865,21 +875,21 @@ test("settlement holds a journaled notice across restart until reactivation", as
 
 test("missing or unknown settlement metadata holds the saved offer without dispatch", async () => {
   for (const change of [
-    (thread) => delete thread.settledAt,
-    (thread) => delete thread.settledOverride,
-    (thread) => {
+    (thread: T3ControlProjection["thread"]) => delete thread.settledAt,
+    (thread: T3ControlProjection["thread"]) => delete thread.settledOverride,
+    (thread: T3ControlProjection["thread"]) => {
       thread.settledAt = false;
     },
-    (thread) => {
+    (thread: T3ControlProjection["thread"]) => {
       thread.settledOverride = "unknown";
     },
   ]) {
     const f = fixture();
     change(f.projection.thread);
-    await expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("settlement state unavailable");
+    expect(f.deliver(1, hint("repo-a"))).rejects.toThrow("settlement state unavailable");
     expect(f.received).toHaveLength(0);
     expect(f.state.acknowledged).toBe(0);
-    expect(f.state.pending.eventId).toBe(1);
+    expect(f.state.pending!.eventId).toBe(1);
   }
 });
 
@@ -900,8 +910,8 @@ for (const text of ["/compact", "/logout", "  /COMPACT  "]) {
     });
     expect(await rejected(f.deliver(1, hint("repo-a")))).toMatchObject({ retryable: true });
     expect(f.received).toHaveLength(0);
-    expect(f.state.pending.command.operation).toBeUndefined();
-    f.projection.runs[0].status = "completed";
+    expect(f.state.pending!.command.operation).toBeUndefined();
+    f.projection.runs[0]!.status = "completed";
     f.restart();
     await f.deliver(1, hint("repo-a"));
     expect(f.received[0].deliveryIntent).toBe("steer");
@@ -929,7 +939,7 @@ for (const race of ["lost reply", "source started", "target ended"]) {
       await f.deliver(1, hint("repo-a"));
     } catch (error) {
       held = true;
-      expect(error.retryable).toBe(true);
+      expect((error as { retryable: boolean }).retryable).toBe(true);
     }
     const operation = structuredClone(f.received.at(-1));
     expect(operation.type).toBe("queued-message.promote-to-steer");
@@ -942,14 +952,14 @@ for (const race of ["lost reply", "source started", "target ended"]) {
       expect(f.projection.messages.filter((m) => m.id === id)).toHaveLength(1);
     } else if (race === "source started") {
       expect(held).toBe(false);
-      expect(f.projection.runs.find((r) => r.id === `run-${id}`).status).toBe("running");
+      expect(f.projection.runs.find((r) => r.id === `run-${id}`)!.status).toBe("running");
       expect(f.received.filter((c) => c.type === "message.dispatch")).toHaveLength(1); // original legacy admission
     } else {
       expect(held).toBe(true);
       expect(f.queued()).toHaveLength(1);
-      expect(f.state.pending.command.operation).toBeUndefined();
-      f.projection.runs.find((r) => r.id === "human-active").status = "completed";
-      f.projection.runs.find((r) => r.id === `run-${id}`).status = "running";
+      expect(f.state.pending!.command.operation).toBeUndefined();
+      f.projection.runs.find((r) => r.id === "human-active")!.status = "completed";
+      f.projection.runs.find((r) => r.id === `run-${id}`)!.status = "running";
       f.restart();
       await f.deliver(1, hint("repo-a"));
       expect(f.state.pending).toBeNull();

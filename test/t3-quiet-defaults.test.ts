@@ -1,11 +1,15 @@
 import { expect, test } from "bun:test";
 import { openDatabase } from "../src/db.ts";
+import type { Args } from "../src/store.ts";
 import { createTools } from "../src/tools.ts";
 import { createWaiters } from "../src/wake.ts";
 
 function fixture() {
   const db = openDatabase(":memory:");
-  const tools = createTools(db, { databasePath: ":memory:" });
+  const tools = createTools(db, { databasePath: ":memory:" }) as Record<
+    "register_agent" | "send_message" | "fetch_session_inbox" | "search_messages" | "reply_message",
+    (a: Args) => any
+  >;
   const project_key = "/quiet-default/repo";
   const tags = {
     BlueLake: "[t3:sender-thread codex:sender-session]",
@@ -25,7 +29,7 @@ function fixture() {
     db,
     tools,
     common,
-    send: (extra = {}) =>
+    send: (extra: Args = {}) =>
       tools.send_message({
         ...common,
         to: ["GreenCastle"],
@@ -76,7 +80,7 @@ test("omitted T3 policy stores readable quiet mail and replays its original defa
 test("default checks every recipient and preserves explicit, priority and acknowledgement policies", () => {
   const f = fixture();
   try {
-    const cases = [
+    const cases: [Args, string][] = [
       [{}, "quiet"],
       [{ importance: "low", cc: ["AmberHill"], bcc: ["GreenCastle"] }, "quiet"],
       [{ to: ["RedPond"] }, "wake"],
@@ -113,7 +117,7 @@ test("default checks every recipient and preserves explicit, priority and acknow
 test("replies recompute the default from recipients, inherited importance and reply acknowledgement", () => {
   const f = fixture();
   try {
-    const reply = (sent, extra = {}) =>
+    const reply = (sent: { id: number }, extra: Args = {}) =>
       f.tools.reply_message({
         project_key: f.common.project_key,
         sender_name: "GreenCastle",

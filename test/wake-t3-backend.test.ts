@@ -1,4 +1,4 @@
-import { afterEach, expect, spyOn, test } from "bun:test";
+import { afterEach, expect, spyOn, test, type Mock } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import {
@@ -18,10 +18,10 @@ import { BridgeError } from "../src/wake-target.ts";
 import { testScratch } from "./fixtures/test-scratch.ts";
 
 const scratch = testScratch();
-const cleanup = [];
-afterEach(() => {
+const cleanup: (() => void | Promise<void>)[] = [];
+afterEach(async () => {
   for (const close of cleanup.splice(0).reverse()) {
-    close();
+    await close();
   }
 });
 
@@ -58,7 +58,8 @@ function fixture() {
     retired: [],
   };
   const statePath = join(rotation, "state.json");
-  const save = (value = state) => writeFileSync(statePath, JSON.stringify(value), { mode: 0o600 });
+  const save = (value: object = state) =>
+    writeFileSync(statePath, JSON.stringify(value), { mode: 0o600 });
   save();
   const path = join(root, "config.json");
   writeFileSync(
@@ -87,13 +88,13 @@ function fixture() {
       scopes: ["orchestration:operate"],
     });
   const spawn = Bun.spawn;
-  const cli = [];
-  const spawnSpy = spyOn(Bun, "spawn").mockImplementation((command, options) => {
+  const cli: string[][] = [];
+  const spawnSpy = spyOn(Bun, "spawn").mockImplementation(((command: any, options: any) => {
     if (Array.isArray(command) && command[0] !== "ss") {
       cli.push(command);
     }
     return spawn(command, options);
-  });
+  }) as typeof Bun.spawn);
   cleanup.push(() => spawnSpy.mockRestore());
   return {
     path,
@@ -111,12 +112,14 @@ function fixture() {
   };
 }
 
-function fetchMock(implementation) {
-  const mock = spyOn(globalThis, "fetch").mockImplementation(implementation);
+type FetchImpl = (...args: any[]) => Response | Promise<Response>;
+function fetchMock(implementation: FetchImpl) {
+  const mock = spyOn(globalThis, "fetch") as unknown as Mock<FetchImpl>;
+  mock.mockImplementation(implementation);
   cleanup.push(() => mock.mockRestore());
   return mock;
 }
-const transport = (code) =>
+const transport = (code: string) =>
   Object.assign(new TypeError("synthetic error must not be logged"), { code });
 const linuxTest = test.skipIf(process.platform !== "linux");
 
@@ -141,10 +144,10 @@ linuxTest("session scopes must be an array before a current credential is accept
   const service = credentialService(f.path);
   const backend = await service.backend();
   const fetch = fetchMock(async () => {
-    const response = await f.response().json();
+    const response = (await f.response().json()) as object;
     return Response.json({ ...response, scopes: "orchestration:operate" });
   });
-  await expect(service.current(backend)).rejects.toThrow("unexpected T3 session contract");
+  expect(service.current(backend)).rejects.toThrow("unexpected T3 session contract");
   fetch.mockImplementation(f.response);
   expect(await service.current(backend)).toBeDefined();
   expect(f.cli).toEqual([]);
@@ -156,7 +159,7 @@ linuxTest("only measured transport errors from eligible current checks are retry
   const service = credentialService(f.path);
   const backend = await service.backend();
   const fetch = fetchMock(() => Promise.reject(transport("ECONNRESET")));
-  await expect(service.current(backend)).rejects.toBeInstanceOf(T3SessionTransportUnavailable);
+  expect(service.current(backend)).rejects.toBeInstanceOf(T3SessionTransportUnavailable);
   for (const response of [
     () => Promise.reject(transport("UnexpectedRedirect")),
     () => Promise.reject(new TypeError("unrecognized")),
@@ -165,7 +168,7 @@ linuxTest("only measured transport errors from eligible current checks are retry
     () => Response.json({ authenticated: true, sessionMethod: "unknown" }),
   ]) {
     fetch.mockImplementation(response);
-    await expect(service.current(backend)).rejects.toBeInstanceOf(BridgeError);
+    expect(service.current(backend)).rejects.toBeInstanceOf(BridgeError);
   }
   for (const change of [
     { disabled: true },
@@ -198,7 +201,7 @@ linuxTest(
     const dbPath = join(f.baseDir, "userdata/statev2.sqlite");
     const other = new Database(dbPath);
     other.close();
-    await expect(poll()).rejects.toBeInstanceOf(BridgeError);
+    expect(poll()).rejects.toBeInstanceOf(BridgeError);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(f.snapshot()).toEqual(before);
     expect(f.cli).toEqual([]);
@@ -219,7 +222,7 @@ linuxTest("shutdown wins a simultaneous own-timeout race without retry or mutati
     caller.abort("private reason must not escape");
     return Promise.reject(new DOMException("synthetic", "TimeoutError"));
   });
-  await expect(service.current(backend, { signal: caller.signal })).rejects.toThrow("cancelled");
+  expect(service.current(backend, { signal: caller.signal })).rejects.toThrow("cancelled");
   expect(f.snapshot()).toEqual(before);
   expect(f.cli).toEqual([]);
 });
@@ -244,10 +247,10 @@ linuxTest("requests respect remaining grace and own timeout classification", asy
     return timer.signal;
   });
   cleanup.push(() => timeout.mockRestore());
-  await expect(
-    service.current(backend, { deadline: performance.now() + 1000 }),
-  ).rejects.toBeInstanceOf(T3SessionTransportUnavailable);
-  await expect(service.current(backend, { deadline: performance.now() })).rejects.toThrow(
+  expect(service.current(backend, { deadline: performance.now() + 1000 })).rejects.toBeInstanceOf(
+    T3SessionTransportUnavailable,
+  );
+  expect(service.current(backend, { deadline: performance.now() })).rejects.toThrow(
     "grace exhausted",
   );
 });
@@ -340,7 +343,7 @@ linuxTest("rejection during an outage stops without entering credential recovery
   const poll = followT3Backend(f.path, f);
   expect(await poll()).toBeUndefined();
   fetch.mockImplementation(() => new Response(null, { status: 401 }));
-  await expect(poll()).rejects.toThrow("no longer eligible");
+  expect(poll()).rejects.toThrow("no longer eligible");
   expect(f.snapshot()).toEqual(before);
   expect(f.cli).toEqual([]);
 });
@@ -360,21 +363,21 @@ linuxTest("ownership changed during an in-flight session check cannot become rea
 linuxTest("shutdown aborts and reaps the owned identity subprocess", async () => {
   const shutdown = new AbortController();
   const spawn = Bun.spawn;
-  let child;
-  const probe = spyOn(Bun, "spawn").mockImplementation((_command, options) => {
+  let child: ReturnType<typeof Bun.spawn> | undefined;
+  const probe = spyOn(Bun, "spawn").mockImplementation(((_command: unknown, options: any) => {
     child = spawn([process.execPath, "-e", "await new Promise(() => {})"], options);
     queueMicrotask(() => shutdown.abort("private reason"));
     return child;
-  });
+  }) as typeof Bun.spawn);
   cleanup.push(() => probe.mockRestore());
-  await expect(
+  expect(
     verifyT3Backend(
       { url: "http://127.0.0.1:12345", baseDir: scratch },
       { signal: shutdown.signal },
     ),
   ).rejects.toThrow("cancelled");
-  expect(await child.exited).not.toBe(0);
-  expect(() => process.kill(child.pid, 0)).toThrow();
+  expect(await child!.exited).not.toBe(0);
+  expect(() => process.kill(child!.pid, 0)).toThrow();
 });
 
 linuxTest("cold start refuses unsafe credential directories before any token request", async () => {
@@ -405,7 +408,7 @@ linuxTest("cold start refuses unsafe credential directories before any token req
       writeFileSync(f.path, JSON.stringify(config));
     }
     const poll = followT3Backend(f.path, f);
-    await expect(poll()).rejects.toBeInstanceOf(BridgeError);
+    expect(poll()).rejects.toBeInstanceOf(BridgeError);
     expect(fetch).not.toHaveBeenCalled();
     expect(f.cli).toEqual([]);
     expect(f.snapshot()).toEqual(before);
@@ -430,7 +433,7 @@ linuxTest("the owned request timeout is transient even after response headers ar
   const actualTimeout = AbortSignal.timeout.bind(AbortSignal);
   const timeout = spyOn(AbortSignal, "timeout").mockImplementation(() => actualTimeout(20));
   cleanup.push(() => timeout.mockRestore());
-  await expect(service.current(backend)).rejects.toBeInstanceOf(T3SessionTransportUnavailable);
+  expect(service.current(backend)).rejects.toBeInstanceOf(T3SessionTransportUnavailable);
   expect(f.snapshot()).toEqual(before);
   expect(f.cli).toEqual([]);
 });
@@ -460,7 +463,7 @@ linuxTest(
     });
     expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
     expect(renew).toHaveBeenCalledTimes(1);
-    expect(renew.mock.calls[0][2].deadline).toBe(300000);
+    expect(renew.mock.calls[0]![2]!.deadline).toBe(300000);
     expect(f.cli).toEqual([]);
   },
 );
@@ -478,7 +481,7 @@ linuxTest(
     expect(await poll()).toBeUndefined();
     expect(fetch).toHaveBeenCalledTimes(1);
     f.save({ ...f.state, disabled: true });
-    await expect(poll()).rejects.toThrow("no longer eligible");
+    expect(poll()).rejects.toThrow("no longer eligible");
     expect(f.cli).toEqual([]);
     f.save();
     expect(f.snapshot()).toEqual(before);
@@ -511,7 +514,7 @@ linuxTest(
     f.save({ ...f.state, pending: { subject: "unfinished" } });
     expect(await poll()).toEqual({ url: f.url, moved: false, restarted: false });
     expect(renew).toHaveBeenCalledTimes(1);
-    expect(renew.mock.calls[0][2].deadline).toBe(361000);
+    expect(renew.mock.calls[0]![2]!.deadline).toBe(361000);
     expect(f.cli).toEqual([]);
   },
 );

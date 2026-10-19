@@ -13,33 +13,44 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nowUs, openDatabase } from "../src/db.ts";
 import { guard } from "../src/guard.ts";
+import type { HostProcess } from "../src/proc.ts";
 import { selfNames } from "../src/registry.ts";
 import { installSwarmailGuard } from "../scripts/install-guard.ts";
 
-let dir, repo, dbPath, env;
-const git = (...args) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
-const stage = (path) => {
+let dir: string, repo: string, dbPath: string, env: NodeJS.ProcessEnv;
+const git = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
+const stage = (path: string) => {
   mkdirSync(join(repo, path, ".."), { recursive: true });
   writeFileSync(join(repo, path), String(Math.random()));
   git("add", path);
 };
-function reserve(agent, pattern, { exclusive = 1, ttl = 3600, released = null } = {}) {
+function reserve(
+  agent: string,
+  pattern: string,
+  { exclusive = 1, ttl = 3600, released = null as number | null } = {},
+) {
   const db = openDatabase(dbPath);
   const now = nowUs();
-  let project = db.query("SELECT id FROM projects WHERE human_key = ?").get(repo);
+  let project = db
+    .query<{ id: number }, [string]>("SELECT id FROM projects WHERE human_key = ?")
+    .get(repo);
   if (!project) {
     project = db
-      .query("INSERT INTO projects (slug, human_key, created_at) VALUES (?, ?, ?) RETURNING id")
+      .query<{ id: number }, [string, string, number]>(
+        "INSERT INTO projects (slug, human_key, created_at) VALUES (?, ?, ?) RETURNING id",
+      )
       .get("p", repo, now);
   }
   db.run(
     "INSERT OR IGNORE INTO agents (project_id, name, program, model, inception_ts, last_active_ts) VALUES (?, ?, 'x', 'x', ?, ?)",
-    [project.id, agent, now, now],
+    [project!.id, agent, now, now],
   );
-  const { id } = db.query("SELECT id FROM agents WHERE name = ?").get(agent);
+  const { id } = db
+    .query<{ id: number }, [string]>("SELECT id FROM agents WHERE name = ?")
+    .get(agent)!;
   db.run(
     "INSERT INTO file_reservations (project_id, agent_id, path_pattern, exclusive, reason, created_ts, expires_ts, released_ts) VALUES (?, ?, ?, ?, '', ?, ?, ?)",
-    [project.id, id, pattern, exclusive, now, now + ttl * 1_000_000, released],
+    [project!.id, id, pattern, exclusive, now, now + ttl * 1_000_000, released],
   );
   db.close();
 }
@@ -107,7 +118,7 @@ test("finds its own names from the register hook's state for the host process", 
     join(state, "b.json"),
     JSON.stringify({ name: "BlueRiver", host: { pid: 42, start: "6" } }),
   );
-  expect([...selfNames(env, { pid: 42, start: "7" })]).toEqual(["GreenLake"]);
+  expect([...selfNames(env, { pid: 42, start: "7" } as HostProcess)]).toEqual(["GreenLake"]);
   expect([...selfNames(env, null)]).toEqual([]);
   rmSync(state, { recursive: true });
 });
@@ -124,7 +135,7 @@ test("selfNames gives the name the session holds in the project asked about", ()
       host: { pid: 42, start: "7" },
     }),
   );
-  const host = { pid: 42, start: "7" };
+  const host = { pid: 42, start: "7" } as HostProcess;
   expect([...selfNames(env, host, "/fixture")]).toEqual(["GreenLake"]);
   expect([...selfNames(env, host, "/other")]).toEqual(["BlueHarbor"]);
   expect([...selfNames(env, host)]).toEqual(["GreenLake"]);
@@ -157,7 +168,7 @@ test("shared host processes never confer another session's reservation identity"
   ]).toEqual([]);
   expect([...selfNames({ ...env, CLAUDE_CODE_SESSION_ID: "foreign" }, owner)]).toEqual([]);
   expect([...selfNames(env, owner)]).toEqual([]);
-  expect([...selfNames(env, { pid: 42 })]).toEqual([]);
+  expect([...selfNames(env, { pid: 42 } as HostProcess)]).toEqual([]);
   expect([...selfNames({ ...env, SWARMAIL_AGENT: "ChosenName" }, owner)]).toEqual(["ChosenName"]);
   rmSync(join(state, "foreign.json"));
   rmSync(join(state, "other.json"));
@@ -197,7 +208,7 @@ test("the installed hook blocks a real commit and preserves the hook chain", () 
   expect(existsSync(join(hooks, "hooks.d", "pre-commit", "10-other"))).toBe(true);
   expect(installSwarmailGuard(repo, { bin })).toEqual([]);
   stage("src/z.ts");
-  const run = (extra) =>
+  const run = (extra: NodeJS.ProcessEnv) =>
     spawnSync("git", ["commit", "-q", "-m", "z"], {
       cwd: repo,
       encoding: "utf8",

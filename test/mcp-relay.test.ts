@@ -1,33 +1,35 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { createServer as createNetServer } from "node:net";
+import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../src/server.ts";
 
 const RELAY = join(import.meta.dir, "..", "packages", "mcp-relay", "index.mjs");
-let dir, server, db;
+let dir: string,
+  server: ReturnType<typeof createServer>["server"],
+  db: ReturnType<typeof createServer>["db"];
 
 beforeAll(() => {
   dir = realpathSync.native(mkdtempSync(join(tmpdir(), "swarmail-relay-")));
   ({ server, db } = createServer(join(dir, "mail.sqlite3"), 0));
 });
-afterAll(() => {
-  server.stop(true);
+afterAll(async () => {
+  await server.stop(true);
   db.close();
   rmSync(dir, { recursive: true, force: true });
 });
 
 // Runs the relay under Node, as `npx` would, and returns its stdout lines parsed.
-async function relay(url, messages) {
+async function relay(url: string, messages: object[]) {
   const proc = Bun.spawn(["node", RELAY], {
     env: { ...process.env, SWARMAIL_URL: url },
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
   });
-  proc.stdin.write(messages.map((m) => JSON.stringify(m) + "\n").join(""));
-  proc.stdin.end();
+  await proc.stdin.write(messages.map((m) => JSON.stringify(m) + "\n").join(""));
+  await proc.stdin.end();
   const out = await new Response(proc.stdout).text();
   expect(await proc.exited).toBe(0);
   return out
@@ -49,11 +51,11 @@ test("relays requests in order and drops notifications", async () => {
       params: { name: "health_check", arguments: {} },
     },
   ]);
-  expect(out.map((m) => m.id)).toEqual([1, 2, 3]);
+  expect(out.map((m: { id: number }) => m.id)).toEqual([1, 2, 3]);
   expect(out[0].result.serverInfo.name).toBe("swarmail");
   expect(typeof out[0].result.instructions).toBe("string");
   expect(out[0].result.instructions.trim().length).toBeGreaterThan(0);
-  expect(out[1].result.tools.some((t) => t.name === "send_message")).toBe(true);
+  expect(out[1].result.tools.some((t: { name: string }) => t.name === "send_message")).toBe(true);
   expect(out[2].result.isError).toBeUndefined();
 });
 
@@ -70,13 +72,13 @@ test("keeps relaying after an answer breaks off mid-body", async () => {
       );
     });
   });
-  await new Promise((resolve) => flaky.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => flaky.listen(0, "127.0.0.1", resolve));
   try {
-    const out = await relay(`http://127.0.0.1:${flaky.address().port}/mcp/`, [
+    const out = await relay(`http://127.0.0.1:${(flaky.address() as AddressInfo).port}/mcp/`, [
       { jsonrpc: "2.0", id: 1, method: "tools/list" },
       { jsonrpc: "2.0", id: 2, method: "ping" },
     ]);
-    expect(out.map((m) => m.id)).toEqual([1, 2]);
+    expect(out.map((m: { id: number }) => m.id)).toEqual([1, 2]);
     expect(out[0].error.message).toContain("did not finish");
     expect(out[1].result).toEqual({});
   } finally {
@@ -87,7 +89,7 @@ test("keeps relaying after an answer breaks off mid-body", async () => {
 test("answers each request with an error when the server is down", async () => {
   const down = createServer(join(dir, "down.sqlite3"), 0);
   const url = `http://127.0.0.1:${down.server.port}/mcp/`;
-  down.server.stop(true);
+  await down.server.stop(true);
   down.db.close();
   const out = await relay(url, [
     { jsonrpc: "2.0", id: 7, method: "tools/list" },
@@ -99,25 +101,26 @@ test("answers each request with an error when the server is down", async () => {
   expect(out[0].error.message).toContain("#install");
 });
 
-const initialize = (id, protocolVersion) => ({
+const initialize = (id: number, protocolVersion: string) => ({
   jsonrpc: "2.0",
   id,
   method: "initialize",
   params: { protocolVersion },
 });
-const toolCall = (id, name, args) => ({
+const toolCall = (id: number, name: string, args: Record<string, unknown>) => ({
   jsonrpc: "2.0",
   id,
   method: "tools/call",
   params: { name, arguments: args },
 });
-const toolValue = (answer) => JSON.parse(answer.result.content[0].text);
+const toolValue = (answer: { result: { content: { text: string }[] } }) =>
+  JSON.parse(answer.result.content[0]!.text);
 
 test("three independent Node clients preserve modern, legacy and absent-version delivery across reconnect", async () => {
   const url = `http://127.0.0.1:${server.port}/mcp/`;
   const project_key = "/project/relay-contract";
   const other = "/project/relay-other";
-  const register = (id, name, project = project_key) =>
+  const register = (id: number, name: string, project = project_key) =>
     toolCall(id, "register_agent", {
       project_key: project,
       name,
@@ -139,10 +142,13 @@ test("three independent Node clients preserve modern, legacy and absent-version 
     relay(url, [register(1, "RelayObserver"), { jsonrpc: "2.0", id: 2, method: "tools/list" }]),
   ]);
   expect(
-    sender.at(-1).result.tools.find((t) => t.name === "send_message").outputSchema,
+    sender.at(-1).result.tools.find((t: { name: string }) => t.name === "send_message")
+      .outputSchema,
   ).toBeDefined();
   for (const client of [receiver, observer]) {
-    expect(client.at(-1).result.tools.every((t) => !t.outputSchema)).toBe(true);
+    expect(
+      client.at(-1).result.tools.every((t: { outputSchema?: unknown }) => !t.outputSchema),
+    ).toBe(true);
   }
   const args = {
     project_key,
@@ -162,7 +168,7 @@ test("three independent Node clients preserve modern, legacy and absent-version 
     initialize(1, "2024-11-05"),
     toolCall(2, "fetch_inbox", { project_key, agent_name: "RelayReceiver", include_bodies: true }),
   ]);
-  expect(toolValue(read[1]).find((m) => m.id === message_id).body_md).toBe(
+  expect(toolValue(read[1]).find((m: { id: number }) => m.id === message_id).body_md).toBe(
     "Persist through reconnect",
   );
   expect(read[1].result.structuredContent).toBeUndefined();
@@ -190,21 +196,29 @@ test("three independent Node clients preserve modern, legacy and absent-version 
     idempotent_replay: true,
   });
   expect(replay[2].result.structuredContent.recipients[0]).toMatchObject({ acknowledged: true });
-  expect(db.query("SELECT count(*) AS n FROM messages WHERE subject = 'Handoff'").get().n).toBe(1);
+  expect(
+    db
+      .query<{ n: number }, []>("SELECT count(*) AS n FROM messages WHERE subject = 'Handoff'")
+      .get()!.n,
+  ).toBe(1);
 });
 
 test("only a successful matching initialize changes the forwarded protocol", async () => {
-  const headers = [];
+  const headers: (string | null)[] = [];
   const fixture = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
       headers.push(req.headers.get("MCP-Protocol-Version"));
-      const msg = await req.json();
+      const msg = (await req.json()) as {
+        id: number;
+        method: string;
+        params?: { protocolVersion: string };
+      };
       if (msg.method !== "initialize") {
         return Response.json({ jsonrpc: "2.0", id: msg.id, result: {} });
       }
-      const requested = msg.params.protocolVersion;
+      const requested = msg.params!.protocolVersion;
       if (requested === "error") {
         return Response.json({
           jsonrpc: "2.0",
@@ -228,7 +242,7 @@ test("only a successful matching initialize changes the forwarded protocol", asy
     },
   });
   try {
-    const messages = [initialize(1, "2025-06-18")];
+    const messages: object[] = [initialize(1, "2025-06-18")];
     let id = 1;
     for (const event of ["error", "wrong-id", "invalid", "http-error", "2024-11-05"]) {
       messages.push(initialize(++id, event), { jsonrpc: "2.0", id: ++id, method: "ping" });
@@ -236,6 +250,6 @@ test("only a successful matching initialize changes the forwarded protocol", asy
     await relay(`http://127.0.0.1:${fixture.port}/mcp/`, messages);
     expect(headers).toEqual([null, ...Array(9).fill("2025-06-18"), "2024-11-05"]);
   } finally {
-    fixture.stop(true);
+    await fixture.stop(true);
   }
 });

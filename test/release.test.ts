@@ -3,7 +3,7 @@ import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const fixtures = [];
+const fixtures: string[] = [];
 afterEach(() => {
   for (const fixture of fixtures.splice(0)) {
     rmSync(fixture, { recursive: true });
@@ -32,7 +32,7 @@ function fixture() {
   return root;
 }
 
-function check(root) {
+function check(root: string) {
   return Bun.spawnSync([process.execPath, "scripts/check-release.ts"], { cwd: root });
 }
 
@@ -40,11 +40,16 @@ test("release check accepts aligned repository metadata", () => {
   expect(check(fixture()).exitCode).toBe(0);
 });
 
-test.each([
+interface Manifest {
+  version: string;
+  packages: { version: string }[];
+}
+
+test.each<[string, (manifest: Manifest) => string]>([
   ["package.json", (manifest) => (manifest.version = "0.0.0")],
   ["packages/mcp-relay/package.json", (manifest) => (manifest.version = "0.0.0")],
   ["server.json", (manifest) => (manifest.version = "0.0.0")],
-  ["server.json", (manifest) => (manifest.packages[0].version = "0.0.0")],
+  ["server.json", (manifest) => (manifest.packages[0]!.version = "0.0.0")],
 ])("release check rejects version drift in %s", (file, change) => {
   const root = fixture();
   const path = join(root, file);

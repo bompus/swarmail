@@ -1,12 +1,14 @@
 import { expect, test } from "bun:test";
+import type { Database } from "bun:sqlite";
 import Schema from "typebox/schema";
 import { openDatabase } from "../src/db.ts";
+import type { Args } from "../src/store.ts";
 import { createTools, TOOL_DEFINITIONS } from "../src/tools.ts";
 import { createWaiters } from "../src/wake.ts";
 import { isMessageResult } from "../src/message-validation.ts";
 
 const reference = Schema.Compile(
-  TOOL_DEFINITIONS.find((t) => t.name === "send_message").inputSchema,
+  TOOL_DEFINITIONS.find((t) => t.name === "send_message")!.inputSchema,
 );
 const notice = {
   resource_id: "heavy-local-work",
@@ -17,7 +19,10 @@ const notice = {
 
 function fixture() {
   const db = openDatabase(":memory:");
-  const tools = createTools(db, { databasePath: ":memory:", mutationsEnabled: true });
+  const tools = createTools(db, { databasePath: ":memory:", mutationsEnabled: true }) as Record<
+    "register_agent" | "send_message" | "file_reservation_paths" | "fetch_session_inbox",
+    (a: Args) => any
+  >;
   const project_key = "/resource/repo";
   for (const name of ["BlueLake", "GreenCastle"]) {
     tools.register_agent({
@@ -39,10 +44,12 @@ function fixture() {
   return { db, tools, args, waiters: createWaiters(db) };
 }
 
-function rows(db) {
+function rows(db: Database) {
   return Object.fromEntries(
     db
-      .query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+      .query<{ name: string }, []>(
+        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
+      )
       .all()
       .map(({ name }) => [name, db.query(`SELECT * FROM "${name.replaceAll('"', '""')}"`).all()]),
   );
@@ -164,7 +171,7 @@ test("malformed typed sends match their public schema and leave every table unch
         "details",
       ].map((key) => ({ [key]: "override" })),
     ];
-    const missingKey = { ...f.args };
+    const missingKey: Args = { ...f.args };
     delete missingKey.idempotency_key;
     for (const args of [missingKey, ...bad.map((extra) => ({ ...f.args, ...extra }))]) {
       expect(reference.Check(args)).toBe(false);

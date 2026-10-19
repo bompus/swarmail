@@ -14,8 +14,8 @@ const env = {
   SWARMAIL_WAKE_URL: `http://127.0.0.1:${server.port}`,
   XDG_STATE_HOME: join(dir, "state"),
 };
-afterAll(() => {
-  server.stop(true);
+afterAll(async () => {
+  await server.stop(true);
   db.close();
   rmSync(dir, { recursive: true, force: true });
 });
@@ -37,7 +37,9 @@ test("a run through the server passes, logs a line and keeps its agents", async 
   expect(lines[1].wake_ms).toBeLessThan(2000);
   const names = JSON.parse(readFileSync(join(state, "agents.json"), "utf8"));
   const roster = await call(env, "list_agents", { project_key: state });
-  expect(roster.map((a) => a.name).sort()).toEqual([names.receiver, names.sender].sort());
+  expect(roster.map((a: { name: string }) => a.name).sort()).toEqual(
+    [names.receiver, names.sender].sort(),
+  );
 });
 
 test("a wait that never hints fails the run and names the message", async () => {
@@ -56,7 +58,7 @@ test("a wait that never hints fails the run and names the message", async () => 
 test("the wait endpoint comes from SWARMAIL_WAKE_URL, the way a wake hook finds it", async () => {
   const gone = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response("") });
   const deadUrl = `http://127.0.0.1:${gone.port}`;
-  gone.stop(true); // Nothing listens there now: if the canary used SWARMAIL_URL instead, this run would pass.
+  await gone.stop(true); // Nothing listens there now: if the canary used SWARMAIL_URL instead, this run would pass.
   const log = spyOn(console, "error").mockImplementation(() => {});
   try {
     expect(await canary({ ...env, SWARMAIL_WAKE_URL: deadUrl })).toBe(1);
@@ -69,10 +71,10 @@ test("a wait that never answers is cut off after the wait time plus a grace peri
   const silent = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Promise(() => {}) });
   try {
     const started = performance.now();
-    await expect(httpWait(`http://127.0.0.1:${silent.port}`, 100)("session", 0)).rejects.toThrow();
+    expect(httpWait(`http://127.0.0.1:${silent.port}`, 100)("session", 0)).rejects.toThrow();
     expect(performance.now() - started).toBeLessThan(2000);
   } finally {
-    silent.stop(true);
+    await silent.stop(true);
   }
 });
 
@@ -86,14 +88,16 @@ test("a trailing slash in SWARMAIL_WAKE_URL still reaches /wait", async () => {
 });
 
 // A server stub that wakes the receiver and accepts every call, so each check after the wake can fail on its own.
-const stub = ({ inbox, receipt }) =>
+const stub = ({ inbox, receipt }: { inbox: { id: number }[]; receipt: Record<string, unknown> }) =>
   roundTrip(
     "/canary-stub",
     {},
     async (name, args) => {
       if (name === "register_agent") {
         return {
-          name: args.task_description.includes("swarmail-canary-rx") ? "receiver" : "sender",
+          name: String(args.task_description).includes("swarmail-canary-rx")
+            ? "receiver"
+            : "sender",
         };
       }
       if (name === "send_message") {
