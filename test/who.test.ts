@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openDatabase } from "../src/db.ts";
+import type { Args } from "../src/store.ts";
+import type { T3Thread } from "../src/t3-state.ts";
 import { createTools } from "../src/tools.ts";
 import { parseTag } from "../src/tag.ts";
 import { resolveProject, whoRows } from "../src/who.ts";
@@ -84,18 +86,18 @@ test("ranks running sessions first and links untagged rows through the hook's st
         last_active_ts: "2026-09-27T03:04:00Z",
       },
     ];
-    const t3For = { c583: "room" };
+    const t3For: Record<string, string> = { c583: "room" };
     const rows = whoRows(
       {
         project: "/r",
         roster,
         stateDir,
         threads,
-        room: { agentName: "TanOwl" },
+        room: { heartbeatAt: "2026-09-26T05:47:00Z", agentName: "TanOwl" },
         checkout: () => "/r",
       },
       (id) => t3For[id] ?? null,
-      (host) => host.pid === 7,
+      (host) => host!.pid === 7,
     );
     expect(rows.map((row) => row.name)).toEqual(["TanOwl", null, "WildDeer", "WindyOriole"]);
     expect(rows[0]).toMatchObject({
@@ -105,12 +107,12 @@ test("ranks running sessions first and links untagged rows through the hook's st
       hostAlive: true,
       lastActive: "2026-09-26T05:47:00Z",
     });
-    expect(rows.find((row) => row.name === "WildDeer").hostAlive).toBeNull();
+    expect(rows.find((row) => row.name === "WildDeer")!.hostAlive).toBeNull();
     expect(rows[1]).toMatchObject({
       t3: "lost",
       task: "not in visible roster; registration and delivery unknown",
     });
-    expect(rows.find((row) => row.name === "WildDeer").sameSessionAs).toEqual(["WindyOriole"]);
+    expect(rows.find((row) => row.name === "WildDeer")!.sameSessionAs).toEqual(["WindyOriole"]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -130,10 +132,10 @@ test("links a roster row through the name the session holds in that project", ()
         host: { name: "claude", pid: 7, start: "1" },
       }),
     );
-    const roster = (name) => [
+    const roster = (name: string) => [
       { name, task_description: "registered by hook", last_active_ts: "2026-09-26T05:47:00Z" },
     ];
-    const rowsIn = (project, name) =>
+    const rowsIn = (project: string, name: string) =>
       whoRows(
         {
           project,
@@ -146,10 +148,10 @@ test("links a roster row through the name the session holds in that project", ()
         () => null,
         () => true,
       );
-    expect(rowsIn("/a", "TanOwl")[0].sessionId).toBe("c583");
-    expect(rowsIn("/b", "BlueHarbor")[0].sessionId).toBe("c583");
+    expect(rowsIn("/a", "TanOwl")[0]!.sessionId).toBe("c583");
+    expect(rowsIn("/b", "BlueHarbor")[0]!.sessionId).toBe("c583");
     // The headline name is not this session's name in a project that holds a different one.
-    expect(rowsIn("/b", "TanOwl")[0].sessionId).toBeNull();
+    expect(rowsIn("/b", "TanOwl")[0]!.sessionId).toBeNull();
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -217,7 +219,7 @@ test("who keeps edit location separate from the launch directory and T3 title", 
       join(dir, "s.json"),
       JSON.stringify({ name: "BlueBranch", projects: ["/r"], worktrees: { "/r": "/w/older" } }),
     );
-    const context = {
+    const context: Parameters<typeof whoRows>[0] = {
       project: "/r",
       stateDir: dir,
       roster: [
@@ -246,24 +248,27 @@ test("who keeps edit location separate from the launch directory and T3 title", 
       () => null,
       () => false,
     );
+    if (!row) {
+      throw new Error("whoRows returned no row");
+    }
     expect(row.location).toEqual(label);
     expect(row.cwd).toBe("/launch");
     expect(row.title).toBe("Edit task");
-    context.roster[0].location = null;
+    context.roster[0]!.location = null;
     expect(
       whoRows(
         context,
         () => null,
         () => false,
-      )[0].location,
+      )[0]!.location,
     ).toBeNull();
-    delete context.roster[0].location;
+    delete context.roster[0]!.location;
     expect(
       whoRows(
         context,
         () => null,
         () => false,
-      )[0].location,
+      )[0]!.location,
     ).toEqual({
       repo: "r",
       worktree: "/w/older",
@@ -331,13 +336,13 @@ test("who resolves native and hook-state titles while preserving T3 precedence",
       ["T3Fern", "T3 task"],
       ["UnknownFern", null],
     ]);
-    expect(rows[0].location).toBeNull();
-    expect(rows[1].location.title).toBe("Hook task");
+    expect(rows[0]!.location).toBeNull();
+    expect(rows[1]!.location!.title).toBe("Hook task");
   } finally {
     for (const [key, value] of [
       ["HOME", previousHome],
       ["CODEX_HOME", previousCodex],
-    ]) {
+    ] as const) {
       if (value === undefined) {
         delete process.env[key];
       } else {
@@ -352,12 +357,15 @@ test("capped and retired registrations remain unknown when absent from the visib
   const dir = mkdtempSync(join(tmpdir(), "who-visible-"));
   const db = openDatabase(join(dir, "mail.sqlite"));
   try {
-    const tools = createTools(db, { databasePath: join(dir, "mail.sqlite") });
+    const tools = createTools(db, { databasePath: join(dir, "mail.sqlite") }) as Record<
+      "register_agent" | "retire_agent" | "list_agents",
+      (a: Args) => any
+    >;
     const entries = [
       ["HiddenOwl", "limited"],
       ["RetiredBear", "retired"],
       ["VisibleFox", "visible"],
-    ];
+    ] as const;
     for (const [name, thread] of entries) {
       tools.register_agent({
         project_key: "/repo",
@@ -369,14 +377,14 @@ test("capped and retired registrations remain unknown when absent from the visib
     }
     tools.retire_agent({ project_key: "/repo", agent_name: "RetiredBear" });
     const roster = tools.list_agents({ project_key: "/repo", limit: 1 });
-    expect(roster.map((agent) => agent.name)).toEqual(["VisibleFox"]);
+    expect(roster.map((agent: { name: string }) => agent.name)).toEqual(["VisibleFox"]);
     const rows = whoRows({
       project: "/repo",
       roster,
       stateDir: join(dir, "state"),
       room: null,
       checkout: () => "/repo",
-      threads: new Map(
+      threads: new Map<string, T3Thread>(
         entries.map(([, thread]) => [
           thread,
           {
@@ -406,7 +414,7 @@ test("who asks git about a thread directory once however many threads share it",
   try {
     const stateDir = join(dir, "state");
     mkdirSync(stateDir);
-    const thread = (id, cwd) => [
+    const thread = (id: string, cwd: string): [string, T3Thread] => [
       id,
       { thread_id: id, title: id, cwd, status: "running", last_seen_at: null },
     ];
@@ -416,7 +424,7 @@ test("who asks git about a thread directory once however many threads share it",
       thread("c", "/other"),
       thread("d", "/other"),
     ]);
-    const asked = [];
+    const asked: string[] = [];
     const rows = whoRows({
       project: "/r",
       roster: [],

@@ -20,8 +20,8 @@ test("answers on stdout with MCP only and exits when stdin closes", async () => 
     { jsonrpc: "2.0", method: "notifications/initialized" },
     { jsonrpc: "2.0", id: 2, method: "tools/list" },
   ];
-  proc.stdin.write(messages.map((m) => JSON.stringify(m) + "\n").join(""));
-  proc.stdin.end();
+  await proc.stdin.write(messages.map((m) => JSON.stringify(m) + "\n").join(""));
+  await proc.stdin.end();
   const out = await new Response(proc.stdout).text();
   expect(await proc.exited).toBe(0);
   const lines = out
@@ -30,5 +30,5 @@ test("answers on stdout with MCP only and exits when stdin closes", async () => 
     .map((line) => JSON.parse(line));
   expect(lines.map((m) => m.id)).toEqual([1, 2]);
   expect(lines[0].result.serverInfo.name).toBe("swarmail");
-  expect(lines[1].result.tools.some((t) => t.name === "send_message")).toBe(true);
+  expect(lines[1].result.tools.some((t: { name: string }) => t.name === "send_message")).toBe(true);
 });

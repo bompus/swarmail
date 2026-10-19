@@ -5,7 +5,10 @@ import { join } from "node:path";
 
 // scripts/check-published.ts asks GitHub, npm and the MCP registry which version each shows as latest.
 // The tests point it at a local server that answers like those three, with versions the test sets.
-let root, server, shown;
+let root: string;
+let server: ReturnType<typeof Bun.serve>;
+// Loose JSON the stand-in server answers with; each test reshapes it.
+let shown: Record<string, any>;
 
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), "swarmail-published-"));
@@ -29,16 +32,17 @@ beforeAll(() => {
     },
   });
 });
-afterAll(() => {
-  server.stop(true);
+afterAll(async () => {
+  await server.stop(true);
   rmSync(root, { recursive: true, force: true });
 });
 
-const manifest = (file) => JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
+const manifest = (file: string) =>
+  JSON.parse(readFileSync(new URL(`../${file}`, import.meta.url), "utf8"));
 const repoVersion = manifest("package.json").version;
 const npmName = manifest("packages/mcp-relay/package.json").name;
 
-const relayPackage = (version, identifier = npmName) => ({
+const relayPackage = (version: string, identifier = npmName) => ({
   registryType: "npm",
   identifier,
   version,
@@ -52,7 +56,7 @@ function everythingPublished(version = repoVersion) {
   };
 }
 
-async function check(args = []) {
+async function check(args: string[] = []) {
   const base = `http://127.0.0.1:${server.port}`;
   // Not spawnSync: that would block this process, and the stand-in server lives in it.
   const child = Bun.spawn(

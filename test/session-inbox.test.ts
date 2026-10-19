@@ -12,21 +12,21 @@ import { testScratch } from "./fixtures/test-scratch.ts";
 // These tests fake a Codex session through its variable. A runner under another agent host (Claude Code, say) would
 // otherwise find that host's process above it and refuse the identity, so the tests see no host, as in CI.
 const realProc = { ...proc };
-mock.module("../src/proc.ts", () => ({ ...realProc, hostProcess: () => null }));
+await mock.module("../src/proc.ts", () => ({ ...realProc, hostProcess: () => null }));
 // Module mocks last for the whole `bun test` process, so give the real module back for the files that run after this one.
 afterAll(() => mock.module("../src/proc.ts", () => realProc));
 
 const root = testScratch();
-const cleanups = [];
-afterEach(() => {
+const cleanups: Array<() => void | Promise<void>> = [];
+afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) {
-    cleanup();
+    await cleanup();
   }
 });
 function fixture() {
   const { server, db } = createServer(join(root, `${crypto.randomUUID()}.sqlite`), 0);
-  cleanups.push(() => {
-    server.stop(true);
+  cleanups.push(async () => {
+    await server.stop(true);
     db.close();
   });
   const env = {
@@ -34,8 +34,8 @@ function fixture() {
     XDG_STATE_HOME: join(root, "state"),
     SWARMAIL_URL: `http://127.0.0.1:${server.port}/mcp/`,
   };
-  const invoke = (name, args) => call(env, name, args);
-  const register = async (project, name, tag) => {
+  const invoke = (name: string, args: Record<string, unknown>) => call(env, name, args);
+  const register = async (project: string, name: string, tag: string) => {
     await invoke("register_agent", {
       project_key: project,
       name,
@@ -44,7 +44,7 @@ function fixture() {
       task_description: tag,
     });
   };
-  const send = async (project, to, subject = "mail") => {
+  const send = async (project: string, to: string[], subject = "mail") => {
     await register(project, "GoldMoose", "sender");
     return invoke("send_message", {
       project_key: project,
@@ -54,7 +54,7 @@ function fixture() {
       body_md: "message body",
     });
   };
-  const inbox = (args = {}) =>
+  const inbox = (args: Record<string, unknown> = {}) =>
     invoke("fetch_session_inbox", {
       host: "codex",
       session_id: "current",
@@ -84,7 +84,11 @@ test("session inbox drains pages across projects without reading unrelated recei
   ]);
   expect(await f.inbox({ limit: 1 })).toEqual([]);
   expect(
-    f.db.query("SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL").get().n,
+    f.db
+      .query<{ n: number }, []>(
+        "SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL",
+      )
+      .get()!.n,
   ).toBe(2);
   expect(Object.keys(first[0]).sort()).toEqual([
     "ack_required",
@@ -115,16 +119,20 @@ test("T3 identity includes previous providers but excludes a conflicting T3 tag"
     ["b", "AmberCliff"],
     ["c", "BlackHill"],
     ["d", "SilverDog"],
-  ]) {
+  ] as const) {
     await f.send(`/fixture/${project}`, [name]);
   }
-  expect((await f.inbox({ t3_thread: "thread-a" })).map((row) => row.agent_name).sort()).toEqual([
-    "AmberCliff",
-    "SilverDog",
-    "WhiteBear",
-  ]);
   expect(
-    f.db.query("SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL").get().n,
+    (await f.inbox({ t3_thread: "thread-a" }))
+      .map((row: { agent_name: string }) => row.agent_name)
+      .sort(),
+  ).toEqual(["AmberCliff", "SilverDog", "WhiteBear"]);
+  expect(
+    f.db
+      .query<{ n: number }, []>(
+        "SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL",
+      )
+      .get()!.n,
   ).toBe(1);
 });
 
@@ -135,9 +143,13 @@ test("session inbox finds mail for a T3 child-task thread whose ID holds URL-enc
   await f.register("/fixture/a", "AzureWillow", `[t3:${thread} codex:current]`);
   await f.send("/fixture/a", ["AzureWillow"]);
   const rows = await f.inbox({ t3_thread: thread });
-  expect(rows.map((row) => row.agent_name)).toEqual(["AzureWillow"]);
+  expect(rows.map((row: { agent_name: string }) => row.agent_name)).toEqual(["AzureWillow"]);
   expect(
-    f.db.query("SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL").get().n,
+    f.db
+      .query<{ n: number }, []>(
+        "SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL",
+      )
+      .get()!.n,
   ).toBe(0);
 });
 
@@ -152,32 +164,39 @@ test("preview revives returned retired identities and read marking covers only r
   expect(preview[0].agent_name).toBe("GreenHill");
   expect(preview[0]).not.toHaveProperty("read_ts");
   expect(
-    f.db.query("SELECT retired_at FROM agents WHERE name = 'GreenHill'").get().retired_at,
+    f.db
+      .query<{ retired_at: number | null }, []>(
+        "SELECT retired_at FROM agents WHERE name = 'GreenHill'",
+      )
+      .get()!.retired_at,
   ).toBeNull();
   await f.inbox({ limit: 1 });
   expect(
     f.db
-      .query(
+      .query<{ n: number }, [number]>(
         "SELECT count(*) AS n FROM message_recipients WHERE message_id = ? AND read_ts IS NULL",
       )
-      .get(message.id).n,
+      .get(message.id)!.n,
   ).toBe(2);
-  expect((await f.inbox()).map((row) => row.agent_name)).toEqual(["BlueLake"]);
+  expect((await f.inbox()).map((row: { agent_name: string }) => row.agent_name)).toEqual([
+    "BlueLake",
+  ]);
   expect(await f.inbox()).toEqual([]);
 });
 
-for (const [count, limit, sizes] of [
+const drains: Array<[count: number, limit: number | undefined, sizes: number[]]> = [
   [0, undefined, [0]],
   [2, undefined, [2]],
   [2, 1, [1, 1, 0]],
   [3, 2, [2, 1]],
   [1001, 10000, [1000, 1]],
-]) {
+];
+for (const [count, limit, sizes] of drains) {
   test(`session CLI drains ${count} receipts with limit ${limit ?? "default"} and ignores name overrides`, async () => {
     const f = fixture();
     await f.register("/fixture/a", "BlueLake", "[codex:current]");
     await f.register("/fixture/b", "GreenHill", "[codex:current]");
-    const recipients = [];
+    const recipients: string[] = [];
     for (let index = 0; index < count; index++) {
       const name = index % 2 ? "GreenHill" : "BlueLake";
       await f.send(index % 2 ? "/fixture/b" : "/fixture/a", [name]);
@@ -204,7 +223,7 @@ for (const [count, limit, sizes] of [
       ).toBe(0);
       const pages = log.mock.calls.map(([text]) => JSON.parse(text));
       expect(pages.map((page) => page.length)).toEqual(sizes);
-      expect(pages.flat().map((row) => row.agent_name)).toEqual(recipients);
+      expect(pages.flat().map((row: { agent_name: string }) => row.agent_name)).toEqual(recipients);
       expect(await f.inbox()).toEqual([]);
     } finally {
       log.mockRestore();
@@ -228,7 +247,7 @@ for (const flag of ["--peek", "--all"]) {
         ),
       ).toBe(0);
       expect(log.mock.calls).toHaveLength(1);
-      expect(JSON.parse(log.mock.calls[0][0])).toHaveLength(1);
+      expect(JSON.parse(log.mock.calls[0]![0])).toHaveLength(1);
       expect(await f.inbox({ mark_read: false })).toHaveLength(flag === "--peek" ? 1 : 0);
     } finally {
       log.mockRestore();
@@ -236,7 +255,7 @@ for (const flag of ["--peek", "--all"]) {
   });
 }
 
-function localState(dir, id, host, tags) {
+function localState(dir: string, id: string, host: proc.HostProcess, tags: Record<string, string>) {
   const path = join(dir, "swarmail-register");
   mkdirSync(path, { recursive: true });
   writeFileSync(
@@ -287,7 +306,7 @@ test("session inbox rejects malformed identities and limits", async () => {
     { t3_thread: "bad/path" },
     { limit: 0 },
   ]) {
-    await expect(f.inbox(args)).rejects.toThrow();
+    expect(f.inbox(args)).rejects.toThrow();
   }
   const err = spyOn(console, "error").mockImplementation(() => {});
   try {
@@ -299,7 +318,7 @@ test("session inbox rejects malformed identities and limits", async () => {
   }
 });
 
-function permutations(events) {
+function permutations<T>(events: T[]): T[][] {
   if (!events.length) {
     return [[]];
   }
@@ -339,7 +358,11 @@ test("mail, re-registration and page reads preserve every session receipt in all
     }
     expect(received.map((message) => message.id).sort()).toEqual(sent.sort());
     expect(
-      f.db.query("SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL").get().n,
+      f.db
+        .query<{ n: number }, []>(
+          "SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL",
+        )
+        .get()!.n,
     ).toBe(1);
   }
 });
@@ -367,22 +390,34 @@ test("session CLI uses a unique T3 provider match and refuses competing threads"
   const error = spyOn(console, "error").mockImplementation(() => {});
   try {
     expect(await mail(["inbox", "--session", "--json"], async () => "", env, home)).toBe(0);
-    expect(JSON.parse(log.mock.calls[0][0]).map((row) => row.agent_name)).toEqual(["BlueLake"]);
     expect(
-      f.db.query("SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL").get().n,
+      JSON.parse(log.mock.calls[0]![0]).map((row: { agent_name: string }) => row.agent_name),
+    ).toEqual(["BlueLake"]);
+    expect(
+      f.db
+        .query<{ n: number }, []>(
+          "SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL",
+        )
+        .get()!.n,
     ).toBe(1);
     addT3V2Thread(t3, { threadId: "own", nativeId: "current", driver: "codex" });
     await f.register("/fixture/c", "SilverDog", "[t3:own claude:previous]");
     await f.send("/fixture/c", ["SilverDog"]);
     log.mockClear();
     expect(await mail(["inbox", "--session", "--json"], async () => "", env, home)).toBe(0);
-    expect(JSON.parse(log.mock.calls[0][0]).map((row) => row.agent_name)).toEqual(["SilverDog"]);
+    expect(
+      JSON.parse(log.mock.calls[0]![0]).map((row: { agent_name: string }) => row.agent_name),
+    ).toEqual(["SilverDog"]);
     addT3V2Thread(t3, { threadId: "competing", nativeId: "current", driver: "codex" });
     await f.send("/fixture/c", ["SilverDog"]);
     expect(await mail(["inbox", "--session"], async () => "", env, home)).toBe(1);
-    expect(error.mock.calls.at(-1)[0]).toContain("cannot identify");
+    expect(error.mock.calls.at(-1)![0]).toContain("cannot identify");
     expect(
-      f.db.query("SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL").get().n,
+      f.db
+        .query<{ n: number }, []>(
+          "SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL",
+        )
+        .get()!.n,
     ).toBe(2);
   } finally {
     log.mockRestore();

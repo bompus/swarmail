@@ -1,4 +1,6 @@
-import { deliverCodex } from "../src/wake-codex.ts";
+import { deliverCodex, type CodexTarget } from "../src/wake-codex.ts";
+import type { Row } from "../src/store.ts";
+import type { ServerWebSocket } from "bun";
 import { afterEach, expect, test as bunTest } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
@@ -17,13 +19,13 @@ import { testScratch } from "./fixtures/test-scratch.ts";
 const test = process.platform === "win32" ? bunTest.skip : bunTest;
 
 const root = testScratch();
-const cleanups = [];
+const cleanups: Array<() => void | Promise<void>> = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) {
     await cleanup();
   }
 });
-async function until(fn) {
+async function until(fn: () => boolean) {
   const deadline = Date.now() + 5000;
   while (!fn()) {
     if (Date.now() > deadline) {
@@ -35,9 +37,10 @@ async function until(fn) {
 function fixture() {
   const dir = mkdtempSync(join(root, "case-"));
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
-  const requests = [],
-    responses = [],
-    offers = [];
+  // Parsed JSON-RPC frames the stand-in app server saw.
+  const requests: any[] = [],
+    responses: any[] = [],
+    offers: number[] = [];
   const behavior = {
     drop: false,
     lifecycle: true,
@@ -48,8 +51,8 @@ function fixture() {
     cwd: dir,
     direct: true,
     status: { type: "active", activeFlags: [] },
-    queue: [],
-    history: [],
+    queue: [] as unknown[],
+    history: [] as unknown[],
     paginate: false,
     cycle: false,
   };
@@ -69,7 +72,7 @@ function fixture() {
     }
     const db = new Database(join(dir, "state/swarmail-bridge", file), { readonly: true });
     try {
-      return db.query("SELECT * FROM state").get();
+      return db.query<Row, []>("SELECT * FROM state").get();
     } catch {
       return null;
     } finally {
@@ -77,13 +80,13 @@ function fixture() {
     }
   };
   const seedAttempted = () => {
-    const db = new Database(join(dir, "state/swarmail-bridge", stateFile()));
-    const pending = JSON.parse(state().pending);
+    const db = new Database(join(dir, "state/swarmail-bridge", stateFile()!));
+    const pending = JSON.parse(state()!.pending);
     pending.command.phase = "attempted";
     db.query("UPDATE state SET pending=? WHERE id=1").run(JSON.stringify(pending));
     db.close();
   };
-  const sockets = new Set();
+  const sockets = new Set<ServerWebSocket<unknown>>();
   const socketPath = join(dir, "app.sock");
   const server = Bun.serve({
     unix: socketPath,
@@ -104,7 +107,7 @@ function fixture() {
           return;
         }
         requests.push({ ...request, saved: state() });
-        const reply = (result) => ws.send(JSON.stringify({ id: request.id, result }));
+        const reply = (result: unknown) => ws.send(JSON.stringify({ id: request.id, result }));
         if (request.method === "initialize") {
           reply({ userAgent: "codex_cli_rs/0.160.0" });
         } else if (request.method === "initialized") {
@@ -179,11 +182,11 @@ function fixture() {
     },
   });
   chmodSync(socketPath, 0o777); // Private parent is the Unix endpoint's protection.
-  cleanups.push(() => {
+  cleanups.push(async () => {
     for (const ws of sockets) {
       ws.terminate();
     }
-    server.stop(true);
+    await server.stop(true);
   });
   const mail = Bun.serve({
     hostname: "127.0.0.1",
@@ -213,7 +216,7 @@ function fixture() {
     },
   });
   cleanups.push(() => mail.stop(true));
-  const config = {
+  const config: { swarmailUrl: string; target: CodexTarget } = {
     swarmailUrl: `http://127.0.0.1:${mail.port}`,
     target: {
       type: "codex-queue",
@@ -225,7 +228,7 @@ function fixture() {
   };
   const path = join(dir, "config.json");
   writeFileSync(path, JSON.stringify(config));
-  const start = (boundary) => {
+  const start = (boundary?: string) => {
     const proc = Bun.spawn(
       [
         process.execPath,
@@ -289,8 +292,8 @@ test("Codex commits attempted before atomic start or steer, validates admission,
     clientUserMessageId: pending.command.promptId,
     input: [{ type: "text", text: pending.command.text }],
   });
-  expect(f.state().acknowledged).toBe(9);
-  expect(f.state().pending).toBeNull();
+  expect(f.state()!.acknowledged).toBe(9);
+  expect(f.state()!.pending).toBeNull();
   expect(f.responses).toEqual([]);
 });
 
@@ -300,11 +303,11 @@ test("lost steering reply never resends across restarts; paginated history recov
   const first = f.start();
   expect(await first.exited).toBe(1);
   expect(await new Response(first.stderr).text()).toContain("no resend");
-  const saved = JSON.parse(f.state().pending).command;
+  const saved = JSON.parse(f.state()!.pending).command;
   const absent = f.start();
   expect(await absent.exited).toBe(1);
   expect(f.adds()).toHaveLength(1);
-  expect(f.state().acknowledged).toBe(0);
+  expect(f.state()!.acknowledged).toBe(0);
   f.behavior.paginate = true;
   f.behavior.history = [
     {
@@ -321,7 +324,7 @@ test("lost steering reply never resends across restarts; paginated history recov
   recovered.kill();
   await recovered.exited;
   expect(f.adds()).toHaveLength(1);
-  expect(f.state().acknowledged).toBe(9);
+  expect(f.state()!.acknowledged).toBe(9);
 });
 
 test("process death preserves attempted state; exact paginated user-message history recovers without resend", async () => {
@@ -334,7 +337,7 @@ test("process death preserves attempted state; exact paginated user-message hist
   expect(await new Response(competing.stderr).text()).toContain("another wake bridge owns");
   first.kill("SIGKILL");
   await first.exited;
-  const saved = JSON.parse(f.state().pending).command;
+  const saved = JSON.parse(f.state()!.pending).command;
   for (const item of [
     {
       type: "agentMessage",
@@ -351,7 +354,7 @@ test("process death preserves attempted state; exact paginated user-message hist
     f.behavior.history = [{ turnId: "turn", item }];
     const wrong = f.start();
     expect(await wrong.exited).toBe(1);
-    expect(f.state().acknowledged).toBe(0);
+    expect(f.state()!.acknowledged).toBe(0);
   }
   f.behavior.paginate = true;
   f.behavior.history = [
@@ -369,7 +372,7 @@ test("process death preserves attempted state; exact paginated user-message hist
   recovered.kill();
   await recovered.exited;
   expect(f.adds()).toHaveLength(1);
-  expect(f.state().acknowledged).toBe(9);
+  expect(f.state()!.acknowledged).toBe(9);
 });
 
 test("wrong workspace and unsafe socket stop before enqueue; a mark-only crash cannot authorize sending", async () => {
@@ -378,7 +381,7 @@ test("wrong workspace and unsafe socket stop before enqueue; a mark-only crash c
   const wrong = f.start();
   expect(await wrong.exited).toBe(1);
   expect(f.adds()).toHaveLength(0);
-  expect(JSON.parse(f.state().pending).command.phase).toBe("prepared");
+  expect(JSON.parse(f.state()!.pending).command.phase).toBe("prepared");
   f.behavior.cwd = f.dir;
   chmodSync(f.dir, 0o755);
   const unsafe = f.start();
@@ -389,7 +392,7 @@ test("wrong workspace and unsafe socket stop before enqueue; a mark-only crash c
   const marked = f.start();
   expect(await marked.exited).toBe(1);
   expect(f.adds()).toHaveLength(0);
-  expect(f.state().acknowledged).toBe(0);
+  expect(f.state()!.acknowledged).toBe(0);
   f.config.target.cwd = join(f.dir, "changed");
   writeFileSync(f.path, JSON.stringify(f.config));
   const changed = f.start();
@@ -402,7 +405,7 @@ test("mismatched admission and SIGTERM retain mail; cyclic recovery cursors are 
   f.behavior.mismatch = true;
   const wrong = f.start();
   expect(await wrong.exited).toBe(1);
-  expect(f.state().acknowledged).toBe(0);
+  expect(f.state()!.acknowledged).toBe(0);
   f.behavior.cycle = true;
   const cycle = f.start();
   expect(await cycle.exited).toBe(1);
@@ -413,8 +416,8 @@ test("mismatched admission and SIGTERM retain mail; cyclic recovery cursors are 
   await until(() => g.adds().length === 1);
   run.kill();
   expect(await run.exited).toBe(0);
-  expect(g.state().acknowledged).toBe(0);
-  expect(JSON.parse(g.state().pending).command.phase).toBe("attempted");
+  expect(g.state()!.acknowledged).toBe(0);
+  expect(JSON.parse(g.state()!.pending).command.phase).toBe("attempted");
 });
 
 test("native socket aliases require private alias and resolved parents", async () => {
@@ -443,9 +446,11 @@ test("native socket aliases require private alias and resolved parents", async (
   }
 });
 
-async function atBarrier(proc, boundary) {
+type Child = ReturnType<ReturnType<typeof fixture>["start"]>;
+
+async function atBarrier(proc: Child, boundary: string) {
   const reader = proc.stdout.getReader();
-  let timer;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const line = await Promise.race([
       (async () => {
@@ -480,12 +485,12 @@ for (const boundary of ["before-attempt", "after-attempt", "before-ack"]) {
     await atBarrier(first, boundary);
     const expectedSends = boundary === "before-ack" ? 1 : 0;
     expect(f.adds()).toHaveLength(expectedSends);
-    const saved = JSON.parse(f.state().pending).command;
+    const saved = JSON.parse(f.state()!.pending).command;
     expect(saved.phase).toBe(boundary === "before-attempt" ? "prepared" : "attempted");
-    expect(f.state().acknowledged).toBe(0);
+    expect(f.state()!.acknowledged).toBe(0);
     first.kill("SIGKILL");
     await first.exited;
-    expect(JSON.parse(f.state().pending).command).toEqual(saved);
+    expect(JSON.parse(f.state()!.pending).command).toEqual(saved);
 
     if (boundary === "after-attempt") {
       for (let restart = 0; restart < 2; restart++) {
@@ -493,8 +498,8 @@ for (const boundary of ["before-attempt", "after-attempt", "before-ack"]) {
         expect(await recovery.exited).toBe(1);
         expect(await new Response(recovery.stderr).text()).toContain("no resend");
         expect(f.adds()).toHaveLength(0);
-        expect(f.state().acknowledged).toBe(0);
-        expect(JSON.parse(f.state().pending).command).toEqual(saved);
+        expect(f.state()!.acknowledged).toBe(0);
+        expect(JSON.parse(f.state()!.pending).command).toEqual(saved);
       }
       return;
     }
@@ -519,8 +524,8 @@ for (const boundary of ["before-attempt", "after-attempt", "before-ack"]) {
       await recovery.exited;
       expect(f.adds()).toHaveLength(1);
       expect(f.adds()[0].params.clientUserMessageId).toBe(saved.promptId);
-      expect(f.state().acknowledged).toBe(9);
-      expect(f.state().pending).toBeNull();
+      expect(f.state()!.acknowledged).toBe(9);
+      expect(f.state()!.pending).toBeNull();
     }
   });
 }
@@ -535,8 +540,8 @@ for (const order of [
     const children = [f.start("startup"), f.start("startup")];
     await Promise.all(children.map((child) => atBarrier(child, "startup")));
     for (const index of order) {
-      children[index].stdin.write("x");
-      children[index].stdin.flush();
+      await children[index]!.stdin.write("x");
+      await children[index]!.stdin.flush();
     }
     const loser = await Promise.race(
       children.map(async (child) => {
@@ -547,18 +552,18 @@ for (const order of [
     expect(loser.exitCode).toBe(1);
     expect(await new Response(loser.stderr).text()).toContain("another wake bridge owns");
     await until(() => f.adds().length > 0);
-    const saved = JSON.parse(f.state().pending).command;
+    const saved = JSON.parse(f.state()!.pending).command;
     expect(f.adds()).toHaveLength(1);
     expect(saved.phase).toBe("attempted");
     const winner = children.find((child) => child !== loser);
-    winner.kill("SIGKILL");
-    await winner.exited;
+    winner!.kill("SIGKILL");
+    await winner!.exited;
     for (let restart = 0; restart < 2; restart++) {
       const recovery = f.start();
       expect(await recovery.exited).toBe(1);
       expect(f.adds()).toHaveLength(1);
       expect(f.adds()[0].params.clientUserMessageId).toBe(saved.promptId);
-      expect(f.state().acknowledged).toBe(0);
+      expect(f.state()!.acknowledged).toBe(0);
     }
   });
 }
@@ -579,8 +584,8 @@ for (const held of [
     run.kill();
     await run.exited;
     expect(f.adds()).toHaveLength(0);
-    expect(JSON.parse(f.state().pending).command.phase).toBe("prepared");
-    expect(f.state().acknowledged).toBe(0);
+    expect(JSON.parse(f.state()!.pending).command.phase).toBe("prepared");
+    expect(f.state()!.acknowledged).toBe(0);
   });
 }
 
@@ -617,8 +622,8 @@ test("lifecycle closure after Codex inspection holds the prepared journal before
   run.kill();
   await run.exited;
   expect(f.adds()).toEqual([]);
-  expect(f.state().acknowledged).toBe(0);
-  expect(JSON.parse(f.state().pending).command.phase).toBe("prepared");
+  expect(f.state()!.acknowledged).toBe(0);
+  expect(JSON.parse(f.state()!.pending).command.phase).toBe("prepared");
   f.behavior.holdLifecycleAfterRead = false;
   f.behavior.lifecycle = true;
   const resumed = f.start();

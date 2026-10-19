@@ -27,7 +27,9 @@ test("opening waits for another process that holds the database instead of faili
     const reader = holder.stdout.getReader();
     expect(new TextDecoder().decode((await reader.read()).value)).toContain("locked");
     const db = openDatabase(path);
-    expect(db.query("PRAGMA journal_mode").get().journal_mode).toBe("wal");
+    expect(db.query<{ journal_mode: string }, []>("PRAGMA journal_mode").get()!.journal_mode).toBe(
+      "wal",
+    );
     db.close();
     expect(await holder.exited).toBe(0);
   } finally {
@@ -55,7 +57,9 @@ test("identity columns are backfilled from each tag, and every open repairs rows
     old.close();
 
     let db = openDatabase(path);
-    expect(db.query("PRAGMA user_version").get().user_version).toBe(7);
+    expect(db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(
+      7,
+    );
     expect(
       db.query("SELECT host, session_id, t3_thread, build, cwd FROM agents ORDER BY id").all(),
     ).toEqual([
@@ -63,11 +67,14 @@ test("identity columns are backfilled from each tag, and every open repairs rows
       { host: null, session_id: null, t3_thread: null, build: null, cwd: null },
       { host: null, session_id: null, t3_thread: null, build: null, cwd: null },
     ]);
-    expect(db.query("SELECT worktree FROM agents WHERE id = 1").get().worktree).toBeNull();
+    expect(
+      db.query<{ worktree: string | null }, []>("SELECT worktree FROM agents WHERE id = 1").get()!
+        .worktree,
+    ).toBeNull();
     expect(db.query("SELECT sender_location FROM messages").all()).toEqual([]);
     // The wake lookup reads the indexes instead of scanning every description.
     const plan = db
-      .query(
+      .query<{ detail: string }, [string]>(
         "EXPLAIN QUERY PLAN SELECT id FROM agents WHERE retired_at IS NULL AND (session_id = ?1 OR t3_thread = ?1)",
       )
       .all("s-1")
@@ -86,8 +93,13 @@ test("identity columns are backfilled from each tag, and every open repairs rows
     `);
     db.close();
     db = openDatabase(path);
-    expect(db.query("PRAGMA user_version").get().user_version).toBe(7);
-    expect(db.query("SELECT worktree FROM agents WHERE id = 1").get().worktree).toBe("/w/edit");
+    expect(db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(
+      7,
+    );
+    expect(
+      db.query<{ worktree: string | null }, []>("SELECT worktree FROM agents WHERE id = 1").get()!
+        .worktree,
+    ).toBe("/w/edit");
     expect(
       db
         .query("SELECT id, host, session_id, t3_thread FROM agents WHERE id IN (1, 4) ORDER BY id")
@@ -131,7 +143,9 @@ test("migrating a released database preserves messages without inventing sender 
       expect(db.query("SELECT id,subject,body_md,sender_location FROM messages").all()).toEqual([
         { id: 1, subject: "old", body_md: "hello", sender_location: null },
       ]);
-      expect(db.query("SELECT worktree FROM agents").get().worktree).toBeNull();
+      expect(
+        db.query<{ worktree: string | null }, []>("SELECT worktree FROM agents").get()!.worktree,
+      ).toBeNull();
       expect(db.query("SELECT * FROM wake_cursors WHERE session='previous-session'").get()).toEqual(
         { session: "previous-session", announced: 10, offered: 12 },
       );
@@ -152,7 +166,9 @@ test("unsupported newer mailbox schema is refused without creating tables", () =
     expect(() => openDatabase(path)).toThrow("Unsupported mailbox schema 8");
     const inspect = new Database(path, { readonly: true });
     expect(inspect.query("SELECT name FROM sqlite_master").all()).toEqual([]);
-    expect(inspect.query("PRAGMA user_version").get().user_version).toBe(8);
+    expect(
+      inspect.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version,
+    ).toBe(8);
     inspect.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -207,7 +223,9 @@ test("opening refuses a schema upgrade committed after its initial version read"
     expect(await reader.exited).toBe(0);
     expect(result).toContain("Unsupported mailbox schema 8");
     expect(result).not.toContain("accepted");
-    expect(writer.query("PRAGMA user_version").get().user_version).toBe(8);
+    expect(
+      writer.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version,
+    ).toBe(8);
   } finally {
     if (writer.inTransaction) {
       writer.run("ROLLBACK");

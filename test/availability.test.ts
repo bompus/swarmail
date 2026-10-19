@@ -3,8 +3,8 @@ import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { openDatabase } from "../src/db.ts";
-import { Lifecycle, sessionEligible } from "../src/lifecycle.ts";
-import { MailStore } from "../src/store.ts";
+import { Lifecycle, sessionEligible, type LifecycleConfig } from "../src/lifecycle.ts";
+import { MailStore, type Agent, type Args } from "../src/store.ts";
 import { createTools } from "../src/tools.ts";
 import { createServer } from "../src/server.ts";
 import { processIdentity } from "../src/proc.ts";
@@ -12,10 +12,10 @@ import { testScratch } from "./fixtures/test-scratch.ts";
 
 const scratch = testScratch();
 let serial = 0;
-const close = [];
-afterEach(() => {
+const close: Array<() => void | Promise<void>> = [];
+afterEach(async () => {
   for (const fn of close.splice(0).reverse()) {
-    fn();
+    await fn();
   }
 });
 function fixture() {
@@ -29,15 +29,22 @@ function fixture() {
     INSERT INTO orchestration_v2_projection_threads VALUES ('thread-one',NULL,NULL,'{"settledAt":null,"settledOverride":null}');`);
   const path = base + "-mail.sqlite";
   const db = openDatabase(path);
-  const config = {
+  const config: LifecycleConfig = {
     profile: "test-one",
     databasePath: base + "-source.sqlite",
     eventTable: "orchestration_events",
   };
   const lifecycle = new Lifecycle(db, config);
   const registry = base + "-registry";
-  const tools = createTools(db, { databasePath: path, lifecycle, registry });
-  const register = (name, tag = "") =>
+  const tools = createTools(db, { databasePath: path, lifecycle, registry }) as Record<
+    | "register_agent"
+    | "send_message"
+    | "get_message_delivery_receipt"
+    | "fetch_inbox"
+    | "reply_message",
+    (a: Args) => any
+  >;
+  const register = (name: string, tag = "") =>
     tools.register_agent({
       project_key: "/repo/one",
       name,
@@ -53,7 +60,7 @@ function fixture() {
     () => db.close(),
   );
   let revision = 1;
-  const state = (value) => {
+  const state = (value: "archived" | "settled") => {
     revision++;
     source.exec(
       `INSERT INTO orchestration_events VALUES (${revision},'event-${revision}'); UPDATE orchestration_v2_projection_metadata SET last_sequence=${revision};`,
@@ -73,15 +80,17 @@ function fixture() {
     subject: "handoff",
     body_md: "information",
   };
-  const send = (extra = {}) => tools.send_message({ ...args, ...extra });
+  const send = (extra: Args = {}) => tools.send_message({ ...args, ...extra });
   return { source, db, config, lifecycle, registry, tools, register, state, args, send, path };
 }
 
 test("fresh send admission rejects stale T3 state and mixed fanout before storage", () => {
   const f = fixture();
   f.state("archived");
-  expect(f.db.query("SELECT state FROM session_lifecycle").get().state).toBe("active");
-  let error;
+  expect(
+    f.db.query<{ state: string }, []>("SELECT state FROM session_lifecycle").get()!.state,
+  ).toBe("active");
+  let error: any;
   try {
     f.send({ to: ["TealDune", "GreenCastle", "MissingAgent"] });
   } catch (e) {
@@ -95,9 +104,11 @@ test("fresh send admission rejects stale T3 state and mixed fanout before storag
       { recipient: "MissingAgent", reason: "unregistered" },
     ],
   });
-  expect(f.db.query("SELECT count(*) AS n FROM messages").get().n).toBe(0);
-  expect(f.db.query("SELECT count(*) AS n FROM message_recipients").get().n).toBe(0);
-  expect(f.db.query("SELECT count(*) AS n FROM wake_notices").get().n).toBe(0);
+  expect(f.db.query<{ n: number }, []>("SELECT count(*) AS n FROM messages").get()!.n).toBe(0);
+  expect(
+    f.db.query<{ n: number }, []>("SELECT count(*) AS n FROM message_recipients").get()!.n,
+  ).toBe(0);
+  expect(f.db.query<{ n: number }, []>("SELECT count(*) AS n FROM wake_notices").get()!.n).toBe(0);
 });
 
 test("source loss holds bound delivery but unknown legacy mail stores with durable observations", () => {
@@ -153,7 +164,7 @@ test("send and reply replay retain historical evidence after closure and never w
   expect(() =>
     f.send({ idempotency_key: "send-once", bcc: ["TealDune"], delivery_policy: "durable" }),
   ).toThrow("different arguments");
-  expect(f.db.query("SELECT count(*) AS n FROM messages").get().n).toBe(2);
+  expect(f.db.query<{ n: number }, []>("SELECT count(*) AS n FROM messages").get()!.n).toBe(2);
   expect(f.db.query("SELECT * FROM wake_notices ORDER BY owner").all()).toEqual(notices);
   const receiver = f.tools.fetch_inbox({
     project_key: "/repo/one",
@@ -228,7 +239,7 @@ test("direct Store delivery applies the same fresh boundary and receipts survive
   const tools2 = createTools(db2, {
     databasePath: f.path,
     lifecycle: new Lifecycle(db2, f.config),
-  });
+  }) as Record<"get_message_delivery_receipt" | "send_message", (a: Args) => any>;
   expect(
     tools2.get_message_delivery_receipt({ project_key: "/repo/one", message_id: result.id })
       .recipients[0].admission.lifecycle,
@@ -260,7 +271,7 @@ test("a registered tag cannot make admission read outside the session registry",
 test("bounded send/closure/replay orderings preserve persistence and replay identity", () => {
   for (const sequence of ["CSC", "SCS", "CSS", "SSC", "CCS", "SCC", "CCC", "SSS"]) {
     const f = fixture();
-    let sent;
+    let sent: number | undefined;
     for (const event of sequence) {
       if (event === "C") {
         f.state("settled");
@@ -271,10 +282,12 @@ test("bounded send/closure/replay orderings preserve persistence and replay iden
           expect(result.id).toBe(sent);
         } catch (error) {
           expect(sent).toBeUndefined();
-          expect(error.data.persisted).toBe(false);
+          expect((error as { data: { persisted: boolean } }).data.persisted).toBe(false);
         }
       }
-      expect(f.db.query("SELECT count(*) AS n FROM messages").get().n).toBe(sent ? 1 : 0);
+      expect(f.db.query<{ n: number }, []>("SELECT count(*) AS n FROM messages").get()!.n).toBe(
+        sent ? 1 : 0,
+      );
     }
   }
 });
@@ -288,17 +301,19 @@ test("another connection cannot change local identity or projection during admis
   const p = store.project("/repo/one");
   const sender = store.agent(p, "BlueLake");
   const original = store.agent.bind(store);
-  const barrier = spyOn(store, "agent").mockImplementation((...args) => {
-    expect(() => other.exec("UPDATE agents SET retired_at=1 WHERE name='GreenCastle'")).toThrow(
-      "locked",
-    );
-    expect(() => other.exec("UPDATE session_lifecycle SET state='archived'")).toThrow("locked");
-    return original(...args);
-  });
+  const barrier = spyOn(store, "agent").mockImplementation(
+    (...args: Parameters<MailStore["agent"]>) => {
+      expect(() => other.exec("UPDATE agents SET retired_at=1 WHERE name='GreenCastle'")).toThrow(
+        "locked",
+      );
+      expect(() => other.exec("UPDATE session_lifecycle SET state='archived'")).toThrow("locked");
+      return original(...args);
+    },
+  );
   try {
     const sent = store.atomic(() => store.deliver(p, sender, f.args));
-    expect(sent.delivery.recipients[0].lifecycle).toBe("active");
-    expect(other.query("SELECT count(*) AS n FROM messages").get().n).toBe(1);
+    expect(sent.delivery.recipients[0]!.lifecycle).toBe("active");
+    expect(other.query<{ n: number }, []>("SELECT count(*) AS n FROM messages").get()!.n).toBe(1);
   } finally {
     barrier.mockRestore();
   }
@@ -312,11 +327,11 @@ test("external settle after the snapshot is reported as snapshot eligibility, no
   const p = store.project("/repo/one");
   const sender = store.agent(p, "BlueLake");
   const original = store.requireLifecycle.bind(store);
-  const barrier = spyOn(store, "requireLifecycle").mockImplementation((who) => {
+  const barrier = spyOn(store, "requireLifecycle").mockImplementation((who: Agent) => {
     original(who);
     f.state("settled");
   });
-  let sent;
+  let sent: ReturnType<MailStore["deliver"]>;
   try {
     sent = store.atomic(() => store.deliver(p, sender, f.args));
   } finally {
@@ -335,11 +350,11 @@ test("external settle after the snapshot is reported as snapshot eligibility, no
 test("MCP reports bound source loss and unknown admission metadata", async () => {
   const f = fixture();
   const { server, db } = createServer(f.path, 0, { t3Lifecycle: f.config, registry: f.registry });
-  close.push(() => {
-    server.stop(true);
+  close.push(async () => {
+    await server.stop(true);
     db.close();
   });
-  const call = async (extra = {}) => {
+  const call = async (extra: Args = {}) => {
     const response = await fetch(`http://127.0.0.1:${server.port}/mcp/`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -350,7 +365,7 @@ test("MCP reports bound source loss and unknown admission metadata", async () =>
         params: { name: "send_message", arguments: { ...f.args, ...extra } },
       }),
     });
-    return (await response.json()).result;
+    return ((await response.json()) as { result: any }).result;
   };
   f.source.exec("DROP TABLE orchestration_events");
   const rejected = await call();

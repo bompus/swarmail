@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
 import { openDatabase } from "../src/db.ts";
+import type { Args } from "../src/store.ts";
 import { createTools } from "../src/tools.ts";
 import { createWaiters } from "../src/wake.ts";
+
+type ToolName =
+  | "send_message"
+  | "withdraw_message"
+  | "set_message_importance"
+  | "fetch_session_inbox";
 
 test("wake cursor preserves unread batches through bounded loss, acknowledgement and restart orderings", async () => {
   const db = openDatabase(":memory:");
@@ -20,9 +27,12 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
         body_md: "private body",
         notification_policy,
       }).id;
-    const tools = createTools(db, { databasePath: ":memory:", mutationsEnabled: true });
+    const tools = createTools(db, { databasePath: ":memory:", mutationsEnabled: true }) as Record<
+      ToolName,
+      (a: Args) => any
+    >;
     const first = send();
-    const failures = [];
+    const failures: string[] = [];
     let checked = 0;
     const events = [
       "new mail",
@@ -37,7 +47,7 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
       "withdraw",
       "priority",
     ];
-    const mutateBatch = (event, batches, key) => {
+    const mutateBatch = (event: string, batches: number[], key: string) => {
       const target = batches.at(-1);
       if (target === undefined) {
         return batches;
@@ -52,7 +62,11 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
         tools.withdraw_message(args);
         return batches.filter((id) => id !== target);
       }
-      const row = db.query("SELECT revision,importance FROM messages WHERE id=?").get(target);
+      const row = db
+        .query<{ revision: number; importance: string }, [number]>(
+          "SELECT revision,importance FROM messages WHERE id=?",
+        )
+        .get(target)!;
       tools.set_message_importance({
         ...args,
         expected_revision: row.revision,
@@ -60,8 +74,12 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
       });
       return batches;
     };
-    /** @param {{ accepted: number, acknowledged: number, notice: number | null }} delivery */
-    const walk = async (sequence, batches, delivery, waiters) => {
+    const walk = async (
+      sequence: string[],
+      batches: number[],
+      delivery: { accepted: number; acknowledged: number; notice: number | null },
+      waiters: ReturnType<typeof createWaiters>,
+    ): Promise<void> => {
       const { accepted, acknowledged, notice } = delivery;
       if (sequence.length === 4) {
         return;
@@ -84,7 +102,7 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
           nextAck = acknowledged,
           nextWaiters = waiters,
           nextNotice = notice;
-        const assert = (condition, invariant) => {
+        const assert = (condition: boolean, invariant: string) => {
           if (!condition) {
             failures.push(`${next.join(" -> ")}: ${invariant}`);
           }
@@ -106,7 +124,9 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
               t3_thread: "order-test",
               limit: event === "read page" ? 1 : 1000,
             });
-            nextBatches = batches.filter((id) => !page.some((message) => message.id === id));
+            nextBatches = batches.filter(
+              (id) => !page.some((message: { id: number }) => message.id === id),
+            );
             if (!nextBatches.length) {
               nextNotice = null;
             }
@@ -154,7 +174,9 @@ test("wake cursor preserves unread batches through bounded loss, acknowledgement
             }
           }
           const row = db
-            .query("SELECT announced FROM wake_cursors WHERE session='order-test'")
+            .query<{ announced: number }, []>(
+              "SELECT announced FROM wake_cursors WHERE session='order-test'",
+            )
             .get();
           assert(
             (row?.announced ?? 0) === nextAck,

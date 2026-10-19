@@ -4,14 +4,14 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hostProcess } from "../src/proc.ts";
-import { sessionUpdates, updateHint } from "../src/updates.ts";
+import { sessionUpdates, updateHint, type UpdateOptions } from "../src/updates.ts";
 import { createServer } from "../src/server.ts";
 import { SESSION_ENV } from "../src/tag.ts";
 
-const cleanups = [];
-afterEach(() => {
+const cleanups: Array<() => void | Promise<void>> = [];
+afterEach(async () => {
   for (const fn of cleanups.splice(0).reverse()) {
-    fn();
+    await fn();
   }
 });
 function fixture() {
@@ -19,7 +19,7 @@ function fixture() {
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const manifest = join(dir, "targets.json");
   const env = { XDG_STATE_HOME: dir, SWARMAIL_UPDATE_TARGETS: manifest };
-  const publish = (revision, held = false) =>
+  const publish = (revision: string, held = false) =>
     writeFileSync(
       manifest,
       JSON.stringify({
@@ -30,7 +30,7 @@ function fixture() {
         ...(held && { heldSessions: ["receiver"] }),
       }),
     );
-  const check = (options = {}) => sessionUpdates("receiver", { env, ...options });
+  const check = (options: UpdateOptions = {}) => sessionUpdates("receiver", { env, ...options });
   const stateFile = join(dir, "swarmail-updates", "receiver.json");
   publish("A");
   return { dir, manifest, env, publish, check, stateFile };
@@ -58,7 +58,7 @@ test("one pending hint covers newer targets; stale acknowledgment cannot consume
   expect(() => f.check({ ack: { component: "guidance", revision: "A" } })).toThrow(
     "target changed",
   );
-  expect(f.check().targets[0].loaded).toBeNull();
+  expect(f.check().targets[0]!.loaded).toBeNull();
   expect(f.check({ ack: { component: "guidance", revision: "B" } }).targets[0]).toMatchObject({
     status: "attested",
     loaded: { revision: "B", evidence: "attested" },
@@ -77,7 +77,7 @@ test("holds preserve loaded state and suppress output until an explicit reset af
   expect(() => f.check({ ack: { component: "guidance", revision: "B" } })).toThrow("held");
   expect(readFileSync(f.stateFile, "utf8")).toBe(before);
   f.publish("B");
-  expect(f.check({ resetContext: true, notify: true }).targets[0].loaded).toBeNull();
+  expect(f.check({ resetContext: true, notify: true }).targets[0]!.loaded).toBeNull();
   expect(f.check({ resetContext: true, notify: true }).hint).toBe("");
   expect(
     sessionUpdates("other", { env: { ...f.env, SWARMAIL_UPDATE_HOLD: "1" }, notify: true }),
@@ -176,7 +176,7 @@ test("provider-scoped targets exclude sibling guidance and keep same-ID sessions
     "guidance.codex",
     "constructor",
   ]);
-  expect(f.check({ host: "codex" }).targets[1].loaded).toBeNull();
+  expect(f.check({ host: "codex" }).targets[1]!.loaded).toBeNull();
   f.check({ host: "codex", ack: { component: "guidance.codex", revision: "A" } });
   expect(f.check({ host: "claude" }).targets[0]).toMatchObject({
     component: "guidance.claude",
@@ -206,7 +206,7 @@ test("start context uses supported provider output, while unqualified hosts stay
         host === "cursor" ? output.additional_context : output.hookSpecificOutput.additionalContext;
       expect(context).toContain("Updates available: run swarmail updates --session.");
       expect(output).not.toHaveProperty("decision");
-      expect(sessionUpdates(host, { env: f.env, host }).targets[0].loaded).toBeNull();
+      expect(sessionUpdates(host, { env: f.env, host }).targets[0]!.loaded).toBeNull();
     } else {
       expect(text).toBe("");
       expect(existsSync(join(f.dir, "swarmail-updates", `${host}-${host}.json`))).toBe(false);
@@ -220,12 +220,12 @@ test.skipIf(hostProcess() !== null)(
   "the public session command reads and acknowledges the exact approved target",
   async () => {
     const f = fixture();
-    const env = { ...process.env, ...f.env, T3_HOME: f.dir };
+    const env: NodeJS.ProcessEnv = { ...process.env, ...f.env, T3_HOME: f.dir };
     for (const key of Object.values(SESSION_ENV)) {
       delete env[key];
     }
     env.CODEX_THREAD_ID = "receiver";
-    const run = async (...args) => {
+    const run = async (...args: string[]) => {
       const child = Bun.spawn(
         [process.execPath, join(import.meta.dir, "../src/cli.ts"), "updates", ...args],
         {
@@ -287,12 +287,15 @@ test("concurrent native processes claim one pending hint and preserve registrati
         stderr: "pipe",
       },
     );
-    return Promise.all([new Response(child.stdout).json(), child.exited]);
+    return Promise.all([
+      new Response(child.stdout).json() as Promise<{ hint: string }>,
+      child.exited,
+    ]);
   };
   const results = await Promise.all([run(), run(), run(), run()]);
   expect(results.every(([, code]) => code === 0)).toBe(true);
   expect(results.filter(([result]) => result.hint).length).toBe(1);
-  expect(f.check().targets[0].loaded).toBeNull();
+  expect(f.check().targets[0]!.loaded).toBeNull();
   expect(readFileSync(registration, "utf8")).toBe(before);
 });
 
@@ -309,8 +312,8 @@ test("update event orderings never attest a newer target or repeat a pending hin
     "omit",
     "contended-reset",
   ];
-  const failures = [];
-  const walk = (sequence) => {
+  const failures: object[] = [];
+  const walk = (sequence: string[]) => {
     if (sequence.length === 3) {
       return;
     }
@@ -322,7 +325,7 @@ test("update event orderings never attest a newer target or repeat a pending hin
       const before = f.check();
       const wasPending = saved && JSON.parse(saved).hintPending;
       const path = [...sequence, event];
-      let result;
+      let result: ReturnType<typeof sessionUpdates> | undefined;
       try {
         if (event.startsWith("publish-")) {
           f.publish(event.slice(-1));
@@ -341,14 +344,15 @@ test("update event orderings never attest a newer target or repeat a pending hin
           result = f.check({ notify: event === "hint", resetContext: event === "reset" });
         }
       } catch (error) {
-        if (!event.startsWith("ack-") || !/target changed|held/.test(error.message)) {
-          failures.push({ path, error: error.message });
+        const message = (error as Error).message;
+        if (!event.startsWith("ack-") || !/target changed|held/.test(message)) {
+          failures.push({ path, error: message });
         }
       }
       const after = f.check();
       if (
         after.targets[0]?.status === "attested" &&
-        after.targets[0].loaded.revision !== after.targets[0].revision
+        after.targets[0].loaded!.revision !== after.targets[0].revision
       ) {
         failures.push({ path, invariant: "attestation must match approved target" });
       }
@@ -383,12 +387,12 @@ test("update event orderings never attest a newer target or repeat a pending hin
 test("running server exposes the exact negotiated tool catalog fingerprint without writes", async () => {
   const f = fixture();
   const { server, db } = createServer(join(f.dir, "mail.sqlite"), 0);
-  cleanups.push(() => {
-    server.stop(true);
+  cleanups.push(async () => {
+    await server.stop(true);
     db.close();
   });
   const base = `http://127.0.0.1:${server.port}`;
-  const hashes = [];
+  const hashes: string[] = [];
   for (const protocol of ["2025-03-26", "2025-11-25"]) {
     const versions = await (await fetch(`${base}/versions?protocolVersion=${protocol}`)).json();
     const response = await fetch(base + "/mcp", {
@@ -396,7 +400,7 @@ test("running server exposes the exact negotiated tool catalog fingerprint witho
       headers: { "MCP-Protocol-Version": protocol },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
     });
-    const tools = (await response.json()).result.tools;
+    const tools = ((await response.json()) as { result: { tools: unknown[] } }).result.tools;
     const independent = createHash("sha256").update(JSON.stringify(tools)).digest("hex");
     expect(versions).toEqual({
       server_build: null,
@@ -411,5 +415,5 @@ test("running server exposes the exact negotiated tool catalog fingerprint witho
   expect(
     (await fetch(base + "/versions", { headers: { origin: "https://example.invalid" } })).status,
   ).toBe(403);
-  expect(db.query("SELECT count(*) AS n FROM messages").get().n).toBe(0);
+  expect(db.query<{ n: number }, []>("SELECT count(*) AS n FROM messages").get()!.n).toBe(0);
 });
