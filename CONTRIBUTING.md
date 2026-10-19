@@ -27,6 +27,8 @@ reply from an agent that read the old and the new text.
 ## Before you open a pull request
 
 1. Run the checks in the README's Development section. CI runs them too.
+   `bun run check` also runs `shellcheck` and `shfmt` on the shell script, so
+   install both first (CI uses shellcheck 0.11.0 and shfmt 3.14.1).
 2. Add a `CHANGELOG.md` entry under `Unreleased` for any change users will
    notice.
 3. If you changed the README or `docs/usage.md`, rerun `evals/docs-check`
