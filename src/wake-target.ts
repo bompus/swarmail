@@ -3,7 +3,7 @@ import { readFileSync, statSync } from "node:fs";
 import { isAbsolute } from "node:path";
 
 export interface WakeTarget {
-  type: "t3-v1-steer" | "t3-v2-queue" | "opencode-v2-queue";
+  type: "t3-v2-queue" | "opencode-v2-queue";
   url: string;
   id: string;
   authorizationFile: string;
@@ -21,8 +21,14 @@ export class BridgeError extends Error {
 /** Authentication is shared by every thread using the configured target. */
 export class TargetAuthenticationError extends BridgeError {}
 
-/** The target types that reach a T3 thread. */
-export const T3_TYPES: readonly string[] = ["t3-v1-steer", "t3-v2-queue"];
+/** Fails loudly on a target type Swarmail no longer delivers to, instead of reporting it as unknown. */
+export function rejectRemovedTargetType(type: unknown): void {
+  if (type === "t3-v1-steer") {
+    throw new BridgeError(
+      "target type t3-v1-steer was removed: current T3 Code runs only its V2 engine, which has no V1 route; use t3-v2-queue",
+    );
+  }
+}
 
 /** One wake target type: its config, the destination its state binds to, and its protocol. */
 export interface TargetAdapter<T extends { type: string; id: string }> {
@@ -135,32 +141,6 @@ async function request(target: WakeTarget, path: string, body?: unknown): Promis
   }
 }
 
-/** Shared snapshot validation for delivery and the read-only installed-target check. */
-async function inspectT3Thread(target: WakeTarget) {
-  const snapshot = await request(
-    target,
-    `/api/orchestration/threads/${encodeURIComponent(target.id)}`,
-  );
-  if (target.type === "t3-v2-queue") {
-    if (
-      snapshot?.projection?.thread?.id !== target.id ||
-      !Array.isArray(snapshot.projection.runs)
-    ) {
-      throw new BridgeError("target does not expose the tested T3 V2 projection protocol");
-    }
-    return snapshot.projection.thread;
-  }
-  const thread = snapshot?.thread;
-  if (
-    thread?.id !== target.id ||
-    !["full-access", "approval-required"].includes(thread.runtimeMode) ||
-    !["default", "plan"].includes(thread.interactionMode)
-  ) {
-    throw new BridgeError("target does not expose the tested T3 V1 thread protocol");
-  }
-  return thread;
-}
-
 /** Shared GET-only auth check, including automatic supervisors with no eligible thread yet. */
 export async function checkT3Authentication(target: WakeTarget): Promise<void> {
   let session;
@@ -185,11 +165,17 @@ export async function checkT3Authentication(target: WakeTarget): Promise<void> {
 
 /** GET-only preflight; proves auth/snapshot compatibility, never dispatch or model execution. */
 export async function checkT3Target(target: WakeTarget): Promise<void> {
-  if (!T3_TYPES.includes(target.type)) {
+  if (target.type !== "t3-v2-queue") {
     throw new BridgeError("health check requires a T3 target");
   }
   await checkT3Authentication(target);
-  await inspectT3Thread(target);
+  const snapshot = await request(
+    target,
+    `/api/orchestration/threads/${encodeURIComponent(target.id)}`,
+  );
+  if (snapshot?.projection?.thread?.id !== target.id || !Array.isArray(snapshot.projection.runs)) {
+    throw new BridgeError("target does not expose the tested T3 V2 projection protocol");
+  }
 }
 
 async function dispatchV2(
@@ -514,33 +500,10 @@ function admitted(result: any) {
 
 // Each prepared command is journaled whole, so a retry never rereads mutable thread settings.
 
-/** T3 V1: start a turn that steers the active one, with the thread's current modes. */
-export const t3V1Adapter: TargetAdapter<WakeTarget> = {
-  parse: parseHttp("t3-v1-steer"),
-  // The port moves on T3 restart; the authorization file ties the bridge to one T3 database.
-  binding: () => ({}),
-  prepare: async (target, text) => {
-    const thread = await inspectT3Thread(target);
-    return {
-      type: "thread.turn.start",
-      commandId: crypto.randomUUID(),
-      threadId: target.id,
-      message: { messageId: crypto.randomUUID(), role: "user", text, attachments: [] },
-      runtimeMode: thread.runtimeMode,
-      interactionMode: thread.interactionMode,
-      createdAt: new Date().toISOString(),
-    };
-  },
-  deliver: async (target, command, _attempted, _signal, guard) => {
-    ensureT3Unsettled(await inspectT3Thread(target));
-    await guard?.();
-    admitted(await request(target, "/api/orchestration/dispatch", command));
-  },
-};
-
 /** T3 V2: steer the active run, or start an idle thread. */
 export const t3V2Adapter: TargetAdapter<WakeTarget> = {
   parse: parseHttp("t3-v2-queue"),
+  // The port moves on T3 restart; the authorization file ties the bridge to one T3 database.
   binding: () => ({}),
   prepare: () => {
     throw new BridgeError("T3 V2 notices require the notice adapter");

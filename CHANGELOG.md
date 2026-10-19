@@ -4,6 +4,14 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- The `t3-v1-steer` wake target and support for T3 Code's older database are removed. Current T3 Code runs only its V2
+  engine: it keeps its data in `statev2.sqlite` and no longer has the HTTP dispatch route or turn-start command those
+  bridges sent, so a `t3-v1-steer` bridge failed its thread check and delivered nothing. A `wake-bridge`, `wake-auto-t3`
+  or credential rotation configuration that still names `t3-v1-steer` now fails at startup with
+  `target type t3-v1-steer was removed`; change its `target.type` to `t3-v2-queue`. The register hook, `who`, agent
+  locations, automatic wake and `pr-sessions` read only `statev2.sqlite`. While it is missing, or T3 Code is still
+  creating it, they find no T3 threads, and `pr-sessions` exits with an error.
+
 - A wake bridge stops with an authentication failure when T3 Code rejects the token its authorization file currently
   holds (HTTP 401), instead of retrying forever; a standalone bridge whose token was revoked or expired now exits. A
   401 for a token that rotation already replaced is still retried, since rotation writes the new header before revoking

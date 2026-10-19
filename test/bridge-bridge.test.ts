@@ -5,7 +5,7 @@ import { Database } from "bun:sqlite";
 import { createServer as createTcpServer, type AddressInfo, type Socket } from "node:net";
 import { createServer } from "../src/server.ts";
 import { openWakeState, wakeStatePath } from "../src/wake-state.ts";
-import { BridgeError, t3V1Adapter, t3V2Adapter, type WakeTarget } from "../src/wake-target.ts";
+import { BridgeError, t3V2Adapter, type WakeTarget } from "../src/wake-target.ts";
 import { bridgeBinding } from "../src/wake-bridge.ts";
 import { testScratch } from "./fixtures/test-scratch.ts";
 import type { Args, Row } from "../src/store.ts";
@@ -42,7 +42,6 @@ async function until(fn: () => unknown) {
 /** How the fake target answers. */
 interface Behavior {
   reject?: boolean;
-  settled?: boolean;
   mismatch?: boolean;
   deliveryMismatch?: boolean;
 }
@@ -60,7 +59,6 @@ async function fixture(type = "opencode-v2-queue", behavior: Behavior = {}) {
   const received: any[] = [];
   const authorizations: (string | null)[] = [];
   let reject = behavior.reject ?? false;
-  let settled = behavior.settled ?? false;
   const target = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -74,18 +72,10 @@ async function fixture(type = "opencode-v2-queue", behavior: Behavior = {}) {
         return Response.json({ ticket: "private-ticket" });
       }
       if (req.method === "GET") {
-        const thread = {
-          id,
-          runtimeMode: "approval-required",
-          interactionMode: "plan",
-          settledAt: null,
-          settledOverride: settled ? "settled" : null,
-        };
-        return Response.json(
-          type === "t3-v1-steer"
-            ? { thread }
-            : { projection: { thread, runs: [], messages: [], runtimeRequests: [] } },
-        );
+        const thread = { id, settledAt: null, settledOverride: null };
+        return Response.json({
+          projection: { thread, runs: [], messages: [], runtimeRequests: [] },
+        });
       }
       const body = (await req.json()) as Args;
       received.push(body);
@@ -221,12 +211,6 @@ async function fixture(type = "opencode-v2-queue", behavior: Behavior = {}) {
     allow: () => {
       reject = false;
     },
-    settle: () => {
-      settled = true;
-    },
-    reactivate: () => {
-      settled = false;
-    },
   };
 }
 
@@ -334,38 +318,38 @@ test("mismatched admission keeps mail pending and never prints credentials or pr
   expect(await new Response(run.stderr).text()).toContain("does not match");
 });
 
-for (const type of ["t3-v1-steer", "t3-v2-queue"]) {
-  test(`${type} uses its native protocol and retains the thread's permissions`, async () => {
-    const f = await fixture(type);
-    await f.send();
-    const run = f.start();
-    await until(() => f.state()?.acknowledged > 0);
-    run.kill();
-    await run.exited;
-    if (type === "t3-v1-steer") {
-      expect(f.received[0]).toMatchObject({
-        type: "thread.turn.start",
-        threadId: f.id,
-        runtimeMode: "approval-required",
-        interactionMode: "plan",
-      });
-      expect(f.received[0]).not.toHaveProperty("modelSelection");
-    } else {
-      expect(f.received[0]).toMatchObject({
-        _tag: "Request",
-        tag: "orchestration.dispatchCommand",
-        payload: {
-          type: "message.dispatch",
-          threadId: f.id,
-          deliveryIntent: "steer",
-          dispatchMode: { type: "start_immediately" },
-          createdBy: "agent",
-        },
-      });
-      expect(f.received[0].payload).not.toHaveProperty("modelSelection");
-    }
+test("t3-v2-queue uses its native protocol and keeps the thread's model", async () => {
+  const f = await fixture("t3-v2-queue");
+  await f.send();
+  const run = f.start();
+  await until(() => f.state()?.acknowledged > 0);
+  run.kill();
+  await run.exited;
+  expect(f.received[0]).toMatchObject({
+    _tag: "Request",
+    tag: "orchestration.dispatchCommand",
+    payload: {
+      type: "message.dispatch",
+      threadId: f.id,
+      deliveryIntent: "steer",
+      dispatchMode: { type: "start_immediately" },
+      createdBy: "agent",
+    },
   });
-}
+  expect(f.received[0].payload).not.toHaveProperty("modelSelection");
+});
+
+test("a t3-v1-steer configuration fails at load and names its replacement", async () => {
+  const f = await fixture("t3-v1-steer");
+  await f.send();
+  const run = f.start();
+  expect(await run.exited).toBe(1);
+  expect(await new Response(run.stderr).text()).toContain(
+    "target type t3-v1-steer was removed: current T3 Code runs only its V2 engine, which has no V1 route; use t3-v2-queue",
+  );
+  expect(f.received).toHaveLength(0);
+  expect(f.state()).toBeNull();
+});
 
 test("rejects destination changes with pending mail", async () => {
   const f = await fixture("opencode-v2-queue", { mismatch: true });
@@ -532,7 +516,7 @@ test("two bridges in one process cannot own the same mailbox session", async () 
     }
     rmSync(dir, { recursive: true, force: true });
   });
-  const binding = JSON.stringify({ type: "t3-v1-steer", id: "same-thread" });
+  const binding = JSON.stringify({ type: "t3-v2-queue", id: "same-thread" });
   const open = () => openWakeState("http://127.0.0.1:1", "same-thread", binding);
   const first = open();
   expect(open).toThrow("another wake bridge owns this mailbox session");
@@ -551,7 +535,6 @@ test("each target type keeps its saved binding", () => {
   expect(
     (
       [
-        { type: "t3-v1-steer", ...http },
         { type: "t3-v2-queue", ...http },
         { type: "opencode-v2-queue", ...http },
         { type: "grok-queue", ...native },
@@ -559,61 +542,11 @@ test("each target type keeps its saved binding", () => {
       ] as const
     ).map(bridgeBinding),
   ).toEqual([
-    '{"type":"t3-v1-steer","id":"t"}',
     '{"type":"t3-v2-queue","id":"t"}',
     '{"url":"http://127.0.0.1:1","type":"opencode-v2-queue","id":"t"}',
     '{"socket":"/s","cwd":"/c","type":"grok-queue","id":"t"}',
     '{"socket":"/s","cwd":"/c","type":"codex-queue","id":"t"}',
   ]);
-});
-
-test("V1 delivery holds an immutable command while settled and resumes after bridge restart", async () => {
-  const f = await fixture("t3-v1-steer");
-  await f.send();
-  const config = JSON.parse(readFileSync(f.config, "utf8"));
-  const previous = process.env.XDG_STATE_HOME;
-  process.env.XDG_STATE_HOME = join(f.dir, "state");
-  const open = () => openWakeState(config.swarmailUrl, f.id, "{}");
-  let journal = open();
-  try {
-    journal.savePending({
-      eventId: 1,
-      command: await t3V1Adapter.prepare(config.target, "Swarmail: pending mail"),
-    });
-    const saved = structuredClone(journal.pending!);
-    f.settle(); // Settlement follows preparation, before the native dispatch.
-    journal.close();
-    journal = open();
-    expect(
-      t3V1Adapter.deliver(
-        config.target,
-        journal.pending!.command,
-        () => journal.markAttempted(),
-        new AbortController().signal,
-      ),
-    ).rejects.toMatchObject({ retryable: true, message: "T3 thread is settled; holding mail" });
-    expect(f.received).toHaveLength(0);
-    expect(journal.acknowledged).toBe(0);
-    expect(journal.pending).toEqual(saved);
-    f.reactivate();
-    await t3V1Adapter.deliver(
-      config.target,
-      journal.pending!.command,
-      () => journal.markAttempted(),
-      new AbortController().signal,
-    );
-    journal.accept(saved.eventId);
-    expect(f.received).toEqual([saved.command]);
-    expect(journal.pending).toBeNull();
-    expect(
-      f.mail.db
-        .query<Row, []>("SELECT count(*) AS unread FROM message_recipients WHERE read_ts IS NULL")
-        .get()!.unread,
-    ).toBe(1);
-  } finally {
-    journal.close();
-    process.env.XDG_STATE_HOME = previous;
-  }
 });
 
 test("OpenCode receipt must match the saved steering mode", async () => {

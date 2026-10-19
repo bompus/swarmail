@@ -108,7 +108,7 @@ else if(args[2]==='revoke'){
       };
     } = {
       target: {
-        type: "t3-v1-steer",
+        type: "t3-v2-queue",
         id: "test-thread",
         url: `http://127.0.0.1:${server.port}`,
         authorizationFile: join(root, "authorization"),
@@ -291,6 +291,12 @@ else if(args[2]==='revoke'){
     f.configure();
     expect((await f.run()).err).toContain("binding differs");
     f.config.target.id = "test-thread";
+    f.config.target.type = "t3-v1-steer";
+    f.configure();
+    expect((await f.run()).err).toContain(
+      "target type t3-v1-steer was removed: current T3 Code runs only its V2 engine, which has no V1 route; use t3-v2-queue",
+    );
+    f.config.target.type = "t3-v2-queue";
     f.configure();
     chmodSync(f.config.target.authorizationFile, 0o644);
     expect((await f.run()).err).toContain("private, user-owned");
@@ -570,7 +576,7 @@ else if(args[2]==='revoke'){
       const baseDir = join(root, ".t3");
       mkdirSync(join(baseDir, "userdata"), { recursive: true });
       // verifyT3Backend requires the listener to hold T3's database open; this process is the listener.
-      const database = new Database(join(baseDir, "userdata/state.sqlite"));
+      const database = new Database(join(baseDir, "userdata/statev2.sqlite"));
       const requests: string[] = [];
       const server = Bun.serve({
         hostname: "127.0.0.1",
@@ -588,7 +594,7 @@ else if(args[2]==='revoke'){
       servers.push(server);
       const expiresAt = new Date(Date.now() + 86400000).toISOString();
       const config = {
-        target: { type: "t3-v1-steer", id: "minute", authorizationFile: join(root, "auth/header") },
+        target: { type: "t3-v2-queue", id: "minute", authorizationFile: join(root, "auth/header") },
         rotation: {
           executable: process.execPath,
           baseDir,

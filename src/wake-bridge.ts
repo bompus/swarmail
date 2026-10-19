@@ -2,7 +2,13 @@
 // SQLite holds the pending command and an owner lock released when its connection closes.
 import { ensureWakeEligible } from "./wake-lifecycle.ts";
 import { readFileSync } from "node:fs";
-import { BridgeError, localUrl, openCodeAdapter, t3V1Adapter, t3V2Adapter } from "./wake-target.ts";
+import {
+  BridgeError,
+  localUrl,
+  openCodeAdapter,
+  rejectRemovedTargetType,
+  t3V2Adapter,
+} from "./wake-target.ts";
 import type { TargetAdapter, WakeTarget } from "./wake-target.ts";
 import { grokAdapter } from "./wake-grok.ts";
 import type { GrokTarget } from "./wake-grok.ts";
@@ -20,7 +26,6 @@ type Target = WakeTarget | GrokTarget | CodexTarget;
 // The HTTP types share WakeTarget, whose `type` is itself a union.
 type TargetOf<K> = K extends WakeTarget["type"] ? WakeTarget : Extract<Target, { type: K }>;
 const ADAPTERS: { [K in Target["type"]]: TargetAdapter<TargetOf<K>> } = {
-  "t3-v1-steer": t3V1Adapter,
   "t3-v2-queue": t3V2Adapter,
   "opencode-v2-queue": openCodeAdapter,
   "grok-queue": grokAdapter,
@@ -45,6 +50,7 @@ function readConfig(path: string): BridgeConfig {
     throw new BridgeError("config requires a target session/thread id");
   }
   const swarmailUrl = localUrl(input.swarmailUrl ?? "http://127.0.0.1:18765");
+  rejectRemovedTargetType(target.type);
   const adapter = adapterFor(target.type);
   if (!adapter) {
     throw new BridgeError("config requires target type and absolute authorizationFile");

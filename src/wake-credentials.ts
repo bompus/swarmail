@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
-import { BridgeError, localUrl, T3_TYPES } from "./wake-target.ts";
+import { BridgeError, localUrl, rejectRemovedTargetType } from "./wake-target.ts";
 import {
   backendTimeout,
   checkBackendOperation,
@@ -87,9 +87,9 @@ function readConfig(path: string) {
   const config = JSON.parse(readFileSync(path, "utf8"));
   const target = config.target;
   const rotation = config.rotation;
+  rejectRemovedTargetType(target?.type);
   if (
-    !target ||
-    !T3_TYPES.includes(target.type) ||
+    target?.type !== "t3-v2-queue" ||
     (target.id !== undefined && (typeof target.id !== "string" || !target.id)) ||
     !rotation
   ) {

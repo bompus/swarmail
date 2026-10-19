@@ -11,7 +11,6 @@ information to an existing session; it does not assign tasks or manage agents.
 
 | Target type         | Transport                   | Delivery                                                                    |
 | ------------------- | --------------------------- | --------------------------------------------------------------------------- |
-| `t3-v1-steer`       | Loopback HTTP               | Starts a turn that steers the active turn using its current modes           |
 | `t3-v2-queue`       | Loopback HTTP and WebSocket | Agent message with steering intent; can reconcile older queued mail notices |
 | `opencode-v2-queue` | Loopback HTTP               | Prompt with steering delivery and a matching admission receipt              |
 | `codex-queue`       | Unix WebSocket              | Native app-server steering with a durable command ID                        |
@@ -248,7 +247,7 @@ For a Cursor session that holds a settled automatic T3 registration, `swarmail h
 The configuration is the [bridge configuration](#configure-and-run) with these differences:
 
 - Leave out `target.id`; each thread's bridge supplies its own.
-- `target.type` is `t3-v1-steer` or `t3-v2-queue`. `target.delivery` is optional and may only be `auto`, with `t3-v2-queue`.
+- `target.type` is `t3-v2-queue`. `target.delivery` is optional and may only be `auto`.
 - `target.url` is optional. The supervisor reads the port T3 publishes in `<baseDir>/userdata/server-runtime.json` and
   uses `target.url` only when that file is missing.
 - `rotation` is required: `verifyBackend` must be `true` and `baseDir` is T3's base directory. It enables the

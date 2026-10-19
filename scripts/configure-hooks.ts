@@ -180,8 +180,8 @@ export function withClaudeHooks(
 /**
  * The OpenCode plugin: forwards edit-tool calls to `swarmail register` without waiting on it.
  * One default export serves both majors: OpenCode 2 calls `setup(ctx)`, OpenCode 1 (1.18.29+)
- * calls `server(input)`. T3 Code V1 drives OpenCode 1, which shares this plugin directory,
- * and OpenCode 2 still discovers the singular `plugin/` directory.
+ * calls `server(input)`. Both share this plugin directory: OpenCode 2 still discovers the
+ * singular `plugin/` directory.
  */
 export function openCodePlugin(bin: string): string {
   return `// Installed by the Swarmail hooks installer (scripts/configure-hooks.ts); edits here are overwritten.
