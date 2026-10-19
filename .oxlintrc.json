@@ -104,10 +104,25 @@
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "promise"],
   "overrides": [
     {
-      "files": ["test/**"],
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/test/**",
+        "**/tests/**",
+        "**/__tests__/**"
+      ],
       "rules": {
         "max-lines-per-function": "off",
-        "max-lines": "off"
+        "max-lines": "off",
+        "typescript/no-explicit-any": "off",
+        "typescript/no-non-null-assertion": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/no-unsafe-type-assertion": "off"
       }
     }
   ]
