@@ -1,6 +1,9 @@
 root = true
 
-[*]
+# Only the file types the standard covers. Every other file (PHP, HTML templates, served trees,
+# vendored code) keeps its own whitespace, so an editor that honours this file adds no churn to it.
+# Don't add a [*] section with these settings.
+[*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc,md,yml,yaml,toml,py,sh,bash}]
 charset = utf-8
 end_of_line = lf
 indent_size = 2
