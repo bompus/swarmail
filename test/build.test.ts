@@ -76,7 +76,10 @@ test("the binary ignores a .env and a bunfig.toml in the directory it runs in", 
     const cwd = join(root, "project");
     mkdirSync(cwd);
     writeFileSync(join(cwd, ".env"), "SWARMAIL_DOTENV_PROBE=from-project\n");
-    writeFileSync(join(cwd, "preload.ts"), 'Reflect.set(globalThis, "swarmailPreloadProbe", "ran");\n');
+    writeFileSync(
+      join(cwd, "preload.ts"),
+      'Reflect.set(globalThis, "swarmailPreloadProbe", "ran");\n',
+    );
     writeFileSync(join(cwd, "bunfig.toml"), 'preload = ["./preload.ts"]\n');
     const env = { ...process.env };
     delete env.SWARMAIL_DOTENV_PROBE;
