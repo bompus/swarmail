@@ -29,6 +29,9 @@ test("editing a server source changes the hash the binary is checked against", (
     mkdirSync(join(root, "scripts"), { recursive: true });
     writeFileSync(orderProfile(root), "v2\nF 0000000000000000\n");
     expect(sourceHash(root, "1.0.0")).not.toBe(withLock);
+    const withProfile = sourceHash(root, "1.0.0");
+    writeFileSync(join(root, "scripts", "build.ts"), "// flags\n");
+    expect(sourceHash(root, "1.0.0")).not.toBe(withProfile);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -55,6 +58,33 @@ test("the committed profile builds a binary that runs", () => {
     const source = buildSwarmail(ROOT, bin);
     const run = spawnSync(bin, ["version"], { encoding: "utf8" });
     expect(run.stdout.trim()).toBe(source);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("the binary ignores a .env and a bunfig.toml in the directory it runs in", () => {
+  const root = mkdtempSync(join(tmpdir(), "build-swarmail-"));
+  try {
+    const entry = join(root, "probe.ts");
+    writeFileSync(
+      entry,
+      'console.log(process.env.SWARMAIL_DOTENV_PROBE ?? "unset", Reflect.get(globalThis, "swarmailPreloadProbe") ?? "unset");\n',
+    );
+    const bin = join(root, process.platform === "win32" ? "probe.exe" : "probe");
+    buildSwarmail(ROOT, bin, { entry, order: null });
+    const cwd = join(root, "project");
+    mkdirSync(cwd);
+    writeFileSync(join(cwd, ".env"), "SWARMAIL_DOTENV_PROBE=from-project\n");
+    writeFileSync(
+      join(cwd, "preload.ts"),
+      'Reflect.set(globalThis, "swarmailPreloadProbe", "ran");\n',
+    );
+    writeFileSync(join(cwd, "bunfig.toml"), 'preload = ["./preload.ts"]\n');
+    const env = { ...process.env };
+    delete env.SWARMAIL_DOTENV_PROBE;
+    const run = spawnSync(bin, [], { cwd, encoding: "utf8", env });
+    expect(run.stdout.trim()).toBe("unset unset");
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
