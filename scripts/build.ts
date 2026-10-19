@@ -115,6 +115,12 @@ export function buildSwarmail(
       ...(order ? [`--bytecode-order=${order}`] : []),
       // Stack traces name the source file, line and function; --minify saved 40 KB of 84 MB and no startup time.
       "--sourcemap",
+      // Hooks and the git guard run inside other projects, whose .env or bunfig.toml would otherwise
+      // be loaded into this program and could point it at another database, server or guard setting.
+      "--no-compile-autoload-dotenv",
+      "--no-compile-autoload-bunfig",
+      // A dynamic import that cannot be resolved fails the build instead of the installed binary.
+      "--reject-unresolved",
       "--define",
       `SWARMAIL_SOURCE=${JSON.stringify(source)}`,
       entry,

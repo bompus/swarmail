@@ -60,6 +60,25 @@ test("the committed profile builds a binary that runs", () => {
   }
 });
 
+test("the binary ignores a .env in the directory it runs in", () => {
+  const root = mkdtempSync(join(tmpdir(), "build-swarmail-"));
+  try {
+    const entry = join(root, "probe.ts");
+    writeFileSync(entry, 'console.log(process.env.SWARMAIL_DOTENV_PROBE ?? "unset");\n');
+    const bin = join(root, process.platform === "win32" ? "probe.exe" : "probe");
+    buildSwarmail(ROOT, bin, { entry, order: null });
+    const cwd = join(root, "project");
+    mkdirSync(cwd);
+    writeFileSync(join(cwd, ".env"), "SWARMAIL_DOTENV_PROBE=from-project\n");
+    const env = { ...process.env };
+    delete env.SWARMAIL_DOTENV_PROBE;
+    const run = spawnSync(bin, [], { cwd, encoding: "utf8", env });
+    expect(run.stdout.trim()).toBe("unset");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test.skipIf(!hasProfiles || process.platform === "win32")(
   "training records a profile from a server run",
   async () => {

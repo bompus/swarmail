@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- The `swarmail` binary no longer loads a `.env` or `bunfig.toml` from the directory it runs in. Hooks and the git guard run
+  inside other projects, so a project's `.env` could set `SWARMAIL_DB`, `SWARMAIL_URL`, `SWARMAIL_GUARD` or `XDG_*` and point
+  them at another database, server or guard setting. Settings now come only from the environment the binary is started with.
+
 - Under T3 Code, agents are told not to retire themselves at a whole-session closeout. Where configured, closing the thread (local T3 lifecycle reconciliation) or a week idle (`SWARMAIL_RETIRE_DAYS`, default 7;
   `0` disables it) already retires the registration, and later activity under the name reactivates it. Outside T3 the closeout steps are unchanged. The
   connection instructions stay under 4096 characters: the closeout paragraph is shortened to make room, and the
