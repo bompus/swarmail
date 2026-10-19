@@ -4,22 +4,29 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { call } from "../src/mail.ts";
-import { checkOverdue, overdue, overdueRows } from "../src/overdue.ts";
+import {
+  checkOverdue,
+  overdue,
+  overdueRows,
+  type Note,
+  type Overdue,
+  type OverdueState,
+} from "../src/overdue.ts";
 import { createServer } from "../src/server.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "swarmail-overdue-"));
 const dbPath = join(dir, "mail.sqlite3");
 const { server, db } = createServer(dbPath, 0, { retireIdleDays: 0 });
 const env = { SWARMAIL_URL: `http://127.0.0.1:${server.port}/mcp/` };
-const mcp = (name, args) => call(env, name, args);
+const mcp = (name: string, args: Record<string, unknown>) => call(env, name, args);
 const A = "/w/alpha";
 afterAll(() => {
-  server.stop(true);
+  void server.stop(true);
   db.close();
   rmSync(dir, { recursive: true, force: true });
 });
 
-const row = (over = {}) => ({
+const row = (over: Partial<Overdue> = {}): Overdue => ({
   sender_retired: 0,
   id: 7,
   subject: "review please",
@@ -31,9 +38,9 @@ const row = (over = {}) => ({
 });
 
 test("the deadline check reminds the recipient once, then tells the operator once, and forgets acknowledged mail", async () => {
-  const calls = [];
-  const notes = [];
-  const pass = (rows, state, now, dryRun = false) =>
+  const calls: [string, Record<string, unknown>][] = [];
+  const notes: Note[] = [];
+  const pass = (rows: Overdue[], state: OverdueState, now: number, dryRun = false) =>
     checkOverdue({
       rows,
       call: async (name, args) => calls.push([name, args]),
@@ -52,7 +59,7 @@ test("the deadline check reminds the recipient once, then tells the operator onc
   let { state, actions } = await pass([row()], { nudged: {}, escalated: [] }, t0);
   expect(actions).toHaveLength(1);
   expect(calls).toHaveLength(1);
-  const [name, args] = calls[0];
+  const [name, args] = calls[0]!;
   expect(name).toBe("reply_message");
   // Not the reply_message defaults: to the original sender, copying ack_required.
   expect(args).toMatchObject({
@@ -79,7 +86,7 @@ test("overdue rows skip acknowledged and retired recipients and mail outside the
   for (const name of ["BlueLake", "GreenCastle", "RedStone", "TanOwl"]) {
     await mcp("register_agent", { project_key: A, program: "t", model: "m", name });
   }
-  const send = async (to) =>
+  const send = async (to: string[]) =>
     (
       await mcp("send_message", {
         project_key: A,
@@ -132,7 +139,7 @@ test("a reminder goes in the thread as the original sender, and a retired sender
   for (const name of ["BlueLake", "GreenCastle", "PinkFox"]) {
     await mcp("register_agent", { project_key: P, program: "t", model: "m", name });
   }
-  const ask = async (sender) =>
+  const ask = async (sender: string) =>
     await mcp("send_message", {
       project_key: P,
       sender_name: sender,
@@ -144,7 +151,7 @@ test("a reminder goes in the thread as the original sender, and a retired sender
   const live = await ask("BlueLake");
   const gone = await ask("PinkFox");
   await mcp("retire_agent", { project_key: P, agent_name: "PinkFox" });
-  const notes = [];
+  const notes: Note[] = [];
   const rows = overdueRows(dbPath, 30, 24, Date.now() + 40 * 60_000).filter((r) => r.project === P);
   const { state } = await checkOverdue({
     rows,
@@ -159,7 +166,9 @@ test("a reminder goes in the thread as the original sender, and a retired sender
     mark_read: false,
     include_bodies: true,
   });
-  const reminders = inbox.filter((m) => m.subject.startsWith("Reminder (automatic):"));
+  const reminders = inbox.filter((m: { subject: string }) =>
+    m.subject.startsWith("Reminder (automatic):"),
+  );
   expect(reminders).toHaveLength(1);
   expect(reminders[0]).toMatchObject({
     from: "BlueLake",
@@ -191,9 +200,9 @@ test("reminder retries after lost responses or lost local state create one durab
       recipient: "RetryReceiver",
       created_ts: Date.now() * 1000,
     });
-    const notes = [];
+    const notes: Note[] = [];
     let loseResponse = failure === "lost response";
-    const pass = (state, now) =>
+    const pass = (state: OverdueState, now: number) =>
       checkOverdue({
         rows: [overdue],
         state,
@@ -218,16 +227,18 @@ test("reminder retries after lost responses or lost local state create one durab
       agent_name: "RetryReceiver",
       mark_read: false,
     });
-    expect(inbox.filter((m) => m.subject.startsWith("Reminder (automatic):"))).toHaveLength(1);
+    expect(
+      inbox.filter((m: { subject: string }) => m.subject.startsWith("Reminder (automatic):")),
+    ).toHaveLength(1);
     expect(retried.state.nudged[`${original.id}:RetryReceiver`]).toBe(now + 10 * 60000);
     expect(retried.actions).toHaveLength(1);
   }
 });
 
 test("repeated reminder failures retry sending but escalate only once across passes", async () => {
-  const notes = [];
+  const notes: Note[] = [];
   let calls = 0;
-  let state = { nudged: {}, escalated: [] };
+  let state: OverdueState = { nudged: {}, escalated: [] };
   for (const now of [40, 50, 60]) {
     ({ state } = await checkOverdue({
       rows: [row()],
@@ -247,7 +258,7 @@ test("repeated reminder failures retry sending but escalate only once across pas
 });
 
 /** Runs `fn` with console.log silenced; the command prints what it did. */
-async function quiet(fn) {
+async function quiet<T>(fn: () => Promise<T>) {
   const log = console.log;
   console.log = () => {};
   try {
@@ -258,7 +269,7 @@ async function quiet(fn) {
 }
 
 /** A server of its own, so the commands below see only the mail they send. */
-async function overdueSetup(project) {
+async function overdueSetup(project: string) {
   const root = mkdtempSync(join(tmpdir(), "swarmail-overdue-run-"));
   const own = createServer(join(root, "mail.sqlite3"), 0, { retireIdleDays: 0 });
   const env = {
@@ -268,7 +279,7 @@ async function overdueSetup(project) {
     // A deadline of zero minutes makes mail overdue the moment it exists, and a second pass escalates.
     SWARMAIL_OVERDUE_MINUTES: "0",
   };
-  const m = (name, args) => call(env, name, args);
+  const m = (name: string, args: Record<string, unknown>) => call(env, name, args);
   for (const name of ["BlueLake", "GreenCastle"]) {
     await m("register_agent", { project_key: project, program: "t", model: "m", name });
   }
@@ -282,7 +293,7 @@ async function overdueSetup(project) {
   });
   await Bun.sleep(5);
   const stop = () => {
-    own.server.stop(true);
+    void own.server.stop(true);
     own.db.close();
     rmSync(root, { recursive: true, force: true });
   };
@@ -364,9 +375,9 @@ test("the overdue command rejects an argument it does not know and does nothing"
 test("a failing operator command is retried alone, and the rest of the pass is kept", async () => {
   const rows = [row({ id: 7 }), row({ id: 8 }), row({ id: 9 })];
   const t0 = 40 * 60_000;
-  const calls = [];
+  const calls: unknown[] = [];
   let failing = true;
-  const pass = (state, now) =>
+  const pass = (state: OverdueState, now: number) =>
     checkOverdue({
       rows,
       state,

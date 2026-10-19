@@ -2,7 +2,8 @@ import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
 import { openDatabase } from "../src/db.ts";
-import { Lifecycle, sessionEligible } from "../src/lifecycle.ts";
+import { Lifecycle, sessionEligible, type LifecycleConfig } from "../src/lifecycle.ts";
+import type { Args, Row } from "../src/store.ts";
 import { createTools } from "../src/tools.ts";
 import { createServer } from "../src/server.ts";
 import { createWaiters } from "../src/wake.ts";
@@ -10,8 +11,32 @@ import { openHookDelivery } from "../src/hook-delivery.ts";
 import { BridgeError, sendT3Command } from "../src/wake-target.ts";
 import { testScratch } from "./fixtures/test-scratch.ts";
 
+type Tools = Record<
+  | "acknowledge_message"
+  | "fetch_inbox"
+  | "file_reservation_paths"
+  | "list_agents"
+  | "register_agent"
+  | "release_file_reservations"
+  | "retire_agent"
+  | "send_message"
+  | "set_message_importance"
+  | "unretire_agent"
+  | "withdraw_message",
+  (a: Args) => any
+>;
+
+type WaitResult = Awaited<ReturnType<ReturnType<typeof createWaiters>["wait"]>>;
+/** The offer a wait must have returned. */
+function offered(result: WaitResult) {
+  if (!result) {
+    throw new Error(`expected a wake offer, got ${result}`);
+  }
+  return result;
+}
+
 const scratch = testScratch();
-const cleanups = [];
+const cleanups: (() => void)[] = [];
 afterEach(() => {
   for (const close of cleanups.splice(0).reverse()) {
     close();
@@ -31,14 +56,18 @@ function fixture() {
     INSERT INTO orchestration_v2_projection_threads VALUES ('thread-one',NULL,NULL,'{"settledAt":null,"settledOverride":null}');`);
   const db = openDatabase(prefix + "-mail.sqlite");
   cleanups.push(() => db.close());
-  const config = {
+  const config: LifecycleConfig = {
     profile: "local-one",
     databasePath: prefix + "-t3.sqlite",
     eventTable: "orchestration_events",
   };
   const lifecycle = new Lifecycle(db, config);
-  const tools = createTools(db, { databasePath: prefix + "-mail.sqlite", lifecycle });
-  const register = (name, tag = "[t3:thread-one codex:native-one]", project = "/repo/one") =>
+  const tools = createTools(db, { databasePath: prefix + "-mail.sqlite", lifecycle }) as Tools;
+  const register = (
+    name: string,
+    tag = "[t3:thread-one codex:native-one]",
+    project = "/repo/one",
+  ) =>
     tools.register_agent({
       project_key: project,
       name,
@@ -48,7 +77,7 @@ function fixture() {
     });
   register("BlueLake", "sender");
   register("GreenCastle");
-  const transition = (sequence, state = "active", eventId = `event-${sequence}`) =>
+  const transition = (sequence: number, state = "active", eventId = `event-${sequence}`) =>
     source.transaction(() => {
       source
         .query("INSERT OR REPLACE INTO orchestration_events VALUES (?,?)")
@@ -68,7 +97,7 @@ function fixture() {
           "thread-one",
         );
     })();
-  const send = (extra = {}) =>
+  const send = (extra: Args = {}) =>
     tools.send_message({
       project_key: "/repo/one",
       sender_name: "BlueLake",
@@ -78,7 +107,8 @@ function fixture() {
       notification_policy: "wake",
       ...extra,
     });
-  const roster = () => tools.list_agents({ project_key: "/repo/one" }).map((row) => row.name);
+  const roster = (): string[] =>
+    tools.list_agents({ project_key: "/repo/one" }).map((row: Row) => row.name);
   return { db, source, config, lifecycle, tools, register, transition, send, roster, prefix };
 }
 
@@ -141,11 +171,11 @@ test("closure rejects mail and claims but keeps exact identity, unread history a
 
 test("bounded event orderings never revive a closed thread through activity or stale observations", () => {
   const events = ["settle2", "active3", "old1", "register", "read", "manual"];
-  const failures = [];
+  const failures: string[] = [];
   const f = fixture();
   f.source.run("PRAGMA journal_mode=WAL");
   f.source.run("PRAGMA synchronous=NORMAL");
-  function run(sequence) {
+  function run(sequence: string[]) {
     f.db.run("SAVEPOINT ordering");
     f.source.run("DELETE FROM orchestration_events");
     f.transition(1);
@@ -178,7 +208,7 @@ test("bounded event orderings never revive a closed thread through activity or s
     f.db.run("ROLLBACK TO ordering");
     f.db.run("RELEASE ordering");
   }
-  function walk(prefix) {
+  function walk(prefix: string[]) {
     if (prefix.length) {
       run(prefix);
     }
@@ -288,18 +318,18 @@ test("inactive waits cannot acknowledge an outstanding notice, and reopening coa
   const f = fixture();
   f.send();
   const waiters = createWaiters(f.db, 10);
-  const first = await waiters.wait("thread-one", 0, undefined, { retry: true, after: 0 });
+  const first = offered(await waiters.wait("thread-one", 0, undefined, { retry: true, after: 0 }));
   expect(first.hint).toContain("inbox --session");
   f.transition(2, "settled");
   f.lifecycle.reconcile();
   expect(await waiters.wait("thread-one", 0, undefined, { after: first.eventId })).toBeNull();
-  expect(f.db.query("SELECT announced FROM wake_cursors").get().announced).toBe(0);
+  expect((f.db.query("SELECT announced FROM wake_cursors").get() as Row).announced).toBe(0);
   f.transition(3);
   f.lifecycle.reconcile();
-  expect((await waiters.wait("thread-one", 0, undefined, { retry: true, after: 0 })).eventId).toBe(
-    first.eventId,
-  );
-  expect(f.db.query("SELECT count(*) AS n FROM wake_notices").get().n).toBe(1);
+  expect(
+    offered(await waiters.wait("thread-one", 0, undefined, { retry: true, after: 0 })).eventId,
+  ).toBe(first.eventId);
+  expect((f.db.query("SELECT count(*) AS n FROM wake_notices").get() as Row).n).toBe(1);
 });
 
 test.each(["missing", "invalid-json", "unknown-state"])(
@@ -332,10 +362,10 @@ test.each(["missing", "invalid-json", "unknown-state"])(
     f.send();
     const app = createServer(f.prefix + "-mail.sqlite", 0, { t3Lifecycle: f.config });
     cleanups.push(() => {
-      app.server.stop(true);
+      void app.server.stop(true);
       app.db.close();
     });
-    const status = async (session) =>
+    const status = async (session: string) =>
       (await fetch(new URL(`/wait/status?session=${session}`, app.server.url))).json();
     expect(await status("native-one")).toEqual({ eligible: true });
     expect(await status("unverified-native")).toEqual({ eligible: false });
@@ -362,7 +392,7 @@ test("initial source proof is required and the reconciliation HTTP boundary acce
   ).toThrow("activation held");
   const app = createServer(f.prefix + "-http.sqlite", 0, { t3Lifecycle: f.config });
   cleanups.push(() => {
-    app.server.stop(true);
+    void app.server.stop(true);
     app.db.close();
   });
   const base = app.server.url;
@@ -387,7 +417,7 @@ test("a held native hook offer does not consume its cursor before final lifecycl
   cleanups.push(() => hook.close());
   const response = () =>
     new Response("Swarmail: Fetch all unread mail.", { headers: { "x-swarmail-event-id": "42" } });
-  await expect(
+  expect(
     hook.receive(response(), async () => {
       throw new BridgeError("held", true);
     }),
@@ -398,7 +428,7 @@ test("a held native hook offer does not consume its cursor before final lifecycl
 });
 
 test("T3 final admission guard runs after websocket ticket and before RPC send", async () => {
-  const received = [];
+  const received: (string | Buffer)[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -419,7 +449,7 @@ test("T3 final admission guard runs after websocket ticket and before RPC send",
   const { writeFileSync } = await import("node:fs");
   const auth = join(scratch, "auth");
   writeFileSync(auth, "Bearer fixture", { mode: 0o600 });
-  await expect(
+  expect(
     sendT3Command(
       { id: "thread-one", type: "t3-v2-queue", url: String(server.url), authorizationFile: auth },
       { type: "message.dispatch" },
@@ -445,7 +475,7 @@ test("a failed cursor write rolls back every lifecycle transition and retains re
   f.transition(2, "settled");
   expect(f.lifecycle.reconcile()).toEqual({ status: "unavailable", changed: 0 });
   expect(f.roster()).toContain("GreenCastle");
-  expect(f.db.query("SELECT sequence FROM lifecycle_sources").get().sequence).toBe(1);
+  expect((f.db.query("SELECT sequence FROM lifecycle_sources").get() as Row).sequence).toBe(1);
   expect(f.db.query("SELECT * FROM file_reservations").all()).toEqual(before);
   f.db.exec("DROP TRIGGER reject_cursor");
   expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
@@ -476,10 +506,10 @@ test("native-only aliases retain lifecycle and notice ownership across projects 
     });
   sendAlias();
   const waiters = createWaiters(f.db, 10);
-  const first = await waiters.wait("native-one", 0, undefined, { retry: true, after: 0 });
+  const first = offered(await waiters.wait("native-one", 0, undefined, { retry: true, after: 0 }));
   f.transition(2, "settled");
   f.lifecycle.reconcile();
-  expect(f.tools.list_agents({ project_key: "/repo/two" }).map((a) => a.name)).toEqual([
+  expect(f.tools.list_agents({ project_key: "/repo/two" }).map((a: Row) => a.name)).toEqual([
     "BlueLake",
   ]);
   expect(() => sendAlias()).toThrow("settled");
@@ -495,10 +525,10 @@ test("native-only aliases retain lifecycle and notice ownership across projects 
   expect(await waiters.wait("native-one", 0, undefined, { retry: true, after: 0 })).toBeNull();
   f.transition(3);
   f.lifecycle.reconcile();
-  expect((await waiters.wait("native-one", 0, undefined, { retry: true, after: 0 })).eventId).toBe(
-    first.eventId,
-  );
-  expect(f.db.query("SELECT count(*) AS n FROM wake_notices").get().n).toBe(1);
+  expect(
+    offered(await waiters.wait("native-one", 0, undefined, { retry: true, after: 0 })).eventId,
+  ).toBe(first.eventId);
+  expect((f.db.query("SELECT count(*) AS n FROM wake_notices").get() as Row).n).toBe(1);
   expect(
     f.tools.fetch_inbox({
       project_key: "/repo/two",
@@ -524,7 +554,7 @@ test("project-specific manual retirement does not suppress another active mailbo
   expect(sessionEligible(f.db, "native-one")).toBe(true);
   const waiters = createWaiters(f.db, 10);
   expect(
-    (await waiters.wait("native-one", 0, undefined, { retry: true, after: 0 })).hint,
+    offered(await waiters.wait("native-one", 0, undefined, { retry: true, after: 0 })).hint,
   ).toContain("inbox --session");
 });
 
@@ -532,11 +562,14 @@ test("an unavailable T3 source holds bound delivery while standalone delivery co
   const f = fixture();
   const app = createServer(f.prefix + "-standalone.sqlite", 0, { t3Lifecycle: f.config });
   cleanups.push(() => {
-    app.server.stop(true);
+    void app.server.stop(true);
     app.db.close();
   });
-  const tools = createTools(app.db, { lifecycle: new Lifecycle(app.db, f.config) });
-  const register = (name, tag) =>
+  const tools = createTools(app.db, {
+    databasePath: f.prefix + "-standalone.sqlite",
+    lifecycle: new Lifecycle(app.db, f.config),
+  }) as Tools;
+  const register = (name: string, tag: string) =>
     tools.register_agent({
       project_key: "/repo/one",
       name,
@@ -555,7 +588,7 @@ test("an unavailable T3 source holds bound delivery while standalone delivery co
     body_md: "mail",
   });
   f.source.run("DROP TABLE orchestration_v2_projection_metadata");
-  const status = async (session) =>
+  const status = async (session: string) =>
     (await fetch(new URL(`/wait/status?session=${session}`, app.server.url))).json();
   expect(await status("native-one")).toEqual({ eligible: false });
   expect(await status("standalone")).toEqual({ eligible: true });
@@ -570,7 +603,7 @@ test("inactive long polls remain held without acknowledging until reopen or abor
   const f = fixture();
   f.send();
   const waiters = createWaiters(f.db, 1000);
-  const first = await waiters.wait("thread-one", 0, undefined, { retry: true, after: 0 });
+  const first = offered(await waiters.wait("thread-one", 0, undefined, { retry: true, after: 0 }));
   f.transition(2, "settled");
   f.lifecycle.reconcile();
   const abort = new AbortController();
@@ -583,14 +616,14 @@ test("inactive long polls remain held without acknowledging until reopen or abor
     });
   await new Promise((resolve) => setTimeout(resolve, 25));
   expect(completed).toBe(false);
-  expect(f.db.query("SELECT announced FROM wake_cursors").get().announced).toBe(0);
+  expect((f.db.query("SELECT announced FROM wake_cursors").get() as Row).announced).toBe(0);
   abort.abort();
   expect(await held).toBeNull();
   const reopened = waiters.wait("thread-one", 10000, undefined, { retry: true, after: 0 });
   f.transition(3);
   f.lifecycle.reconcile();
   waiters.notify();
-  expect((await reopened).eventId).toBe(first.eventId);
+  expect(offered(await reopened).eventId).toBe(first.eventId);
 });
 
 test("a reopen found by any server reconcile wakes held long polls", async () => {
@@ -603,7 +636,7 @@ test("a reopen found by any server reconcile wakes held long polls", async () =>
     wakePollMs: 60_000,
   });
   cleanups.push(() => {
-    app.server.stop(true);
+    void app.server.stop(true);
     app.db.close();
   });
   let completed = false;
@@ -632,7 +665,7 @@ test("a T3 source that becomes available again wakes held long polls", async () 
     wakePollMs: 60_000,
   });
   cleanups.push(() => {
-    app.server.stop(true);
+    void app.server.stop(true);
     app.db.close();
   });
   f.source.run("ALTER TABLE orchestration_v2_projection_metadata RENAME TO held_metadata");
@@ -660,7 +693,7 @@ for (const state of ["settled", "archived", "deleted"]) {
       databasePath: f.prefix + "-mail.sqlite",
       lifecycle: f.lifecycle,
       mutationsEnabled: true,
-    });
+    }) as Tools;
     f.transition(2, state);
     const result = tools.withdraw_message({
       project_key: "/repo/one",
@@ -670,7 +703,7 @@ for (const state of ["settled", "archived", "deleted"]) {
     });
     expect(result.recipients[0].status).toBe("withdrawn");
     expect(f.roster()).not.toContain("GreenCastle");
-    expect(f.db.query("SELECT state FROM session_lifecycle").get().state).toBe(state);
+    expect((f.db.query("SELECT state FROM session_lifecycle").get() as Row).state).toBe(state);
     f.transition(3, "active");
     f.lifecycle.reconcile();
     expect(f.roster()).toContain("GreenCastle");
@@ -693,7 +726,7 @@ test("mutation replay precedes sender lifecycle closure; fresh mutations fail an
     databasePath: f.prefix + "-mail.sqlite",
     lifecycle: f.lifecycle,
     mutationsEnabled: true,
-  });
+  }) as Tools;
   const args = {
     project_key: "/repo/one",
     sender_name: "BlueLake",
@@ -716,8 +749,11 @@ test("mutation replay precedes sender lifecycle closure; fresh mutations fail an
     "source is unavailable",
   );
   expect(
-    f.db.query("SELECT withdrawn_ts FROM message_recipients WHERE message_id=?").get(sent.id)
-      .withdrawn_ts,
+    (
+      f.db
+        .query("SELECT withdrawn_ts FROM message_recipients WHERE message_id=?")
+        .get(sent.id) as Row
+    ).withdrawn_ts,
   ).toBeNull();
-  expect(f.db.query("SELECT count(*) AS n FROM message_mutations").get().n).toBe(1);
+  expect((f.db.query("SELECT count(*) AS n FROM message_mutations").get() as Row).n).toBe(1);
 });

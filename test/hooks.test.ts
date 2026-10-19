@@ -23,7 +23,7 @@ import {
 
 const windows = process.platform === "win32";
 
-const homes = [];
+const homes: string[] = [];
 function home() {
   const dir = mkdtempSync(join(tmpdir(), "swarmail-hooks-"));
   homes.push(dir);
@@ -81,7 +81,7 @@ test("the CLI prints usage for --help and refuses unknown flags before writing",
   const dir = home();
   mkdirSync(join(dir, ".claude"));
   const script = Bun.fileURLToPath(new URL("../scripts/configure-hooks.ts", import.meta.url));
-  const run = (args) =>
+  const run = (args: string[]) =>
     Bun.spawnSync([process.execPath, script, ...args], {
       env: { ...process.env, HOME: dir, USERPROFILE: dir },
     });
@@ -123,8 +123,10 @@ test("adds the Claude register and wake hooks once, keeping other hooks", () => 
   configureSwarmailHooks(dir);
   configureSwarmailHooks(dir);
   const settings = JSON.parse(readFileSync(path, "utf8"));
-  const ours = (event) =>
-    settings.hooks[event].filter((e) => /\.local[\\/]+bin[\\/]+swarmail/.test(JSON.stringify(e)));
+  const ours = (event: string) =>
+    settings.hooks[event].filter((e: unknown) =>
+      /\.local[\\/]+bin[\\/]+swarmail/.test(JSON.stringify(e)),
+    );
   expect(settings.theme).toBe("dark");
   expect(settings.hooks.UserPromptSubmit[0]).toEqual(other);
   expect(ours("UserPromptSubmit")).toHaveLength(1);
@@ -159,7 +161,7 @@ test.skipIf(windows)(
     mkdirSync(join(dir, ".local/bin"), { recursive: true });
     // Stands in for the binary: records that the shell got past its checks.
     writeFileSync(bin, `#!/bin/sh\necho "$@" > "${dir}/ran"\n`, { mode: 0o755 });
-    const run = (session, extra = {}) => {
+    const run = (session: string, extra: Record<string, string> = {}) => {
       rmSync(join(dir, "ran"), { force: true });
       const res = Bun.spawnSync(["sh", "-c", rearm], {
         env: {
@@ -254,11 +256,11 @@ test("withPluginDir adds and removes only its own directory", () => {
 
 test("hook commands name the binary as one shell word on Windows, through the 8.3 name when the profile path needs it", () => {
   expect(hookBinary("/home/me", "linux")).toBe(`"${join("/home/me", ".local/bin/swarmail")}"`);
-  const names = {
+  const names: Record<string, string> = {
     "C:\\Users\\Jane Doe": "C:\\Users\\JANEDO~1",
     "C:\\Users\\José": "C:\\Users\\JOS~1",
   };
-  const short = (path) => names[path] ?? path;
+  const short = (path: string) => names[path] ?? path;
   expect(hookBinary("C:\\Users\\me", "win32", short)).toBe("C:/Users/me/.local/bin/swarmail.exe");
   expect(hookBinary("C:\\Users\\Jane Doe", "win32", short)).toBe(
     "C:/Users/JANEDO~1/.local/bin/swarmail.exe",
@@ -279,14 +281,19 @@ test("hook commands name the binary as one shell word on Windows, through the 8.
 });
 
 test("a Windows install replaces the hook a Linux-style or long-path install wrote", () => {
-  const entry = (command) => ({ matcher: "Edit|Write", hooks: [{ type: "command", command }] });
+  const entry = (command: string) => ({
+    matcher: "Edit|Write",
+    hooks: [{ type: "command", command }],
+  });
   const fresh = entry("C:/Users/JANEDO~1/.local/bin/swarmail.exe register");
   for (const old of [
     '"C:\\Users\\Jane Doe\\.local\\bin\\swarmail.exe" register',
     '"/home/jane/.local/bin/swarmail" register',
   ]) {
     const config = { hooks: { PreToolUse: [entry("audit"), entry(old)] } };
-    expect(withHook(config, "PreToolUse", fresh).hooks.PreToolUse).toEqual([entry("audit"), fresh]);
+    expect(
+      (withHook(config, "PreToolUse", fresh).hooks as Record<string, unknown>).PreToolUse,
+    ).toEqual([entry("audit"), fresh]);
   }
 });
 
@@ -330,17 +337,17 @@ test.skipIf(windows)(
     const pluginPath = join(dir, "plugin.js");
     writeFileSync(pluginPath, openCodePlugin(bin));
     const plugin = (await import(pluginPath)).default;
-    const hooks = {};
+    const hooks: Record<string, (input: unknown) => void> = {};
     await plugin.setup({
       location: { directory: "/w" },
       tool: {
-        hook: async (name, callback) => {
+        hook: async (name: string, callback: (input: unknown) => void) => {
           hooks[name] = callback;
         },
       },
     });
-    hooks["execute.before"]({ tool: "read", sessionID: "ses_0", input: { path: "/w/a" } });
-    hooks["execute.before"]({
+    hooks["execute.before"]!({ tool: "read", sessionID: "ses_0", input: { path: "/w/a" } });
+    hooks["execute.before"]!({
       tool: "write",
       sessionID: "ses_1",
       input: { path: "/w/a", content: "x" },
@@ -357,7 +364,7 @@ test.skipIf(windows)(
     // OpenCode 2's patch tool is `patch`, carrying the patch text (shape captured live 2026-09-26).
     rmSync(received);
     const patchText = "*** Begin Patch\n*** Update File: /w/b\n@@\n-a\n+b\n*** End Patch";
-    hooks["execute.before"]({ tool: "patch", sessionID: "ses_3", input: { patchText } });
+    hooks["execute.before"]!({ tool: "patch", sessionID: "ses_3", input: { patchText } });
     for (let i = 0; i < 100 && !existsSync(received); i++) {
       await Bun.sleep(20);
     }

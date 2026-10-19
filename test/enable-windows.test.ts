@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { portTaken, savedEnv, stopServer } from "../scripts/enable-windows.ts";
 import { processIdentity } from "../src/proc.ts";
 
-const dirs = [];
+const dirs: string[] = [];
 afterEach(() => {
   for (const dir of dirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });

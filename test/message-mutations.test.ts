@@ -6,15 +6,32 @@ import { spawnSync } from "node:child_process";
 import { openDatabase } from "../src/db.ts";
 import { createTools, WAKES } from "../src/tools.ts";
 import { createServer, pruneIdempotencyKeys, pruneGoneProjects } from "../src/server.ts";
-import { MailStore } from "../src/store.ts";
+import { MailStore, type Args, type Row } from "../src/store.ts";
 import { createWaiters, PING_SUBJECT } from "../src/wake.ts";
 import { unreadQueues } from "../src/who.ts";
 import { mail } from "../src/mail.ts";
 import { testScratch } from "./fixtures/test-scratch.ts";
 
+type Tools = Record<
+  | "acknowledge_message"
+  | "ensure_project"
+  | "fetch_inbox"
+  | "fetch_session_inbox"
+  | "get_message_delivery_receipt"
+  | "mark_message_read"
+  | "register_agent"
+  | "retire_agent"
+  | "search_messages"
+  | "send_message"
+  | "set_message_importance"
+  | "summarize_thread"
+  | "withdraw_message",
+  (a: Args) => any
+>;
+
 const scratch = testScratch();
 let serial = 0;
-const cleanups = [];
+const cleanups: (() => void)[] = [];
 afterEach(() => {
   for (const f of cleanups.splice(0).reverse()) {
     f();
@@ -24,7 +41,7 @@ const P = "/mutations/repo";
 function fixture(path = ":memory:") {
   const db = openDatabase(path);
   cleanups.push(() => db.close());
-  let tools = createTools(db, { databasePath: path, mutationsEnabled: true });
+  let tools = createTools(db, { databasePath: path, mutationsEnabled: true }) as Tools;
   for (const name of ["BlueLake", "GreenCastle", "TealDune", "AmberCliff"]) {
     tools.register_agent({
       project_key: P,
@@ -37,7 +54,7 @@ function fixture(path = ":memory:") {
   }
   let waiters = createWaiters(db);
   const common = { project_key: P, sender_name: "BlueLake" };
-  const send = (extra = {}) =>
+  const send = (extra: Args = {}) =>
     tools.send_message({
       ...common,
       to: ["GreenCastle"],
@@ -46,7 +63,7 @@ function fixture(path = ":memory:") {
       notification_policy: "wake",
       ...extra,
     });
-  const change = (id, extra = {}) =>
+  const change = (id: number, extra: Args = {}) =>
     tools.set_message_importance({
       ...common,
       message_id: id,
@@ -55,9 +72,9 @@ function fixture(path = ":memory:") {
       idempotency_key: "priority",
       ...extra,
     });
-  const withdraw = (id, extra = {}) =>
+  const withdraw = (id: number, extra: Args = {}) =>
     tools.withdraw_message({ ...common, message_id: id, idempotency_key: "withdraw", ...extra });
-  const inbox = (extra = {}) =>
+  const inbox = (extra: Args = {}) =>
     tools.fetch_inbox({
       project_key: P,
       agent_name: "GreenCastle",
@@ -65,7 +82,7 @@ function fixture(path = ":memory:") {
       mark_read: false,
       ...extra,
     });
-  const claim = (id, ack = false) =>
+  const claim = (id: number, ack = false) =>
     tools[ack ? "acknowledge_message" : "mark_message_read"]({
       project_key: P,
       agent_name: "GreenCastle",
@@ -94,9 +111,9 @@ function fixture(path = ":memory:") {
       waiters = createWaiters(db);
     },
     disable: () => {
-      tools = createTools(db, { databasePath: path });
+      tools = createTools(db, { databasePath: path }) as Tools;
     },
-    audit: () => db.query("SELECT * FROM message_mutations ORDER BY id").all(),
+    audit: () => db.query("SELECT * FROM message_mutations ORDER BY id").all() as Row[],
   };
 }
 
@@ -134,7 +151,7 @@ test("subset validation rolls back; mixed to/cc/bcc outcomes retain history with
   expect(f.audit()).toHaveLength(0);
   expect(
     f.db
-      .query("SELECT withdrawn_ts FROM message_recipients")
+      .query<Row, []>("SELECT withdrawn_ts FROM message_recipients")
       .all()
       .every((r) => r.withdrawn_ts === null),
   ).toBe(true);
@@ -144,7 +161,7 @@ test("subset validation rolls back; mixed to/cc/bcc outcomes retain history with
     { recipient: "TealDune", status: "withdrawn", withdrawn_at: expect.any(String) },
   ]);
   const all = f.withdraw(m.id, { idempotency_key: "all" });
-  expect(all.recipients.map((r) => [r.recipient, r.status])).toEqual([
+  expect(all.recipients.map((r: Row) => [r.recipient, r.status])).toEqual([
     ["AmberCliff", "withdrawn"],
     ["GreenCastle", "too_late"],
     ["TealDune", "already_withdrawn"],
@@ -159,7 +176,7 @@ test("subset validation rolls back; mixed to/cc/bcc outcomes retain history with
   ).toHaveLength(2);
   const receipt = f.tools.get_message_delivery_receipt({ project_key: P, message_id: m.id });
   expect(receipt.revision).toBe(2);
-  expect(receipt.recipients.filter((r) => r.withdrawn_at)).toHaveLength(2);
+  expect(receipt.recipients.filter((r: Row) => r.withdrawn_at)).toHaveLength(2);
   const history = f.tools.search_messages({
     project_key: P,
     query: "retained",
@@ -203,7 +220,7 @@ test("ownership/project/key/input boundaries do not write or silently revive sen
   f.tools.retire_agent({ project_key: P, agent_name: "BlueLake" });
   expect(() => f.withdraw(m.id)).toThrow("sender is retired");
   expect(
-    f.db.query("SELECT retired_at FROM agents WHERE name='BlueLake'").get().retired_at,
+    (f.db.query("SELECT retired_at FROM agents WHERE name='BlueLake'").get() as Row).retired_at,
   ).not.toBeNull();
   expect(f.audit()).toEqual([]);
 });
@@ -221,14 +238,16 @@ test("priority uses revision CAS including no-ops, races with withdrawal and pre
     importance: "urgent",
   });
   expect(() => f.change(older.id, { idempotency_key: "stale" })).toThrow("revision changed");
-  expect(f.inbox().map((r) => r.id)).toEqual([newer.id, older.id]);
+  expect(f.inbox().map((r: Row) => r.id)).toEqual([newer.id, older.id]);
   f.claim(older.id);
   expect(
     f.change(older.id, { expected_revision: 1, importance: "low", idempotency_key: "demotion" })
       .revision,
   ).toBe(2);
-  expect(f.inbox({ unread_only: true }).map((r) => r.id)).toEqual([newer.id]);
-  expect(f.inbox({ unread_only: false }).find((r) => r.id === older.id).importance).toBe("low");
+  expect(f.inbox({ unread_only: true }).map((r: Row) => r.id)).toEqual([newer.id]);
+  expect(f.inbox({ unread_only: false }).find((r: Row) => r.id === older.id).importance).toBe(
+    "low",
+  );
   f.withdraw(newer.id);
   expect(() => f.change(newer.id, { idempotency_key: "withdraw-race" })).toThrow(
     "revision changed",
@@ -249,7 +268,7 @@ test("lost-response replay survives restart, disabling and retirement without au
   const stamps = f.db.query("SELECT * FROM message_mutations").all();
   const other = openDatabase(path);
   cleanups.push(() => other.close());
-  const tools = createTools(other, { databasePath: path });
+  const tools = createTools(other, { databasePath: path }) as Tools;
   f.tools.retire_agent({ project_key: P, agent_name: "BlueLake" });
   expect(
     tools.set_message_importance({
@@ -265,7 +284,7 @@ test("lost-response replay survives restart, disabling and retirement without au
   ).toEqual({ ...second, idempotent_replay: true });
   expect(other.query("SELECT * FROM message_mutations").all()).toEqual(stamps);
   expect(
-    other.query("SELECT retired_at FROM agents WHERE name='BlueLake'").get().retired_at,
+    (other.query("SELECT retired_at FROM agents WHERE name='BlueLake'").get() as Row).retired_at,
   ).not.toBeNull();
   expect(() =>
     tools.set_message_importance({
@@ -300,6 +319,9 @@ for (const admitted of [false, true]) {
     const f = fixture();
     const first = f.send();
     const offer = await f.wait();
+    if (!offer) {
+      throw new Error("expected a wake offer");
+    }
     if (admitted) {
       expect(await f.wait(offer.eventId)).toBeNull();
     }
@@ -310,9 +332,11 @@ for (const admitted of [false, true]) {
     f.withdraw(first.id);
     f.restart();
     const next = await f.wait(admitted ? offer.eventId : 0);
-    expect(next?.eventId ?? null).toBe(admitted ? null : offer.eventId);
-    expect(f.inbox().map((r) => r.id)).toEqual([second.id]);
-    expect(f.db.query("SELECT event_id FROM wake_notices").get().event_id).toBe(offer.eventId);
+    expect(next ? next.eventId : null).toBe(admitted ? null : offer.eventId);
+    expect(f.inbox().map((r: Row) => r.id)).toEqual([second.id]);
+    expect((f.db.query("SELECT event_id FROM wake_notices").get() as Row).event_id).toBe(
+      offer.eventId,
+    );
     f.withdraw(second.id, { idempotency_key: "last" });
     expect(f.db.query("SELECT * FROM wake_notices").all()).toEqual([]);
     expect(f.db.query("SELECT * FROM wake_cursors").all()).toEqual(cursor);
@@ -325,7 +349,7 @@ test("withdrawal before offer removes session inbox, mailbox snapshots, roster c
   const path = join(scratch, `readers-${++serial}.sqlite`);
   const f = fixture(path);
   const m = f.send();
-  expect(unreadQueues(path, P).get("GreenCastle").unread).toBe(1);
+  expect(unreadQueues(path, P).get("GreenCastle")!.unread).toBe(1);
   f.withdraw(m.id);
   expect(
     f.tools.fetch_session_inbox({
@@ -343,10 +367,10 @@ test("withdrawal before offer removes session inbox, mailbox snapshots, roster c
   const ping = f.send({ subject: PING_SUBJECT });
   f.withdraw(ping.id, { idempotency_key: "ping" });
   expect(await f.wait()).toBeNull();
-  expect(f.db.query("SELECT count(*) AS n FROM messages").get().n).toBe(2);
+  expect((f.db.query("SELECT count(*) AS n FROM messages").get() as Row).n).toBe(2);
   f.db.run("UPDATE agents SET retired_at=1");
   pruneGoneProjects(f.db);
-  expect(f.db.query("SELECT count(*) AS n FROM projects").get().n).toBe(1);
+  expect((f.db.query("SELECT count(*) AS n FROM projects").get() as Row).n).toBe(1);
 });
 
 for (const claimCommitted of [false, true]) {
@@ -361,7 +385,9 @@ for (const claimCommitted of [false, true]) {
     other.run("UPDATE message_recipients SET read_ts=99 WHERE message_id=?", [m.id]);
     expect(() => f.withdraw(m.id)).toThrow();
     expect(f.audit()).toEqual([]);
-    expect(f.db.query("SELECT revision FROM messages WHERE id=?").get(m.id).revision).toBe(0);
+    expect((f.db.query("SELECT revision FROM messages WHERE id=?").get(m.id) as Row).revision).toBe(
+      0,
+    );
     expect(f.db.query("SELECT * FROM idempotency_keys WHERE key='withdraw'").all()).toEqual([]);
     other.run(claimCommitted ? "COMMIT" : "ROLLBACK");
     expect(f.withdraw(m.id).recipients[0].status).toBe(claimCommitted ? "too_late" : "withdrawn");
@@ -369,8 +395,8 @@ for (const claimCommitted of [false, true]) {
 }
 
 test("bounded public-operation orderings retain claim/withdraw/revision invariants", () => {
-  const sequences = [];
-  const visit = (prefix) => {
+  const sequences: string[][] = [];
+  const visit = (prefix: string[]) => {
     if (prefix.length) {
       sequences.push(prefix);
     }
@@ -381,7 +407,7 @@ test("bounded public-operation orderings retain claim/withdraw/revision invarian
     }
   };
   visit([]);
-  const violations = [];
+  const violations: string[] = [];
   for (const sequence of sequences) {
     const f = fixture();
     const m = f.send();
@@ -389,7 +415,7 @@ test("bounded public-operation orderings retain claim/withdraw/revision invarian
       withdrawn = false,
       rev = 0,
       level = "normal";
-    const apply = (i, event) => {
+    const apply = (i: number, event: string) => {
       if (event === "read" || event === "ack") {
         if (withdrawn) {
           expect(() => f.claim(m.id, event === "ack")).toThrow();
@@ -428,7 +454,7 @@ test("bounded public-operation orderings retain claim/withdraw/revision invarian
       expect(state).toEqual({ revision: rev, importance: level });
       const receipt = f.db
         .query("SELECT read_ts,ack_ts,withdrawn_ts FROM message_recipients WHERE message_id=?")
-        .get(m.id);
+        .get(m.id) as Row;
       expect(receipt.withdrawn_ts !== null).toBe(withdrawn);
       if (withdrawn) {
         expect(receipt.read_ts).toBeNull();
@@ -439,12 +465,12 @@ test("bounded public-operation orderings retain claim/withdraw/revision invarian
       try {
         apply(i, event);
       } catch (e) {
-        violations.push(sequence.join(" → ") + ": " + e.message);
+        violations.push(sequence.join(" → ") + ": " + (e as Error).message);
         break;
       }
     }
     // Hundreds of independent in-memory databases do not remain open until afterEach.
-    cleanups.pop()();
+    cleanups.pop()!();
   }
   expect(sequences.length).toBe(258);
   expect(violations).toEqual([]);
@@ -457,13 +483,13 @@ test("HTTP/CLI mutation routing keeps explicit sender and revision choices", asy
   spawnSync("git", ["init", "-q"], { cwd: base });
   const { server, db } = createServer(join(base, "mail.sqlite"), 0, { mutationsEnabled: true });
   cleanups.push(() => {
-    server.stop(true);
+    void server.stop(true);
     db.close();
   });
   const tools = createTools(db, {
     databasePath: join(base, "mail.sqlite"),
     mutationsEnabled: true,
-  });
+  }) as Tools;
   for (const name of ["BlueLake", "GreenCastle"]) {
     tools.register_agent({ project_key: base, name, program: "x", model: "x" });
   }
@@ -494,7 +520,10 @@ test("HTTP/CLI mutation routing keeps explicit sender and revision choices", asy
       base,
     );
     expect({ status, errors: error.mock.calls }).toEqual({ status: 0, errors: [] });
-    expect(JSON.parse(log.mock.calls.at(-1)[0])).toMatchObject({ importance: "high", revision: 1 });
+    expect(JSON.parse(log.mock.calls.at(-1)![0])).toMatchObject({
+      importance: "high",
+      revision: 1,
+    });
     expect(
       await mail(
         ["withdraw", String(m.id), "--idempotency-key", "cli-w", "--recipients", "GreenCastle"],
@@ -503,9 +532,9 @@ test("HTTP/CLI mutation routing keeps explicit sender and revision choices", asy
         base,
       ),
     ).toBe(0);
-    expect(JSON.parse(log.mock.calls.at(-1)[0]).recipients[0].status).toBe("withdrawn");
+    expect(JSON.parse(log.mock.calls.at(-1)![0]).recipients[0].status).toBe("withdrawn");
     expect(await mail(["withdraw", String(m.id)], async () => "", env, base)).toBe(1);
-    expect(error.mock.calls.at(-1)[0]).toContain("idempotency-key");
+    expect(error.mock.calls.at(-1)![0]).toContain("idempotency-key");
   } finally {
     log.mockRestore();
     error.mockRestore();

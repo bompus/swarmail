@@ -70,8 +70,7 @@ for (const { name, schema, check, fixture } of [
   test(`${name} direct checks preserve JSON and JavaScript contracts`, () => {
     // TypeBox checks JSON values. Explicit expectations keep JavaScript-only
     // cases independent of validator differences in undefined, keys and holes.
-    /** @type {Array<[unknown, boolean?]>} */
-    const cases = [
+    const cases: Array<[unknown, boolean?]> = [
       [null],
       [[]],
       [fixture],
@@ -91,7 +90,7 @@ for (const { name, schema, check, fixture } of [
             : undefined,
         ]);
       }
-      const missing = structuredClone(fixture);
+      const missing: Record<string, unknown> = structuredClone(fixture);
       delete missing[key];
       cases.push([missing]);
     }
@@ -118,8 +117,7 @@ for (const { name, schema, check, fixture } of [
 
 test("nested fields and historical replay preserve JSON and JavaScript acceptance", () => {
   const reference = Schema.Compile(MESSAGE_RESULT);
-  /** @type {Array<[unknown, boolean?]>} */
-  const variants = [
+  const variants: Array<[unknown, boolean?]> = [
     [
       {
         ...message,
@@ -153,7 +151,7 @@ test("nested fields and historical replay preserve JSON and JavaScript acceptanc
     [{ historical: undefined, reported_end_at: undefined }, true],
     [{ historical: true, reported_end_at: "then" }],
     [{ reported_end_at: null }],
-  ]) {
+  ] as Array<[Record<string, unknown>, boolean?]>) {
     variants.push([
       {
         ...message,
@@ -172,7 +170,7 @@ test("nested fields and historical replay preserve JSON and JavaScript acceptanc
     { kind: "other" },
     { private_field: true },
   ]) {
-    const value = { ...receipt, recipients: [{ ...receipt.recipients[0], ...extra }] };
+    const value = { ...receipt, recipients: [{ ...receipt.recipients[0]!, ...extra }] };
     expect(isReceiptResult(value)).toBe(receiptReference.Check(value));
   }
 });

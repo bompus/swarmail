@@ -2,19 +2,20 @@ import { afterEach, expect, test } from "bun:test";
 import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
-import { createServer as createTcpServer } from "node:net";
+import { createServer as createTcpServer, type AddressInfo, type Socket } from "node:net";
 import { createServer } from "../src/server.ts";
 import { openWakeState, wakeStatePath } from "../src/wake-state.ts";
-import { BridgeError, t3V1Adapter, t3V2Adapter } from "../src/wake-target.ts";
+import { BridgeError, t3V1Adapter, t3V2Adapter, type WakeTarget } from "../src/wake-target.ts";
 import { bridgeBinding } from "../src/wake-bridge.ts";
 import { testScratch } from "./fixtures/test-scratch.ts";
+import type { Args, Row } from "../src/store.ts";
 
 const scratch = testScratch();
-const cleanups = [];
+const cleanups: (() => unknown)[] = [];
 test("V2 bridge preparation refuses the generic command path", async () => {
-  let failure;
+  let failure: any;
   try {
-    await t3V2Adapter.prepare({}, "Swarmail: pending mail");
+    await t3V2Adapter.prepare({} as WakeTarget, "Swarmail: pending mail");
   } catch (error) {
     failure = error;
   }
@@ -29,7 +30,7 @@ afterEach(async () => {
   }
 });
 
-async function until(fn) {
+async function until(fn: () => unknown) {
   const deadline = Date.now() + 8000;
   while (!fn()) {
     if (Date.now() > deadline) {
@@ -38,18 +39,26 @@ async function until(fn) {
     await Bun.sleep(20);
   }
 }
-async function fixture(type = "opencode-v2-queue", behavior = {}) {
+/** How the fake target answers. */
+interface Behavior {
+  reject?: boolean;
+  settled?: boolean;
+  mismatch?: boolean;
+  deliveryMismatch?: boolean;
+}
+
+async function fixture(type = "opencode-v2-queue", behavior: Behavior = {}) {
   const dir = mkdtempSync(join(scratch, "case-"));
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const mail = createServer(join(dir, "mail.sqlite"), 0);
   cleanups.push(() => {
-    mail.server.stop(true);
+    void mail.server.stop(true);
     mail.db.close();
   });
   const mailUrl = `http://127.0.0.1:${mail.server.port}`;
   const id = type === "opencode-v2-queue" ? "ses_bridge" : "thread:project:bridge";
-  const received = [];
-  const authorizations = [];
+  const received: any[] = [];
+  const authorizations: (string | null)[] = [];
   let reject = behavior.reject ?? false;
   let settled = behavior.settled ?? false;
   const target = Bun.serve({
@@ -78,7 +87,7 @@ async function fixture(type = "opencode-v2-queue", behavior = {}) {
             : { projection: { thread, runs: [], messages: [], runtimeRequests: [] } },
         );
       }
-      const body = await req.json();
+      const body = (await req.json()) as Args;
       received.push(body);
       if (reject) {
         return new Response("private response body", { status: 503 });
@@ -98,7 +107,7 @@ async function fixture(type = "opencode-v2-queue", behavior = {}) {
     },
     websocket: {
       message(ws, raw) {
-        const frame = JSON.parse(raw);
+        const frame = JSON.parse(String(raw));
         if (frame._tag !== "Request") {
           return;
         }
@@ -124,7 +133,7 @@ async function fixture(type = "opencode-v2-queue", behavior = {}) {
       target: { type, id, url: `http://127.0.0.1:${target.port}`, authorizationFile: auth },
     }),
   );
-  const call = async (name, args) => {
+  const call = async (name: string, args: Args) => {
     const res = await fetch(mailUrl + "/mcp", {
       method: "POST",
       body: JSON.stringify({
@@ -134,7 +143,7 @@ async function fixture(type = "opencode-v2-queue", behavior = {}) {
         params: { name, arguments: args },
       }),
     });
-    const data = JSON.parse((await res.json()).result.content[0].text);
+    const data = JSON.parse(((await res.json()) as any).result.content[0].text);
     if (data.error) {
       throw new Error(JSON.stringify(data.error));
     }
@@ -158,7 +167,7 @@ async function fixture(type = "opencode-v2-queue", behavior = {}) {
       body_md: "private body",
       notification_policy: "wake",
     });
-  const state = () => {
+  const state = (): Row | null => {
     const root = join(dir, "state/swarmail-bridge");
     let path;
     try {
@@ -172,9 +181,9 @@ async function fixture(type = "opencode-v2-queue", behavior = {}) {
     const db = new Database(join(root, path), { readonly: true });
     try {
       db.exec("PRAGMA busy_timeout=2000");
-      return db.query("SELECT * FROM state").get();
+      return db.query<Row, []>("SELECT * FROM state").get();
     } catch (error) {
-      if (error.message.includes("no such table")) {
+      if ((error as Error).message.includes("no such table")) {
         return null;
       }
       throw error;
@@ -223,7 +232,7 @@ async function fixture(type = "opencode-v2-queue", behavior = {}) {
 
 test("explicit acknowledgement retries a lost offer, including after restart, without consuming newer mail", async () => {
   const f = await fixture();
-  const wait = (after, base = f.mailUrl) =>
+  const wait = (after: string | number | null, base = f.mailUrl) =>
     fetch(`${base}/wait?session=${encodeURIComponent(f.id)}&after=${after}&timeout=1`);
   await f.send();
   const first = await wait(0);
@@ -261,7 +270,7 @@ test("explicit acknowledgement retries a lost offer, including after restart, wi
       expect((await wait(after, base)).status).toBe(400);
     }
   } finally {
-    restart.server.stop(true);
+    void restart.server.stop(true);
     restart.db.close();
   }
 });
@@ -273,8 +282,8 @@ test("restart retries the saved request after uncertain admission and preserves 
   await until(() => f.received.length === 1);
   const original = f.received[0];
   expect(original.delivery).toBe("steer");
-  expect(f.state().acknowledged).toBe(0);
-  expect(JSON.parse(f.state().pending).command).toEqual(original);
+  expect(f.state()!.acknowledged).toBe(0);
+  expect(JSON.parse(f.state()!.pending).command).toEqual(original);
   const alias = JSON.parse(readFileSync(f.config, "utf8"));
   alias.swarmailUrl = alias.swarmailUrl.replace("127.0.0.1", "localhost");
   writeFileSync(f.config, JSON.stringify(alias));
@@ -294,7 +303,9 @@ test("restart retries the saved request after uncertain admission and preserves 
   expect(f.received).toHaveLength(2);
   expect(f.received[1].text).toContain("swarmail inbox --session");
   expect(
-    f.mail.db.query("SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL").get().n,
+    f.mail.db
+      .query<Row, []>("SELECT count(*) AS n FROM message_recipients WHERE read_ts IS NULL")
+      .get()!.n,
   ).toBe(2);
   expect(f.authorizations).toContain("Bearer rotated-test-token");
   resumed.kill();
@@ -305,8 +316,8 @@ test("restart retries the saved request after uncertain admission and preserves 
   const restarted = f.start();
   await until(
     () =>
-      f.mail.db.query("SELECT announced FROM wake_cursors WHERE session=?").get(f.id)?.announced >=
-      1,
+      f.mail.db.query<Row, [string]>("SELECT announced FROM wake_cursors WHERE session=?").get(f.id)
+        ?.announced >= 1,
   );
   restarted.kill();
   await restarted.exited;
@@ -318,8 +329,8 @@ test("mismatched admission keeps mail pending and never prints credentials or pr
   await f.send();
   const run = f.start();
   expect(await run.exited).toBe(1);
-  expect(f.state().acknowledged).toBe(0);
-  expect(f.state().pending).not.toBeNull();
+  expect(f.state()!.acknowledged).toBe(0);
+  expect(f.state()!.pending).not.toBeNull();
   expect(await new Response(run.stderr).text()).toContain("does not match");
 });
 
@@ -361,7 +372,7 @@ test("rejects destination changes with pending mail", async () => {
   await f.send();
   const rejected = f.start();
   expect(await rejected.exited).toBe(1);
-  expect(f.state().pending).not.toBeNull();
+  expect(f.state()!.pending).not.toBeNull();
   const config = JSON.parse(readFileSync(f.config, "utf8"));
   config.target.url = "http://127.0.0.1:9";
   writeFileSync(f.config, JSON.stringify(config));
@@ -410,11 +421,11 @@ for (const boundary of ["mail", "target"]) {
     const config = JSON.parse(readFileSync(f.config, "utf8"));
     const origin = boundary === "mail" ? config.swarmailUrl : config.target.url;
     let broken = false;
-    const sockets = new Set();
+    const sockets = new Set<Socket>();
     const stop = new AbortController();
     const proxy = createTcpServer((socket) => {
       sockets.add(socket);
-      socket.on("error", (error) => {
+      socket.on("error", (error: NodeJS.ErrnoException) => {
         // The peer can reset the deliberately truncated response or a pending teardown write.
         if (error.code !== "ECONNRESET") {
           throw error;
@@ -422,7 +433,7 @@ for (const boundary of ["mail", "target"]) {
       });
       socket.on("close", () => sockets.delete(socket));
       let input = "";
-      socket.on("data", async (chunk) => {
+      socket.on("data", async (chunk: Buffer) => {
         input += chunk.toString();
         const split = input.indexOf("\r\n\r\n");
         if (split < 0) {
@@ -433,8 +444,8 @@ for (const boundary of ["mail", "target"]) {
           return;
         }
         socket.removeAllListeners("data");
-        const [method, path] = input.split("\r\n")[0].split(" ");
-        const headers = {};
+        const [method, path = ""] = input.split("\r\n")[0]!.split(" ");
+        const headers: Record<string, string> = {};
         for (const line of input.slice(0, split).split("\r\n").slice(1)) {
           const colon = line.indexOf(":");
           const name = line.slice(0, colon).toLowerCase();
@@ -479,7 +490,7 @@ for (const boundary of ["mail", "target"]) {
         );
       });
     });
-    await new Promise((resolve) => proxy.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));
     cleanups.push(() => {
       stop.abort();
       for (const socket of sockets) {
@@ -487,7 +498,7 @@ for (const boundary of ["mail", "target"]) {
       }
       proxy.close();
     });
-    const url = `http://127.0.0.1:${proxy.address().port}`;
+    const url = `http://127.0.0.1:${(proxy.address() as AddressInfo).port}`;
     if (boundary === "mail") {
       config.swarmailUrl = url;
     } else {
@@ -538,13 +549,15 @@ test("each target type keeps its saved binding", () => {
   const http = { id: "t", url: "http://127.0.0.1:1", authorizationFile: "/a" };
   const native = { id: "t", socket: "/s", cwd: "/c", timeoutMs: 60_000 };
   expect(
-    [
-      { type: "t3-v1-steer", ...http },
-      { type: "t3-v2-queue", ...http },
-      { type: "opencode-v2-queue", ...http },
-      { type: "grok-queue", ...native },
-      { type: "codex-queue", ...native },
-    ].map(bridgeBinding),
+    (
+      [
+        { type: "t3-v1-steer", ...http },
+        { type: "t3-v2-queue", ...http },
+        { type: "opencode-v2-queue", ...http },
+        { type: "grok-queue", ...native },
+        { type: "codex-queue", ...native },
+      ] as const
+    ).map(bridgeBinding),
   ).toEqual([
     '{"type":"t3-v1-steer","id":"t"}',
     '{"type":"t3-v2-queue","id":"t"}',
@@ -567,14 +580,14 @@ test("V1 delivery holds an immutable command while settled and resumes after bri
       eventId: 1,
       command: await t3V1Adapter.prepare(config.target, "Swarmail: pending mail"),
     });
-    const saved = structuredClone(journal.pending);
+    const saved = structuredClone(journal.pending!);
     f.settle(); // Settlement follows preparation, before the native dispatch.
     journal.close();
     journal = open();
-    await expect(
+    expect(
       t3V1Adapter.deliver(
         config.target,
-        journal.pending.command,
+        journal.pending!.command,
         () => journal.markAttempted(),
         new AbortController().signal,
       ),
@@ -585,7 +598,7 @@ test("V1 delivery holds an immutable command while settled and resumes after bri
     f.reactivate();
     await t3V1Adapter.deliver(
       config.target,
-      journal.pending.command,
+      journal.pending!.command,
       () => journal.markAttempted(),
       new AbortController().signal,
     );
@@ -594,8 +607,8 @@ test("V1 delivery holds an immutable command while settled and resumes after bri
     expect(journal.pending).toBeNull();
     expect(
       f.mail.db
-        .query("SELECT count(*) AS unread FROM message_recipients WHERE read_ts IS NULL")
-        .get().unread,
+        .query<Row, []>("SELECT count(*) AS unread FROM message_recipients WHERE read_ts IS NULL")
+        .get()!.unread,
     ).toBe(1);
   } finally {
     journal.close();
@@ -609,8 +622,8 @@ test("OpenCode receipt must match the saved steering mode", async () => {
   const run = f.start();
   expect(await run.exited).toBe(1);
   expect(f.received[0].delivery).toBe("steer");
-  expect(f.state().acknowledged).toBe(0);
-  expect(f.state().pending).not.toBeNull();
+  expect(f.state()!.acknowledged).toBe(0);
+  expect(f.state()!.pending).not.toBeNull();
 });
 
 test("journal persistence waits for brief SQLite contention without changing mailbox ownership", async () => {
@@ -640,13 +653,13 @@ test("journal persistence waits for brief SQLite contention without changing mai
   try {
     const reader = child.stdout.getReader();
     expect(new TextDecoder().decode((await reader.read()).value)).toContain("locked");
-    child.stdin.end("release");
+    void child.stdin.end();
     expect(() => state.saveContext({ failures: { "thread-1": "retained refusal" } })).not.toThrow();
     expect(await child.exited).toBe(0);
     expect(state.readContext()).toEqual({ failures: { "thread-1": "retained refusal" } });
     expect(() => openWakeState(url, "contended-thread", "{}")).toThrow("another wake bridge owns");
   } finally {
-    child.stdin.end();
+    void child.stdin.end();
     await child.exited;
     await errors;
     state.close();

@@ -4,23 +4,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../src/server.ts";
 import { sessionUpdates } from "../src/updates.ts";
+import type { Args, Row } from "../src/store.ts";
 
-const cleanups = [];
+const cleanups: (() => void)[] = [];
 afterEach(() => {
   for (const cleanup of cleanups.splice(0).reverse()) {
     cleanup();
   }
 });
-function fixture(host, key) {
+function fixture(host: string, key: string) {
   const dir = mkdtempSync(join(tmpdir(), "swarmail-context-"));
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const { server, db } = createServer(join(dir, "mail.sqlite"), 0);
   cleanups.push(() => {
-    server.stop(true);
+    void server.stop(true);
     db.close();
   });
   const base = `http://127.0.0.1:${server.port}`;
-  const call = async (name, args) => {
+  const call = async (name: string, args: Args): Promise<any> => {
     const response = await fetch(base + "/mcp", {
       method: "POST",
       body: JSON.stringify({
@@ -30,13 +31,13 @@ function fixture(host, key) {
         params: { name, arguments: args },
       }),
     });
-    return JSON.parse((await response.json()).result.content[0].text);
+    return JSON.parse(((await response.json()) as any).result.content[0].text);
   };
   const run = async (
     sid = "native-session",
     stop = false,
     wakeBase = base,
-    updates = {},
+    updates: Record<string, string> = {},
     wakeAtStop = true,
   ) => {
     const child = Bun.spawn(
@@ -71,7 +72,7 @@ function fixture(host, key) {
 for (const [host, key] of [
   ["cursor", "conversation_id"],
   ["devin", "session_id"],
-]) {
+] as const) {
   test(`${host} gives one update hint at active context even with mail offline, never at Stop`, async () => {
     const f = fixture(host, key);
     const manifest = join(f.dir, "targets.json");
@@ -99,8 +100,8 @@ for (const [host, key] of [
     expect(hint).toBe("Updates available: run swarmail updates --session.");
     expect(output).not.toHaveProperty("decision");
     expect(await f.run("native-session", false, offline, env)).toEqual({});
-    expect(sessionUpdates("native-session", { env, host }).targets[0].loaded).toBeNull();
-    expect(f.db.query("SELECT count(*) AS n FROM messages").get().n).toBe(0);
+    expect(sessionUpdates("native-session", { env, host }).targets[0]!.loaded).toBeNull();
+    expect((f.db.query("SELECT count(*) AS n FROM messages").get() as Row).n).toBe(0);
   });
 }
 
@@ -108,7 +109,7 @@ for (const [host, key] of [
   ["cursor", "conversation_id"],
   ["devin", "session_id"],
   ["agy", "conversationId"],
-]) {
+] as const) {
   test(`${host} coalesces native active-context mail until an inbox read without T3`, async () => {
     const f = fixture(host, key);
     await f.call("register_agent", {
@@ -164,10 +165,10 @@ for (const [host, key] of [
     expect(inbox).toHaveLength(4);
     expect(
       f.db
-        .query(
+        .query<Row, []>(
           "SELECT count(*) AS n FROM message_recipients WHERE ack_ts IS NOT NULL OR read_ts IS NOT NULL",
         )
-        .get().n,
+        .get()!.n,
     ).toBe(0);
   });
 }
@@ -175,7 +176,7 @@ for (const [host, key] of [
 for (const [host, key, decision] of [
   ["devin", "session_id", "block"],
   ["agy", "conversationId", "continue"],
-]) {
+] as const) {
   test(`${host} stop hook requests another turn only when new mail is present`, async () => {
     const f = fixture(host, key);
     await f.call("register_agent", {
@@ -218,7 +219,7 @@ for (const [host, key] of [
   ["cursor", "conversation_id"],
   ["devin", "session_id"],
   ["agy", "conversationId"],
-]) {
+] as const) {
   for (const stop of [false, true]) {
     test(`${host} recovers a lost HTTP offer on the next ${stop ? "stop" : "context"} hook`, async () => {
       const f = fixture(host, key);
@@ -242,7 +243,7 @@ for (const [host, key] of [
         subject: "mail",
         body_md: "info",
       });
-      const queries = [];
+      const queries: (string | null)[] = [];
       const proxy = Bun.serve({
         hostname: "127.0.0.1",
         port: 0,
@@ -294,13 +295,13 @@ test("native Devin CLI registers documented payloads without cwd and follows edi
     mkdirSync(repo);
     expect(Bun.spawnSync(["git", "init", "-q", repo]).exitCode).toBe(0);
   }
-  const register = async (payload) => {
+  const register = async (payload: Args) => {
     const child = Bun.spawn(
       [process.execPath, join(import.meta.dir, "../src/cli.ts"), "register", "--host", "devin"],
       {
         env: {
           ...process.env,
-          DEVIN_PROJECT_DIR: repos[0],
+          DEVIN_PROJECT_DIR: repos[0]!,
           XDG_STATE_HOME: f.dir,
           SWARMAIL_URL: f.base + "/mcp",
         },
@@ -320,14 +321,14 @@ test("native Devin CLI registers documented payloads without cwd and follows edi
     await register({
       hook_event_name: "PreToolUse",
       tool_name: "edit",
-      tool_input: { file_path: join(repos[1], "file.txt") },
+      tool_input: { file_path: join(repos[1]!, "file.txt") },
     }),
   ).toBeNull();
   const rows = f.db
     .query(
       "SELECT a.name, a.program, a.session_id, p.human_key FROM agents a JOIN projects p ON p.id=a.project_id ORDER BY p.human_key",
     )
-    .all();
+    .all() as Row[];
   expect(rows).toHaveLength(2);
   expect(new Set(rows.map((r) => r.name)).size).toBe(1);
   expect(rows.map((r) => r.human_key)).toEqual(repos.map((repo) => realpathSync.native(repo)));
@@ -358,12 +359,12 @@ for (const mixed of [false, true]) {
       subject: "mail",
       body_md: "info",
     });
-    let entered;
-    const arrived = new Promise((resolve) => {
+    let entered!: () => void;
+    const arrived = new Promise<void>((resolve) => {
       entered = resolve;
     });
-    let release;
-    const gate = new Promise((resolve) => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
     let requests = 0;
@@ -421,8 +422,8 @@ for (const stop of [false, true]) {
       subject: "mail",
       body_md: "info",
     });
-    let entered;
-    const arrived = new Promise((resolve) => {
+    let entered!: () => void;
+    const arrived = new Promise<void>((resolve) => {
       entered = resolve;
     });
     const proxy = Bun.serve({
@@ -506,12 +507,12 @@ test("concurrent offers keep one notification while an older receipt remains unr
     });
   await send();
   const second = await send();
-  let entered;
-  const arrived = new Promise((resolve) => {
+  let entered!: () => void;
+  const arrived = new Promise<void>((resolve) => {
     entered = resolve;
   });
-  let release;
-  const gate = new Promise((resolve) => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
   const proxy = Bun.serve({

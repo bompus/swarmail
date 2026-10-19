@@ -2,11 +2,18 @@ import { expect, test } from "bun:test";
 import { openDatabase } from "../src/db.ts";
 import { createTools } from "../src/tools.ts";
 import { createWaiters } from "../src/wake.ts";
+import type { Args } from "../src/store.ts";
+
+type Tools = Record<
+  "mark_message_read" | "register_agent" | "send_message" | "withdraw_message",
+  (a: Args) => any
+>;
+type Sent = { id: number; wake: boolean };
 
 test("independent quiet arrivals never extend wake episodes through read, withdrawal and restart orderings", async () => {
   const db = openDatabase(":memory:");
   try {
-    const tools = createTools(db, { databasePath: ":memory:", mutationsEnabled: true });
+    const tools = createTools(db, { databasePath: ":memory:", mutationsEnabled: true }) as Tools;
     const common = { project_key: "/ordering", sender_name: "GreenCastle" };
     tools.register_agent({
       project_key: "/ordering",
@@ -17,8 +24,13 @@ test("independent quiet arrivals never extend wake episodes through read, withdr
     });
     const events = ["quiet", "wake", "wait", "read", "withdraw", "restart"];
     let checked = 0;
-    const failures = [];
-    const walk = async (sequence, mail, notice, waiters) => {
+    const failures: string[] = [];
+    const walk = async (
+      sequence: string[],
+      mail: Sent[],
+      notice: number | null,
+      waiters: ReturnType<typeof createWaiters>,
+    ): Promise<void> => {
       if (sequence.length === 3) {
         return;
       }
@@ -39,7 +51,7 @@ test("independent quiet arrivals never extend wake episodes through read, withdr
             });
             messages.push({ id: sent.id, wake: event === "wake" });
           } else if ((event === "read" || event === "withdraw") && messages.length) {
-            const last = messages.at(-1);
+            const last = messages.at(-1)!;
             tools[event === "read" ? "mark_message_read" : "withdraw_message"]({
               ...common,
               agent_name: "GreenCastle",
@@ -57,7 +69,7 @@ test("independent quiet arrivals never extend wake episodes through read, withdr
               after: active ?? 0,
             });
             stop.abort();
-            const offer = await pending;
+            const offer = (await pending) || null;
             const expected =
               active === null ? messages.filter((m) => m.wake).at(-1)?.id : undefined;
             if (offer?.eventId !== expected) {

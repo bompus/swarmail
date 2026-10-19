@@ -5,14 +5,21 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { nativeTitles } from "../src/native-titles.ts";
 
-function profile(run) {
+interface Profile {
+  home: string;
+  json: (path: string, value: unknown) => void;
+  sqlite: (path: string, sql: string) => string;
+  env: { HOME: string };
+}
+
+function profile(run: (p: Profile) => void) {
   const home = mkdtempSync(join(tmpdir(), "native-titles-"));
-  const json = (path, value) => {
+  const json = (path: string, value: unknown) => {
     const file = join(home, path);
     mkdirSync(dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(value));
   };
-  const sqlite = (path, sql) => {
+  const sqlite = (path: string, sql: string) => {
     const file = join(home, path);
     mkdirSync(dirname(file), { recursive: true });
     const db = new Database(file, { create: true });

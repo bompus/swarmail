@@ -5,11 +5,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../src/server.ts";
 import { TOOLS } from "../src/tools.ts";
+import type { Args } from "../src/store.ts";
 
-let dir,
-  server,
-  db,
-  url,
+let dir: string,
+  server: ReturnType<typeof createServer>["server"],
+  db: ReturnType<typeof createServer>["db"],
+  url: string,
   id = 0;
 const project_key = "/project/structured";
 const sender_name = "StructuredSender";
@@ -22,11 +23,11 @@ beforeAll(async () => {
   }
 });
 afterAll(() => {
-  server.stop(true);
+  void server.stop(true);
   db.close();
   rmSync(dir, { recursive: true, force: true });
 });
-async function rpc(method, params, version) {
+async function rpc(method: string, params: Args, version?: string): Promise<any> {
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -38,11 +39,12 @@ async function rpc(method, params, version) {
   if (!res.ok) {
     return { status: res.status };
   }
-  return (await res.json()).result;
+  return ((await res.json()) as { result: unknown }).result;
 }
-const call = (name, args, version) => rpc("tools/call", { name, arguments: args }, version);
-const value = (result) => JSON.parse(result.content[0].text);
-const send = (extra = {}) => ({
+const call = (name: string, args: Args, version?: string) =>
+  rpc("tools/call", { name, arguments: args }, version);
+const value = (result: any) => JSON.parse(result.content[0].text);
+const send = (extra: Args = {}) => ({
   project_key,
   sender_name,
   to: ["StructuredReceiver"],
@@ -50,14 +52,14 @@ const send = (extra = {}) => ({
   body_md: "Details",
   ...extra,
 });
-const count = () => db.query("SELECT count(*) AS n FROM messages").get().n;
+const count = () => db.query<{ n: number }, []>("SELECT count(*) AS n FROM messages").get()!.n;
 
 // Removing the header gate or publishing schemas on legacy responses breaks this contract.
 for (const version of [undefined, "2024-11-05", "2025-03-26", "2025-06-18", "2025-11-25"]) {
   test(`success format and declared schemas follow protocol ${version ?? "absent"}`, async () => {
     const modern = version === "2025-06-18" || version === "2025-11-25";
     const definitions = (await rpc("tools/list", {}, version)).tools;
-    expect(definitions.filter((t) => t.outputSchema).map((t) => t.name)).toEqual(
+    expect(definitions.filter((t: any) => t.outputSchema).map((t: any) => t.name)).toEqual(
       modern ? ["send_message", "reply_message", "get_message_delivery_receipt"] : [],
     );
     const sent = await call(
@@ -88,7 +90,7 @@ for (const version of [undefined, "2024-11-05", "2025-03-26", "2025-06-18", "202
       expect(result.isError).toBeUndefined();
       if (modern) {
         expect(result.structuredContent).toEqual(value(result));
-        const validate = Schema.Compile(definitions.find((t) => t.name === name).outputSchema);
+        const validate = Schema.Compile(definitions.find((t: any) => t.name === name).outputSchema);
         expect(validate.Check(result.structuredContent)).toBe(true);
         expect(validate.Check({ ...result.structuredContent, unexpected: "leak" })).toBe(false);
       } else {
@@ -192,10 +194,10 @@ test("a pre-upgrade reply replay preserves omitted fields and its saved acknowle
 });
 
 test("invalid fresh success rolls back mail, retry key and wake notice before returning a safe error", async () => {
-  const tool = TOOLS.find((t) => t.name === "send_message");
+  const tool = TOOLS.find((t) => t.name === "send_message")!;
   const run = tool.run;
   const before = db.serialize();
-  tool.run = (...args) => ({ ...run(...args), unexpected: "must not escape" });
+  tool.run = (...args) => ({ ...(run(...args) as object), unexpected: "must not escape" });
   try {
     const result = await call(
       "send_message",

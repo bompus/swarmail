@@ -3,22 +3,35 @@ import { Database } from "bun:sqlite";
 import { bridgeBinding } from "../src/wake-bridge.ts";
 import { openWakeState } from "../src/wake-state.ts";
 import { deliverGrok } from "../src/wake-grok.ts";
+import type { Row } from "../src/store.ts";
 import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
+import { createServer, type Socket } from "node:net";
 import { join } from "node:path";
 import { testScratch } from "./fixtures/test-scratch.ts";
 
 // Native socket delivery requires Unix sockets and POSIX ownership.
 const test = process.platform === "win32" ? bunTest.skip : bunTest;
 
+/** How the fake Grok leader answers; tests change it between runs. */
+interface Behavior {
+  complete: boolean;
+  replay: Record<string, any> | null;
+  drop: boolean;
+  version: number;
+  stopped: boolean;
+  mismatch?: boolean;
+  sequence?: string[];
+  interjectionSequence?: string[];
+}
+
 const root = testScratch();
-const cleanups = [];
+const cleanups: (() => unknown)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) {
     await cleanup();
   }
 });
-async function until(fn) {
+async function until(fn: () => unknown) {
   const deadline = Date.now() + 5000;
   while (!fn()) {
     if (Date.now() > deadline) {
@@ -32,14 +45,19 @@ async function fixture(legacy = true) {
   cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
   const configPath = join(dir, "bridge.json");
   const socketPath = join(dir, "leader.sock");
-  const requests = [];
-  const loads = [];
-  const replies = [];
-  const offers = [];
-  const sockets = new Set();
-  /** @type {{ complete: boolean, replay: object | null, drop: boolean, version: number }} */
-  const behavior = { complete: true, replay: null, drop: false, version: 1, stopped: false };
-  const state = () => {
+  const requests: { request: any; state: Row | null }[] = [];
+  const loads: unknown[] = [];
+  const replies: unknown[] = [];
+  const offers: number[] = [];
+  const sockets = new Set<Socket>();
+  const behavior: Behavior = {
+    complete: true,
+    replay: null,
+    drop: false,
+    version: 1,
+    stopped: false,
+  };
+  const state = (): Row | null => {
     let files;
     try {
       files = readdirSync(join(dir, "state/swarmail-bridge"));
@@ -52,14 +70,14 @@ async function fixture(legacy = true) {
     }
     const db = new Database(join(dir, "state/swarmail-bridge", name), { readonly: true });
     try {
-      return db.query("SELECT * FROM state").get();
+      return db.query<Row, []>("SELECT * FROM state").get();
     } catch {
       return null;
     } finally {
       db.close();
     }
   };
-  const completion = (promptId, stopReason = "end_turn", sessionId = "native-session") => ({
+  const completion = (promptId: string, stopReason = "end_turn", sessionId = "native-session") => ({
     jsonrpc: "2.0",
     method: "_x.ai/session/update",
     params: {
@@ -73,7 +91,7 @@ async function fixture(legacy = true) {
     socket.on("error", () => {});
     socket.on("close", () => sockets.delete(socket));
     let buffer = Buffer.alloc(0);
-    const frame = (body) => {
+    const frame = (body: unknown) => {
       const payload = Buffer.from(JSON.stringify(body));
       const header = Buffer.alloc(4);
       header.writeUInt32BE(payload.length);
@@ -81,8 +99,8 @@ async function fixture(legacy = true) {
       socket.write(header.subarray(0, 2));
       socket.write(Buffer.concat([header.subarray(2), payload]));
     };
-    const acp = (message) => frame({ type: "acp", payload: JSON.stringify(message) });
-    const handle = (message) => {
+    const acp = (message: unknown) => frame({ type: "acp", payload: JSON.stringify(message) });
+    const handle = (message: any) => {
       if (message.type === "register") {
         expect(message.capabilities).toEqual({});
         frame({
@@ -103,7 +121,7 @@ async function fixture(legacy = true) {
         replies.push(req);
         return;
       }
-      const respond = (result) => acp({ jsonrpc: "2.0", id: req.id, result });
+      const respond = (result: unknown) => acp({ jsonrpc: "2.0", id: req.id, result });
       if (req.method === "initialize") {
         respond({
           protocolVersion: 1,
@@ -128,7 +146,7 @@ async function fixture(legacy = true) {
               acp({
                 ...behavior.replay,
                 params: {
-                  ...behavior.replay.params,
+                  ...behavior.replay!.params,
                   _meta: {
                     isReplay:
                       behavior.sequence.indexOf("completion") <
@@ -227,7 +245,7 @@ async function fixture(legacy = true) {
         }
       }
     };
-    socket.on("data", (chunk) => {
+    socket.on("data", (chunk: Buffer) => {
       buffer = Buffer.concat([buffer, chunk]);
       while (buffer.length >= 4 && buffer.length >= buffer.readUInt32BE(0) + 4) {
         const length = buffer.readUInt32BE(0);
@@ -237,7 +255,7 @@ async function fixture(legacy = true) {
       }
     });
   });
-  await new Promise((resolve) => server.listen(socketPath, resolve));
+  await new Promise<void>((resolve) => server.listen(socketPath, resolve));
   chmodSync(socketPath, 0o777); // Native leader relies on its private parent directory.
   cleanups.push(() => {
     for (const socket of sockets) {
@@ -259,7 +277,7 @@ async function fixture(legacy = true) {
           headers: { "x-swarmail-event-id": "9" },
         });
       }
-      return new Promise((resolve) => {
+      return new Promise<Response>((resolve) => {
         const t = setTimeout(() => resolve(new Response(null, { status: 204 })), 1000);
         req.signal.addEventListener(
           "abort",
@@ -276,7 +294,7 @@ async function fixture(legacy = true) {
   const config = {
     swarmailUrl: `http://127.0.0.1:${mail.port}`,
     target: {
-      type: "grok-queue",
+      type: "grok-queue" as const,
       id: "native-session",
       socket: socketPath,
       cwd: dir,
@@ -351,12 +369,12 @@ test("legacy Grok journal persists attempted before dispatch, completes before a
   run.kill();
   await run.exited;
   expect(f.requests).toHaveLength(1);
-  const saved = JSON.parse(f.requests[0].state.pending);
+  const saved = JSON.parse(f.requests[0]!.state!.pending);
   expect(saved.command.phase).toBe("attempted");
-  expect(saved.command.promptId).toBe(f.requests[0].request.params._meta.promptId);
-  expect(f.requests[0].state.acknowledged).toBe(0);
-  expect(f.state().pending).toBeNull();
-  expect(f.state().acknowledged).toBe(9);
+  expect(saved.command.promptId).toBe(f.requests[0]!.request.params._meta.promptId);
+  expect(f.requests[0]!.state!.acknowledged).toBe(0);
+  expect(f.state()!.pending).toBeNull();
+  expect(f.state()!.acknowledged).toBe(9);
   expect(f.replies).toEqual([]);
 });
 
@@ -365,7 +383,7 @@ test("lost reply stays ambiguous across restarts and only exact successful repla
   f.behavior.drop = true;
   const first = f.start();
   expect(await first.exited).toBe(1);
-  const saved = JSON.parse(f.state().pending).command;
+  const saved = JSON.parse(f.state()!.pending).command;
   expect(saved.phase).toBe("attempted");
   expect(await new Response(first.stderr).text()).toContain("no resend");
   f.behavior.drop = false;
@@ -378,7 +396,7 @@ test("lost reply stays ambiguous across restarts and only exact successful repla
     f.behavior.replay = replay;
     const attempt = f.start();
     expect(await attempt.exited).toBe(1);
-    expect(f.state().acknowledged).toBe(0);
+    expect(f.state()!.acknowledged).toBe(0);
     expect(f.requests).toHaveLength(1);
   }
   f.behavior.replay = f.completion(saved.promptId);
@@ -387,7 +405,7 @@ test("lost reply stays ambiguous across restarts and only exact successful repla
   recovered.kill();
   await recovered.exited;
   expect(f.requests).toHaveLength(1);
-  expect(f.state().acknowledged).toBe(9);
+  expect(f.state()!.acknowledged).toBe(9);
   expect(f.replies).toEqual([]);
 }, 15000);
 
@@ -396,13 +414,13 @@ test("process death during queued delivery preserves the command and recovery ne
   f.behavior.complete = false;
   const run = f.start();
   await until(() => f.requests.length === 1);
-  expect(f.state().acknowledged).toBe(0);
+  expect(f.state()!.acknowledged).toBe(0);
   const competing = f.start();
   expect(await competing.exited).toBe(1);
   expect(await new Response(competing.stderr).text()).toContain("another wake bridge owns");
   run.kill("SIGKILL");
   await run.exited;
-  const saved = JSON.parse(f.state().pending).command;
+  const saved = JSON.parse(f.state()!.pending).command;
   f.behavior.replay = f.completion(saved.promptId);
   const resumed = f.start();
   await until(() => f.state()?.acknowledged === 9);
@@ -417,7 +435,7 @@ test("incompatible leader fails before dispatch and changing destination refuses
   const invalid = f.start();
   expect(await invalid.exited).toBe(1);
   expect(f.requests).toHaveLength(0);
-  expect(JSON.parse(f.state().pending).command.phase).toBe("prepared");
+  expect(JSON.parse(f.state()!.pending).command.phase).toBe("prepared");
   f.config.target.cwd = join(f.dir, "other");
   writeFileSync(f.configPath, JSON.stringify(f.config));
   const changed = f.start();
@@ -433,15 +451,15 @@ for (const legacy of [true, false]) {
     await until(() => f.requests.length === 1);
     run.kill();
     expect(await run.exited).toBe(0);
-    expect(f.state().acknowledged).toBe(0);
-    const saved = JSON.parse(f.state().pending);
+    expect(f.state()!.acknowledged).toBe(0);
+    const saved = JSON.parse(f.state()!.pending);
     expect(saved.command.phase).toBe("attempted");
     const recovery = f.start();
     await until(() => f.loads.length === 2);
     recovery.kill();
     expect(await recovery.exited).toBe(0);
-    expect(JSON.parse(f.state().pending)).toEqual(saved);
-    expect(f.state().acknowledged).toBe(0);
+    expect(JSON.parse(f.state()!.pending)).toEqual(saved);
+    expect(f.state()!.acknowledged).toBe(0);
     expect(f.requests).toHaveLength(1);
     if (legacy) {
       expect(f.offers).toEqual([]);
@@ -465,13 +483,13 @@ test("a crash after durable marking but before dispatch never authorizes a resen
   const initial = f.start();
   expect(await initial.exited).toBe(1);
   expect(f.requests).toHaveLength(0);
-  const pending = JSON.parse(f.state().pending);
+  const pending = JSON.parse(f.state()!.pending);
   expect(pending.command.phase).toBe("prepared");
   pending.command.phase = "attempted";
   const stateDir = join(f.dir, "state/swarmail-bridge");
   const name = readdirSync(stateDir).find(
     (file) => file.endsWith(".sqlite") && !file.includes(".lock."),
-  );
+  )!;
   const db = new Database(join(stateDir, name));
   db.query("UPDATE state SET pending = ?").run(JSON.stringify(pending));
   db.close();
@@ -482,8 +500,8 @@ test("a crash after durable marking but before dispatch never authorizes a resen
   expect(await recovered.exited).toBe(1);
   expect(await new Response(recovered.stderr).text()).toContain("no resend");
   expect(f.requests).toHaveLength(0);
-  expect(f.state().acknowledged).toBe(0);
-  expect(JSON.parse(f.state().pending)).toEqual(pending);
+  expect(f.state()!.acknowledged).toBe(0);
+  expect(JSON.parse(f.state()!.pending)).toEqual(pending);
 });
 
 for (const evidence of ["success", "cancelled", "wrong prompt", "wrong session"]) {
@@ -499,9 +517,9 @@ for (const evidence of ["success", "cancelled", "wrong prompt", "wrong session"]
       evidence === "cancelled" ? "cancelled" : "end_turn",
       evidence === "wrong session" ? "another-session" : f.config.target.id,
     );
-    const failures = [];
+    const failures: string[] = [];
     let checked = 0;
-    const enumerate = async (sequence, remaining) => {
+    const enumerate = async (sequence: string[], remaining: string[]): Promise<void> => {
       if (remaining.length) {
         for (const event of remaining) {
           await enumerate(
@@ -512,7 +530,7 @@ for (const evidence of ["success", "cancelled", "wrong prompt", "wrong session"]
         return;
       }
       f.behavior.sequence = sequence;
-      const marks = [];
+      const marks: string[] = [];
       let admitted = false;
       try {
         await deliverGrok(
@@ -525,8 +543,8 @@ for (const evidence of ["success", "cancelled", "wrong prompt", "wrong session"]
         );
         admitted = true;
       } catch (error) {
-        if (!error.message.includes("pending retained, no resend")) {
-          failures.push(`${sequence.join(" -> ")}: unexpected failure ${error.message}`);
+        if (!(error as Error).message.includes("pending retained, no resend")) {
+          failures.push(`${sequence.join(" -> ")}: unexpected failure ${(error as Error).message}`);
         }
       }
       await f.settled();
@@ -559,16 +577,16 @@ test("native Grok interjection confirms actor admission without a queued prompt 
   run.kill();
   await run.exited;
   expect(f.requests).toHaveLength(1);
-  expect(f.requests[0].request.method).toBe("_x.ai/interject");
-  const saved = JSON.parse(f.requests[0].state.pending).command;
-  expect(f.requests[0].request.params).toEqual({
+  expect(f.requests[0]!.request.method).toBe("_x.ai/interject");
+  const saved = JSON.parse(f.requests[0]!.state!.pending).command;
+  expect(f.requests[0]!.request.params).toEqual({
     sessionId: "native-session",
     text: saved.text,
     interjectionId: saved.promptId,
   });
   expect(saved.phase).toBe("attempted");
   expect(saved.delivery).toBe("steer");
-  expect(f.state().acknowledged).toBe(9);
+  expect(f.state()!.acknowledged).toBe(9);
   expect(f.replies).toEqual([]);
 });
 
@@ -580,22 +598,22 @@ for (const failure of ["drop", "mismatch", "missing-echo"]) {
     f.behavior.complete = failure !== "missing-echo";
     const first = f.start();
     expect(await first.exited).toBe(1);
-    const saved = JSON.parse(f.state().pending).command;
+    const saved = JSON.parse(f.state()!.pending).command;
     f.behavior.drop = false;
     f.behavior.complete = true;
     const second = f.start();
     expect(await second.exited).toBe(1);
     expect(f.requests).toHaveLength(1);
-    expect(f.state().acknowledged).toBe(0);
-    expect(JSON.parse(f.state().pending).command).toEqual(saved);
+    expect(f.state()!.acknowledged).toBe(0);
+    expect(JSON.parse(f.state()!.pending).command).toEqual(saved);
   });
 }
 
 test("Grok steering admits only receipt and matching echo before disconnect in every ordering", async () => {
   const f = await fixture(false);
-  const failures = [];
+  const failures: unknown[] = [];
   let checked = 0;
-  const enumerate = async (sequence, remaining) => {
+  const enumerate = async (sequence: string[], remaining: string[]): Promise<void> => {
     if (remaining.length) {
       for (const event of remaining) {
         await enumerate(
