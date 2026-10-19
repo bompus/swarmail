@@ -4,6 +4,13 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- A wake bridge stops with an authentication failure when T3 Code rejects the token its authorization file currently
+  holds (HTTP 401), instead of retrying forever; a standalone bridge whose token was revoked or expired now exits. A
+  401 for a token that rotation already replaced is still retried, since rotation writes the new header before revoking
+  the old token. `docs/wake-bridges.md` also corrects how notices are recognized: T3 Code records every message a client
+  sends as `createdBy: "user"`, so a bridge owns only the notices whose ids it saved, and it leaves other queued
+  `Swarmail: ` messages alone.
+
 - `pr-sessions` shows which conversations T3 Code is watching a pull request for. Each link now has `watchingSince`:
   when T3 started watching that pull request for the conversation, or null when it is not watching (including after a
   watch ended). A watch whose start time is not a string fails the lookup like other malformed link metadata.
