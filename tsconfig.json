@@ -9,7 +9,7 @@
     "strict": true,
     "skipLibCheck": true,
     "allowJs": true,
-    "checkJs": false,
+    "checkJs": true,
     "types": ["bun"],
     "lib": ["ESNext"],
     "noUncheckedIndexedAccess": true,
@@ -21,6 +21,5 @@
     "libReplacement": false,
     "isolatedModules": true,
     "resolveJsonModule": true
-  },
-  "include": ["src/**/*.ts", "scripts/**/*.ts"]
+  }
 }

@@ -11,7 +11,7 @@ export const SENDING_GUIDANCE =
   "Use one supported transport per recipient and purpose; uncertain delivery is not a reason to resend by another route. " +
   "Keep routine progress in your own conversation; do not send courtesy acknowledgements or reply to thanks.";
 
-// Claude Code shows only the first 4096 characters of a server's instructions; see test/guidance.test.js.
+// Claude Code shows only the first 4096 characters of a server's instructions; see test/guidance.test.ts.
 export const AGENT_GUIDANCE =
   "Swarmail provides local mail, session rosters and advisory file reservations. " +
   "Reuse your existing registered name across projects; macro_start_session registers when needed. " +

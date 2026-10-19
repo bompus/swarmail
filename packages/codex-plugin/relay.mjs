@@ -9,11 +9,18 @@ const url = process.env.SWARMAIL_URL || "http://127.0.0.1:18765/mcp/";
 const install = "https://github.com/bompus/swarmail#install";
 // Tool calls answer in milliseconds; nothing on /mcp/ long-polls.
 const TIMEOUT_MS = 30_000;
+/** @type {string | undefined} */
 let protocolVersion;
 
+/** @param {unknown} message */
 const write = (message) => process.stdout.write(JSON.stringify(message) + "\n");
+/**
+ * @param {unknown} id
+ * @param {string} message
+ */
 const fail = (id, message) => write({ jsonrpc: "2.0", id, error: { code: -32000, message } });
 
+/** @param {string} line */
 async function relay(line) {
   let msg;
   try {
@@ -41,7 +48,7 @@ async function relay(line) {
     const reason = timedOut
       ? `no answer within ${TIMEOUT_MS / 1000} s`
       : e instanceof Error
-        ? (e.cause?.code ?? e.message)
+        ? (/** @type {{ code?: string } | undefined} */ (e.cause)?.code ?? e.message)
         : String(e);
     process.stderr.write(`swarmail-mcp: ${url}: ${reason}\n`);
     if (id !== undefined) {

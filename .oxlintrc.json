@@ -5,13 +5,13 @@
   },
   "rules": {
     "no-unused-vars": [
-      "warn",
+      "error",
       {
         "ignoreRestSiblings": true
       }
     ],
     "no-unused-expressions": [
-      "warn",
+      "error",
       {
         "allowTernary": true,
         "allowShortCircuit": true
@@ -28,8 +28,10 @@
         "null": "ignore"
       }
     ],
-    "eslint/no-var": "warn",
-    "unicorn/prefer-string-slice": "warn",
+    "eslint/no-var": "error",
+    // Style only: substring and slice both work. The shared baseline has no warn-level rules,
+    // so each former warn rule is an error when it catches bugs and off when it is only style.
+    "unicorn/prefer-string-slice": "off",
     "eslint/no-throw-literal": "error",
     "eslint/no-unsafe-optional-chaining": [
       "error",
@@ -80,34 +82,36 @@
         "skipComments": false
       }
     ],
-    "max-depth": [
-      "warn",
-      {
-        "max": 4
-      }
-    ],
-    "max-lines-per-function": [
-      "warn",
-      {
-        "max": 100,
-        "skipBlankLines": true,
-        "skipComments": true
-      }
-    ],
-    "max-params": [
-      "warn",
-      {
-        "max": 5
-      }
-    ]
+    // Size limits are style, not bug checks, so they are off for the same reason;
+    // max-lines above stays an error.
+    "max-depth": "off",
+    "max-lines-per-function": "off",
+    "max-params": "off"
   },
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "import", "promise"],
   "overrides": [
     {
-      "files": ["test/**"],
+      // Tests build mocks and loose test data, so the type-strictness rules below are off there,
+      // along with the file-length limit. The bug checks (floating promises, unnecessary
+      // conditions and the rest) stay on.
+      "files": [
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/test/**",
+        "**/tests/**",
+        "**/__tests__/**"
+      ],
       "rules": {
-        "max-lines-per-function": "off",
-        "max-lines": "off"
+        "max-lines": "off",
+        "typescript/no-explicit-any": "off",
+        "typescript/no-non-null-assertion": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/no-unsafe-type-assertion": "off"
       }
     }
   ]

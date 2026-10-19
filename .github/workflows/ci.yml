@@ -20,6 +20,18 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
+      - name: Install shellcheck and shfmt
+        run: |
+          bin="$RUNNER_TEMP/bin"
+          mkdir -p "$bin"
+          curl -fsSL -o "$RUNNER_TEMP/shellcheck.tar.gz" https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.gz
+          echo "b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6  $RUNNER_TEMP/shellcheck.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/shellcheck.tar.gz" -C "$RUNNER_TEMP"
+          mv "$RUNNER_TEMP/shellcheck-v0.11.0/shellcheck" "$bin/"
+          curl -fsSL -o "$bin/shfmt" https://github.com/mvdan/sh/releases/download/v3.14.1/shfmt_v3.14.1_linux_amd64
+          echo "76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf  $bin/shfmt" | sha256sum -c -
+          chmod +x "$bin/shfmt"
+          echo "$bin" >> "$GITHUB_PATH"
       - run: bun run check
       - run: bun test
 
@@ -34,6 +46,20 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
+      - name: Install shellcheck and shfmt
+        shell: pwsh
+        run: |
+          $bin = Join-Path $env:RUNNER_TEMP 'bin'
+          New-Item -ItemType Directory -Force $bin | Out-Null
+          $zip = Join-Path $env:RUNNER_TEMP 'shellcheck.zip'
+          Invoke-WebRequest -Uri https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.zip -OutFile $zip
+          if ((Get-FileHash $zip -Algorithm SHA256).Hash -ne '8A4E35AB0B331C85D73567B12F2A444DF187F483E5079CEFFA6BDA1FAA2E740E') { throw 'shellcheck checksum mismatch' }
+          Expand-Archive $zip -DestinationPath (Join-Path $env:RUNNER_TEMP 'shellcheck')
+          Move-Item (Join-Path $env:RUNNER_TEMP 'shellcheck/shellcheck.exe') $bin
+          $shfmt = Join-Path $bin 'shfmt.exe'
+          Invoke-WebRequest -Uri https://github.com/mvdan/sh/releases/download/v3.14.1/shfmt_v3.14.1_windows_amd64.exe -OutFile $shfmt
+          if ((Get-FileHash $shfmt -Algorithm SHA256).Hash -ne '13629CE28442CA80B6B5A819F7574AB39E1C28C6E26734CA816C9714E04851DF') { throw 'shfmt checksum mismatch' }
+          Add-Content -Path $env:GITHUB_PATH -Value $bin
       - run: bun run check
       # Windows runners take about 1.7 times as long as Linux, which puts
       # several tests near Bun's 5-second default. Tests that set their own

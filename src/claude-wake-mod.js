@@ -10,6 +10,21 @@
 // dropped connection, a reload) is offered again.
 // Claude Code checks the module statically: `$` is only ever a parameter named `$`, never stored.
 
+// The parts of the mod API this module uses.
+/**
+ * @typedef {object} ModApi
+ * @property {{ after(ms: number, fn: () => void): void }} clock
+ * @property {{ get(name: string): Promise<string | undefined>, set(name: string, value: string): Promise<void> }} env
+ * @property {{ read(path: string): Promise<string> }} fs
+ * @property {{ fetch(url: string): Promise<{ status: number, text: string, headers: Record<string, string> }> }} http
+ * @property {{ id(): Promise<string> }} session
+ * @property {{ submit(prompt: { text: string }): Promise<void> }} prompt
+ * @typedef {{ isInteractive?: boolean, agentId?: string }} ModEvent
+ * @typedef {{ deny?: unknown, context?: string[] }} ToolResult
+ * @typedef {($: ModApi, e: ModEvent, next: (e: ModEvent) => Promise<any>) => Promise<any>} Handler
+ * @typedef {{ hint: string, eventId: number, sid: string, submitting?: boolean }} HeldHint
+ */
+
 // $.http.fetch gives up after 30 s.
 const WAIT_SECONDS = 25;
 // A session with nobody at the prompt (`claude -p` and SDK hosts alike) polls for a shorter time. A
@@ -26,6 +41,7 @@ const HELD_MS = 1000;
 // One module runs per session, so its state is the session's. `busy`: a main-loop turn is running. `held`: the hint
 // the server offered and this mod has not delivered yet, { hint, eventId, sid, submitting }; no wait runs while one is held.
 let busy = false;
+/** @type {HeldHint | null} */
 let held = null;
 let acked = 0;
 // The session `acked` belongs to; /clear and /resume change it, and the new session starts over.
@@ -34,6 +50,10 @@ let waitedFor = "";
 let generation = 0;
 let waitSeconds = WAIT_SECONDS;
 
+/**
+ * @param {ModApi} $
+ * @param {number} ms
+ */
 function schedule($, ms) {
   const mine = generation;
   $.clock.after(ms, () => {
@@ -43,6 +63,10 @@ function schedule($, ms) {
   });
 }
 
+/**
+ * @param {ModApi} $
+ * @param {string} sid
+ */
 async function registered($, sid) {
   // The register hook's directory (stateHome in paths.ts): HOME, or the user profile on Windows, where HOME is
   // usually unset.
@@ -56,10 +80,18 @@ async function registered($, sid) {
 }
 
 function delivered() {
+  // A session.start during the delivery already cleared the hint and the cursor.
+  if (!held) {
+    return;
+  }
   acked = held.eventId;
   held = null;
 }
 
+/**
+ * @param {ModApi} $
+ * @param {string} sid
+ */
 async function eligible($, sid) {
   const base = (await $.env.get("SWARMAIL_WAKE_URL")) || "http://127.0.0.1:18765";
   try {
@@ -70,26 +102,35 @@ async function eligible($, sid) {
   }
 }
 
+/**
+ * Offers the held hint as a new prompt. Returns whether it was delivered.
+ * @param {ModApi} $
+ */
 async function submit($) {
   const pending = held;
+  if (!pending) {
+    return false;
+  }
   const allowed = await eligible($, pending.sid);
   const sid = await $.session.id();
   const live = await registered($, pending.sid);
   if (!allowed || !live || sid !== pending.sid || held !== pending || pending.submitting) {
-    return;
+    return false;
   }
-  held.submitting = true;
+  pending.submitting = true;
   try {
     // Resolves once the turn starts, or once the prompt is queued behind a turn that started meanwhile.
-    await $.prompt.submit({ text: held.hint });
+    await $.prompt.submit({ text: pending.hint });
   } catch (error) {
-    held.submitting = false;
+    pending.submitting = false;
     throw error;
   }
   delivered();
+  return true;
 }
 
 // One wait for mail to the session's agents, once it is registered: the pause before the next step.
+/** @param {ModApi} $ */
 async function wait($) {
   // The id changes after /clear, which raises no new session.start.
   const sid = await $.session.id();
@@ -128,6 +169,7 @@ async function wait($) {
 }
 
 // One step of the session's only chain of timers, so every API call goes through the `$` session.start gave it.
+/** @param {ModApi} $ */
 async function round($) {
   let delay;
   try {
@@ -138,10 +180,8 @@ async function round($) {
     if (!held) {
       delay = await wait($);
     } else {
-      if (!busy) {
-        await submit($);
-      }
-      delay = held ? HELD_MS : 0;
+      const sent = !busy && (await submit($));
+      delay = sent ? 0 : HELD_MS;
     }
   } catch {
     delay = ERROR_MS;
@@ -149,6 +189,7 @@ async function round($) {
   schedule($, delay);
 }
 
+/** @param {(event: string, handler: Handler) => void} on */
 export function register(on) {
   on("session.start", async ($, e, next) => {
     // `claude -p` answers one prompt and exits, so it gets no wake, as with the hook. The SDK (T3) is `sdk-ts`.

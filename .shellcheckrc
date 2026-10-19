@@ -1,0 +1,5 @@
+# Follow `source` lines, resolving paths from the script's own directory.
+external-sources=true
+source-path=SCRIPTDIR
+# Optional checks: unassigned uppercase variables, `which`, `[ "$var" ]` tests.
+enable=check-unassigned-uppercase,deprecate-which,avoid-nullary-conditions

@@ -1,0 +1,29 @@
+root = true
+
+# Only the file types the standard covers. Every other file (PHP, HTML templates, served trees,
+# vendored code) keeps its own whitespace, so an editor that honours this file adds no churn to it.
+# Don't add a [*] section with these settings.
+[*.{js,mjs,cjs,jsx,ts,mts,cts,tsx,json,jsonc,md,yml,yaml,toml,py,sh,bash}]
+charset = utf-8
+end_of_line = lf
+indent_size = 2
+indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Matches printWidth in .oxfmtrc.json and line-length in ruff.toml.
+[*.{js,mjs,cjs,ts,json,jsonc}]
+max_line_length = 100
+
+# Two trailing spaces are a markdown hard line break.
+[*.md]
+trim_trailing_whitespace = false
+
+[*.py]
+indent_size = 4
+max_line_length = 100
+
+# shfmt reads these keys.
+[*.{sh,bash}]
+binary_next_line = true
+switch_case_indent = true

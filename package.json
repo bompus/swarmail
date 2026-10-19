@@ -12,7 +12,8 @@
     "lint": "oxlint --deny-warnings .",
     "fmt": "oxfmt",
     "check:published": "bun scripts/check-published.ts",
-    "check": "bun scripts/check-release.ts && oxfmt --check && oxlint --deny-warnings . && tsc --noEmit -p tsconfig.json"
+    "check": "bun scripts/check-release.ts && oxfmt --check && oxlint --deny-warnings . && tsc --noEmit -p tsconfig.json && bun run check:shell",
+    "check:shell": "shellcheck scripts/enable.sh && shfmt -d scripts/enable.sh"
   },
   "devDependencies": {
     "@types/bun": "1.4.3",
