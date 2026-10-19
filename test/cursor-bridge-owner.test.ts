@@ -31,7 +31,7 @@ test("Cursor hooks leave a settled automatic T3 registration to its bridge and k
     tags: { repo: "[t3:thread-a cursor:native-cursor cwd:repo]" },
     wakeThread: "thread-a",
   };
-  const cases = [
+  const cases: [string, string | Record<string, unknown>, boolean][] = [
     ["enrolled", valid, true],
     ["native", { ...valid, wakeThread: undefined }, false],
     ["ended", { ...valid, ended: "ended" }, false],
@@ -85,8 +85,8 @@ test("Cursor hooks leave a settled automatic T3 registration to its bridge and k
             stderr: "pipe",
           },
         );
-        child.stdin.write(JSON.stringify({ conversation_id: "native-cursor" }));
-        child.stdin.end();
+        await child.stdin.write(JSON.stringify({ conversation_id: "native-cursor" }));
+        await child.stdin.end();
         const [code, output] = await Promise.all([child.exited, new Response(child.stdout).text()]);
         expect({ label, code, output: JSON.parse(output), requests }).toEqual({
           label,
@@ -95,15 +95,20 @@ test("Cursor hooks leave a settled automatic T3 registration to its bridge and k
             ? {}
             : mode === "wake"
               ? { followup_message: "Swarmail: fixture mail" }
-              : state.ended
+              : typeof state !== "string" && state.ended
                 ? {}
                 : { additional_context: "Swarmail: fixture mail" },
-          requests: owned || (mode === "context" && state.ended) ? 0 : mode === "wake" ? 2 : 1,
+          requests:
+            owned || (mode === "context" && typeof state !== "string" && state.ended)
+              ? 0
+              : mode === "wake"
+                ? 2
+                : 1,
         });
       }
     }
   } finally {
-    server.stop(true);
+    await server.stop(true);
     rmSync(dir, { recursive: true, force: true });
   }
 });

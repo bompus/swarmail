@@ -17,17 +17,17 @@ import { testScratch } from "./fixtures/test-scratch.ts";
 
 // Rotation and listener identity require Linux process and private-file semantics.
 describe.skipIf(process.platform !== "linux")("credential ownership and rotation", () => {
-  const roots = [];
-  const servers = [];
-  afterEach(() => {
+  const roots: string[] = [];
+  const servers: Bun.Server<undefined>[] = [];
+  afterEach(async () => {
     for (const server of servers.splice(0)) {
-      server.stop(true);
+      await server.stop(true);
     }
     for (const root of roots.splice(0)) {
       rmSync(root, { recursive: true, force: true });
     }
   });
-  const scratch = testScratch("swarmail-credentials-tests", "credential rotation contract tests");
+  const scratch = testScratch();
 
   function fixture(version = "0.0.43-nightly.20260928.2402") {
     const root = mkdtempSync(join(scratch, "case-"));
@@ -81,7 +81,7 @@ else if(args[2]==='revoke'){
           await Bun.sleep(1200);
         }
         const row = JSON.parse(readFileSync(dbPath, "utf8")).find(
-          (x) => "Bearer " + x.token === request.headers.get("authorization"),
+          (x: any) => "Bearer " + x.token === request.headers.get("authorization"),
         );
         if (!row || row.revoked || Date.parse(row.expiresAt) <= Date.now() || mode === "reject") {
           return Response.json({ authenticated: false });
@@ -95,7 +95,18 @@ else if(args[2]==='revoke'){
       },
     });
     servers.push(server);
-    const config = {
+    // The rotator's config file; tests drop or add fields to reach each refusal.
+    const config: {
+      target: { type: string; id: string; url?: string; authorizationFile: string };
+      rotation: {
+        executable: string;
+        baseDir: string;
+        version?: string;
+        ttlSeconds: number;
+        renewBeforeSeconds: number;
+        verifyBackend?: boolean;
+      };
+    } = {
       target: {
         type: "t3-v1-steer",
         id: "test-thread",
@@ -113,7 +124,7 @@ else if(args[2]==='revoke'){
     const configPath = join(root, "config.json");
     const configure = () => writeFileSync(configPath, JSON.stringify(config));
     configure();
-    const run = async (...args) => {
+    const run = async (...args: string[]) => {
       const proc = Bun.spawn(
         [
           process.execPath,
@@ -132,7 +143,7 @@ else if(args[2]==='revoke'){
       return { out, err, code };
     };
     const rows = () => JSON.parse(readFileSync(dbPath, "utf8"));
-    const mode = (value) => writeFileSync(modePath, value);
+    const mode = (value: string) => writeFileSync(modePath, value);
     const statePath = join(config.target.authorizationFile + ".rotation", "state.json");
     return { root, run, rows, mode, config, configure, statePath, dbPath };
   }
@@ -393,29 +404,34 @@ else if(args[2]==='revoke'){
       );
       const paths = [f.statePath, headerPath, f.dbPath];
       const snapshot = () => paths.map((path) => readFileSync(path));
-      const restore = (saved) => paths.forEach((path, index) => writeFileSync(path, saved[index]));
-      const failures = [];
+      const restore = (saved: ReturnType<typeof snapshot>) =>
+        paths.forEach((path, index) => writeFileSync(path, saved[index]!));
+      const failures: string[] = [];
       let checked = 0;
       const events = ["recover", "cleanup fails", "revoke", "issuer finishes"];
-      const check = (sequence, before, result) => {
+      const check = (
+        sequence: string[],
+        before: any,
+        result: Awaited<ReturnType<typeof f.run>> | undefined,
+      ) => {
         const label = sequence.join(" -> ");
         const after = JSON.parse(readFileSync(f.statePath, "utf8"));
         const rows = f.rows();
-        const live = rows.filter((row) => !row.revoked);
+        const live = rows.filter((row: any) => !row.revoked);
         const ownedIds = new Set(
           [after.current, after.pending?.credential, ...after.retired]
             .filter(Boolean)
             .map((credential) => credential.sessionId),
         );
         const ownedSubjects = new Set([after.pending?.subject, ...(after.abandoned ?? [])]);
-        const assert = (condition, invariant) => {
+        const assert = (condition: unknown, invariant: string) => {
           if (!condition) {
             failures.push(`${label}: ${invariant}`);
           }
         };
         if (sequence.at(-1) === "recover") {
           assert(
-            result.code === (before.disabled ? 1 : 0),
+            result!.code === (before.disabled ? 1 : 0),
             "recovery succeeds unless explicitly disabled",
           );
         }
@@ -423,11 +439,11 @@ else if(args[2]==='revoke'){
           const unresolved =
             boundary === "unresolved issuance" && !sequence.includes("issuer finishes");
           assert(
-            result.code === (unresolved ? 1 : 0),
+            result!.code === (unresolved ? 1 : 0),
             "revoke reports unresolved issuance and otherwise succeeds",
           );
         }
-        for (const row of live.filter((row) => row.subject !== unrelated.subject)) {
+        for (const row of live.filter((row: any) => row.subject !== unrelated.subject)) {
           assert(
             ownedIds.has(row.sessionId) || ownedSubjects.has(row.subject),
             `live credential ${row.sessionId} remains durably owned`,
@@ -436,19 +452,19 @@ else if(args[2]==='revoke'){
         if (!after.disabled) {
           const published = readFileSync(headerPath, "utf8").trim();
           assert(
-            live.some((row) => `Bearer ${row.token}` === published),
+            live.some((row: any) => `Bearer ${row.token}` === published),
             "published credential remains live while enabled",
           );
         }
         assert(
-          JSON.stringify(rows.find((row) => row.sessionId === unrelated.sessionId)) ===
+          JSON.stringify(rows.find((row: any) => row.sessionId === unrelated.sessionId)) ===
             JSON.stringify(unrelated),
           "unrelated credential remains unchanged",
         );
         if (before.disabled) {
           assert(after.disabled === true, "explicit disable survives recovery");
           assert(
-            rows.every((row) =>
+            rows.every((row: any) =>
               [original.sessionId, unrelated.sessionId, candidate.sessionId].includes(
                 row.sessionId,
               ),
@@ -456,10 +472,10 @@ else if(args[2]==='revoke'){
             "disabled rotation never issues another credential",
           );
         }
-        if (sequence.at(-1) === "revoke" && result.code === 0) {
+        if (sequence.at(-1) === "revoke" && result!.code === 0) {
           assert(after.disabled === true, "successful revoke persists disabled state");
           assert(
-            !live.some((row) => row.sessionId === after.current?.sessionId),
+            !live.some((row: any) => row.sessionId === after.current?.sessionId),
             "successful revoke revokes current credential",
           );
         }
@@ -469,14 +485,14 @@ else if(args[2]==='revoke'){
           sequence.includes("issuer finishes")
         ) {
           assert(
-            !live.some((row) => row.sessionId === candidate.sessionId),
+            !live.some((row: any) => row.sessionId === candidate.sessionId),
             "successful recovery cleans up the late issuer",
           );
         }
       };
       // Enumerate every prefix through four events. The issuer can finish only once;
       // rotator invocations are serialized by the production lock, not interleaved internally.
-      const walk = async (sequence = []) => {
+      const walk = async (sequence: string[] = []) => {
         if (sequence.length === 4) {
           return;
         }
@@ -555,7 +571,7 @@ else if(args[2]==='revoke'){
       mkdirSync(join(baseDir, "userdata"), { recursive: true });
       // verifyT3Backend requires the listener to hold T3's database open; this process is the listener.
       const database = new Database(join(baseDir, "userdata/state.sqlite"));
-      const requests = [];
+      const requests: string[] = [];
       const server = Bun.serve({
         hostname: "127.0.0.1",
         port: 0,
@@ -587,7 +603,7 @@ else if(args[2]==='revoke'){
       chmodSync(join(root, "auth"), 0o700);
       const header = "Bearer fixture-secret-minute";
       writeFileSync(config.target.authorizationFile, header, { mode: 0o600 });
-      const saveState = (current) =>
+      const saveState = (current: { sessionId: string; expiresAt: string; digest: string }) =>
         writeFileSync(
           join(rotation, "state.json"),
           JSON.stringify({
@@ -606,14 +622,15 @@ else if(args[2]==='revoke'){
         );
       const digest = createHash("sha256").update(header).digest("hex");
       saveState({ sessionId: "minute", expiresAt, digest });
-      const publish = (pid) =>
+      const publish = (pid: number) =>
         writeFileSync(
           join(baseDir, "userdata/server-runtime.json"),
           JSON.stringify({ version: 1, pid, port: server.port }),
         );
       const spawn = Bun.spawn;
-      const cli = [];
-      Bun.spawn = (command, options) => {
+      const cli: unknown[] = [];
+      // A spy on every spawn signature, so it is typed loosely.
+      (Bun as any).spawn = (command: any, options: any) => {
         if (Array.isArray(command) && command[0] === realpathSync(process.execPath)) {
           cli.push(command);
         }
@@ -631,7 +648,7 @@ else if(args[2]==='revoke'){
         expect(requests).toEqual(["/api/auth/session"]);
         // A listener other than the published one gets no request carrying the token.
         publish(process.pid + 1_000_000);
-        await expect(checkCredential()).rejects.toBeInstanceOf(T3Unavailable);
+        expect(checkCredential()).rejects.toBeInstanceOf(T3Unavailable);
         expect(requests).toHaveLength(1);
         // Renewal due: the full path takes over without a request from the minute check.
         publish(process.pid);

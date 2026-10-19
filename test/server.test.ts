@@ -10,35 +10,39 @@ import {
   utimesSync,
   writeFileSync,
 } from "node:fs";
+import type { PathLike } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer, pruneGoneProjects, retireIdleAgents } from "../src/server.ts";
 import { iso, openDatabase, parseIso } from "../src/db.ts";
 
 const P = "/w/project";
-let dir, server, db, url;
+let dir: string;
+let server: ReturnType<typeof createServer>["server"];
+let db: ReturnType<typeof createServer>["db"];
+let url: string;
 
 beforeAll(() => {
   dir = realpathSync.native(mkdtempSync(join(tmpdir(), "swarmail-server-")));
   ({ server, db } = createServer(join(dir, "mail.sqlite3"), 0));
   url = `http://127.0.0.1:${server.port}/mcp/`;
 });
-afterAll(() => {
-  server.stop(true);
+afterAll(async () => {
+  await server.stop(true);
   db.close();
   rmSync(dir, { recursive: true, force: true });
 });
 
 let nextId = 0;
-async function rpc(method, params) {
+async function rpc(method: string, params: unknown): Promise<any> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: ++nextId, method, params }),
   });
-  return (await res.json()).result;
+  return ((await res.json()) as any).result;
 }
-async function call(name, args) {
+async function call(name: string, args: Record<string, unknown>): Promise<any> {
   const r = await rpc("tools/call", { name, arguments: args });
   const value = JSON.parse(r.content[0].text);
   if (r.isError) {
@@ -46,9 +50,10 @@ async function call(name, args) {
   }
   return value;
 }
-const register = (name, program = "claude-code") =>
+const register = (name: string, program = "claude-code") =>
   call("register_agent", { project_key: P, program, model: "m", name });
-const messageCount = () => db.query("SELECT count(*) AS n FROM messages").get().n;
+const messageCount = () =>
+  db.query<{ n: number }, []>("SELECT count(*) AS n FROM messages").get()!.n;
 
 test("negotiates the client's protocol version and lists the available tools", async () => {
   expect((await rpc("initialize", { protocolVersion: "2024-11-05" })).protocolVersion).toBe(
@@ -57,7 +62,7 @@ test("negotiates the client's protocol version and lists the available tools", a
   expect((await rpc("initialize", { protocolVersion: "1999-01-01" })).protocolVersion).toBe(
     "2025-11-25",
   );
-  expect((await rpc("tools/list", {})).tools.map((t) => t.name).sort()).toEqual([
+  expect((await rpc("tools/list", {})).tools.map((t: any) => t.name).sort()).toEqual([
     "acknowledge_message",
     "ensure_project",
     "fetch_inbox",
@@ -93,7 +98,7 @@ test("tools annotated read-only write nothing", async () => {
     subject: "Readonly probe",
     body_md: "probe",
   });
-  const args = {
+  const args: Record<string, Record<string, unknown>> = {
     health_check: {},
     whois: { project_key: P, agent_name: "ReaderTwo" },
     list_agents: { project_key: P },
@@ -102,13 +107,13 @@ test("tools annotated read-only write nothing", async () => {
     summarize_thread: { project_key: P, thread_id: String(id) },
   };
   const readOnly = (await rpc("tools/list", {})).tools
-    .filter((t) => t.annotations?.readOnlyHint)
-    .map((t) => t.name);
+    .filter((t: any) => t.annotations?.readOnlyHint)
+    .map((t: any) => t.name);
   expect(readOnly.toSorted()).toEqual(Object.keys(args).toSorted());
-  const changes = () => db.query("SELECT total_changes() AS n").get().n;
+  const changes = () => db.query<{ n: number }, []>("SELECT total_changes() AS n").get()!.n;
   const before = changes();
   for (const name of readOnly) {
-    await call(name, args[name]);
+    await call(name, args[name]!);
   }
   expect(changes()).toBe(before);
 });
@@ -123,7 +128,7 @@ test("every tool declares its hints and describes every parameter", async () => 
       expect([t.name, typeof t.annotations.idempotentHint]).toEqual([t.name, "boolean"]);
     }
     const undescribed = Object.entries(t.inputSchema.properties)
-      .filter(([, p]) => !p.description)
+      .filter(([, p]) => !(p as { description?: string }).description)
       .map(([k]) => k);
     expect([t.name, undescribed]).toEqual([t.name, []]);
   }
@@ -143,11 +148,11 @@ test("health_check fails when the database does not answer", async () => {
         params: { name: "health_check", arguments: {} },
       }),
     });
-    const { result } = await res.json();
+    const { result } = (await res.json()) as any;
     expect(result.isError).toBe(true);
     expect(JSON.parse(result.content[0].text).error.type).toBe("INTERNAL");
   } finally {
-    own.server.stop(true);
+    await own.server.stop(true);
   }
 });
 
@@ -206,7 +211,7 @@ test("fetch_inbox with mark_read false leaves messages unread", async () => {
     agent_name: "BlueLake",
     unread_only: true,
   });
-  expect(unread.map((m) => m.subject)).toEqual(["Peek"]);
+  expect(unread.map((m: any) => m.subject)).toEqual(["Peek"]);
 });
 
 test("fetch_inbox returns the newest messages first, up to the limit", async () => {
@@ -225,12 +230,12 @@ test("fetch_inbox returns the newest messages first, up to the limit", async () 
     limit: 2,
     mark_read: false,
   });
-  expect(inbox.map((m) => m.subject)).toEqual(["Newest", "Middle"]);
+  expect(inbox.map((m: any) => m.subject)).toEqual(["Newest", "Middle"]);
 });
 
 test("an unknown recipient fails the whole send", async () => {
   const before = messageCount();
-  await expect(
+  expect(
     call("send_message", {
       project_key: P,
       sender_name: "BlueLake",
@@ -257,9 +262,7 @@ test("a repeated idempotency key replays the first send; reusing it for another 
   expect(b.id).toBe(a.id);
   expect(b.idempotent_replay).toBe(true);
   expect(messageCount()).toBe(before + 1);
-  await expect(
-    call("send_message", { ...args, body_md: "a different message" }),
-  ).rejects.toMatchObject({
+  expect(call("send_message", { ...args, body_md: "a different message" })).rejects.toMatchObject({
     type: "IDEMPOTENCY_KEY_CONFLICT",
   });
   expect(messageCount()).toBe(before + 1);
@@ -267,7 +270,7 @@ test("a repeated idempotency key replays the first send; reusing it for another 
 
 test("durable message retries preserve identity across restart orderings", async () => {
   const events = ["retry", "conflict", "ack", "restart"];
-  const sequences = [[]];
+  const sequences: string[][] = [[]];
   for (let depth = 0; depth < 2; depth++) {
     for (const prefix of sequences.filter((sequence) => sequence.length === depth)) {
       for (const event of events) {
@@ -275,7 +278,7 @@ test("durable message retries preserve identity across restart orderings", async
       }
     }
   }
-  const violations = [];
+  const violations: string[] = [];
   let trial = 0;
   const cases = ["send_message", "reply_message"].flatMap((tool) =>
     sequences.map((sequence) => ({ tool, sequence })),
@@ -283,7 +286,7 @@ test("durable message retries preserve identity across restart orderings", async
   for (const { tool, sequence } of cases) {
     const path = join(dir, `retry-${trial++}.sqlite3`);
     let runtime = createServer(path, 0, { retireIdleDays: 0 });
-    const invoke = async (name, args) => {
+    const invoke = async (name: string, args: Record<string, unknown>): Promise<any> => {
       const response = await fetch(`http://127.0.0.1:${runtime.server.port}/mcp/`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -294,7 +297,7 @@ test("durable message retries preserve identity across restart orderings", async
           params: { name, arguments: args },
         }),
       });
-      const result = (await response.json()).result;
+      const result = ((await response.json()) as any).result;
       const value = JSON.parse(result.content[0].text);
       if (result.isError) {
         throw Object.assign(new Error(value.error.message), value.error);
@@ -302,7 +305,7 @@ test("durable message retries preserve identity across restart orderings", async
       return value;
     };
     const restart = () => {
-      runtime.server.stop(true);
+      void runtime.server.stop(true);
       runtime.db.close();
       runtime = createServer(path, 0, { retireIdleDays: 0 });
     };
@@ -344,12 +347,13 @@ test("durable message retries preserve identity across restart orderings", async
           delivery: { ...expected.delivery, historical: true },
           idempotent_replay: true,
         });
-        expect(runtime.db.query("SELECT count(*) AS n FROM messages").get().n).toBe(
-          original ? 2 : 1,
-        );
-        expect(runtime.db.query("SELECT count(*) AS n FROM message_recipients").get().n).toBe(
-          original ? 2 : 1,
-        );
+        expect(
+          runtime.db.query<{ n: number }, []>("SELECT count(*) AS n FROM messages").get()!.n,
+        ).toBe(original ? 2 : 1);
+        expect(
+          runtime.db.query<{ n: number }, []>("SELECT count(*) AS n FROM message_recipients").get()!
+            .n,
+        ).toBe(original ? 2 : 1);
         expect(
           runtime.db
             .query("SELECT tool,agent_id,key,fingerprint,created_ts FROM idempotency_keys")
@@ -376,7 +380,7 @@ test("durable message retries preserve identity across restart orderings", async
           });
           acknowledged = true;
         } else if (event === "conflict") {
-          await expect(invoke(tool, { ...args, body_md: "different" })).rejects.toMatchObject({
+          expect(invoke(tool, { ...args, body_md: "different" })).rejects.toMatchObject({
             type: "IDEMPOTENCY_KEY_CONFLICT",
           });
         } else {
@@ -385,9 +389,11 @@ test("durable message retries preserve identity across restart orderings", async
         await check();
       }
     } catch (error) {
-      violations.push(`${tool}: ${sequence.join(" -> ") || "initial reopen"}: ${error.message}`);
+      violations.push(
+        `${tool}: ${sequence.join(" -> ") || "initial reopen"}: ${(error as Error).message}`,
+      );
     } finally {
-      runtime.server.stop(true);
+      await runtime.server.stop(true);
       runtime.db.close();
     }
   }
@@ -395,7 +401,7 @@ test("durable message retries preserve identity across restart orderings", async
 }, 30_000);
 
 test("broadcast stays rejected and a retired agent receives nothing", async () => {
-  await expect(
+  expect(
     call("send_message", {
       project_key: P,
       sender_name: "BlueLake",
@@ -407,7 +413,7 @@ test("broadcast stays rejected and a retired agent receives nothing", async () =
   ).rejects.toMatchObject({ type: "INVALID_ARGUMENT" });
   await register("PlumPond");
   await call("retire_agent", { project_key: P, agent_name: "PlumPond" });
-  await expect(
+  expect(
     call("send_message", {
       project_key: P,
       sender_name: "BlueLake",
@@ -433,14 +439,14 @@ test("an idle agent is retired and comes back when it acts", async () => {
       subject: "x",
       body_md: "y",
     });
-  await expect(send()).rejects.toMatchObject({ type: "NOT_FOUND" });
+  expect(send()).rejects.toMatchObject({ type: "NOT_FOUND" });
   await call("fetch_inbox", { project_key: P, agent_name: "IdleOwl" });
   await send();
   expect(retireIdleAgents(db, 7)).toBe(0);
 });
 
 test("a gone checkout under home with no mail is deregistered; mail, a live path or recent use keeps it", async () => {
-  const at = (project_key, name) =>
+  const at = (project_key: string, name: string) =>
     call("register_agent", { project_key, program: "claude-code", model: "m", name });
   await at("/h/gone", "GoneOwl");
   await at("/h/mailed", "MailOwl");
@@ -458,14 +464,21 @@ test("a gone checkout under home with no mail is deregistered; mail, a live path
   db.run("UPDATE agents SET last_active_ts = last_active_ts - ? WHERE name != 'FreshOwl'", [
     2 * 86_400_000_000,
   ]);
-  const keys = () => db.query("SELECT human_key FROM projects WHERE human_key LIKE '/_/%'").all();
-  const opts = { home: "/h", exists: (path) => path === "/h/here" };
+  const keys = () =>
+    db
+      .query<{ human_key: string }, []>(
+        "SELECT human_key FROM projects WHERE human_key LIKE '/_/%'",
+      )
+      .all();
+  const opts = { home: "/h", exists: (path: PathLike) => path === "/h/here" };
   expect(pruneGoneProjects(db, opts)).toBe(1);
   expect(keys().map((p) => p.human_key)).not.toContain("/h/gone");
   expect(keys().map((p) => p.human_key)).toEqual(
     expect.arrayContaining(["/h/mailed", "/h/here", "/x/gone", "/h/fresh"]),
   );
-  expect(db.query("SELECT count(*) AS n FROM agents WHERE name = 'GoneOwl'").get().n).toBe(0);
+  expect(
+    db.query<{ n: number }, []>("SELECT count(*) AS n FROM agents WHERE name = 'GoneOwl'").get()!.n,
+  ).toBe(0);
   expect(pruneGoneProjects(db, opts)).toBe(0);
   await at("/h/gone", "GoneOwl");
 });
@@ -493,8 +506,8 @@ test("since_ts takes a server timestamp back and a malformed one is a recoverabl
     since_ts: created,
     mark_read: false,
   });
-  expect(newer.map((m) => m.id)).toEqual([after.id]);
-  await expect(
+  expect(newer.map((m: any) => m.id)).toEqual([after.id]);
+  expect(
     call("fetch_inbox", { project_key: P, agent_name: "BlueLake", since_ts: "yesterday" }),
   ).rejects.toMatchObject({
     type: "INVALID_ARGUMENT",
@@ -528,7 +541,7 @@ test("a reply joins the original's thread and defaults to its sender", async () 
     reply_to: id,
   });
   const thread = await call("summarize_thread", { project_key: P, thread_id: String(id) });
-  expect(thread.messages.map((m) => m.body_md)).toEqual(["Which port?", "18766"]);
+  expect(thread.messages.map((m: any) => m.body_md)).toEqual(["Which port?", "18766"]);
   expect(thread.summary.participants).toEqual(["BlueLake", "GreenCastle"]);
 });
 
@@ -570,13 +583,13 @@ test("search finds words in bodies, best match first, and pages with a cursor", 
     since: messages[1].created_ts,
     until: messages[1].created_ts,
   });
-  expect(filtered.result.map((m) => m.id)).toEqual([messages[1].id]);
+  expect(filtered.result.map((m: any) => m.id)).toEqual([messages[1].id]);
   const day = await call("search_messages", {
     project_key: P,
     query: "zebra",
     until: messages[2].created_ts.slice(0, 10),
   });
-  expect(day.result.map((m) => m.id).sort()).toEqual(messages.map((m) => m.id).sort());
+  expect(day.result.map((m: any) => m.id).sort()).toEqual(messages.map((m) => m.id).sort());
   expect(
     (await call("search_messages", { project_key: P, query: "zebra", sender_name: "GreenCastle" }))
       .result,
@@ -633,13 +646,13 @@ test("another agent's overlapping reservation comes back as a conflict", async (
     agent_name: "BlueLake",
     paths: ["src/*.ts"],
   });
-  expect(mine.granted.map((g) => g.path_pattern)).toEqual(["src/*.ts"]);
+  expect(mine.granted.map((g: any) => g.path_pattern)).toEqual(["src/*.ts"]);
   const theirs = await call("file_reservation_paths", {
     project_key: P,
     agent_name: "GreenCastle",
     paths: ["src/a.ts", "docs/x.md"],
   });
-  expect(theirs.granted.map((g) => g.path_pattern)).toEqual(["docs/x.md"]);
+  expect(theirs.granted.map((g: any) => g.path_pattern)).toEqual(["docs/x.md"]);
   expect(theirs.conflicts).toEqual([
     {
       path: "src/a.ts",
@@ -662,7 +675,7 @@ test("another agent's overlapping reservation comes back as a conflict", async (
     agent_name: "BlueLake",
     paths: ["src/*"],
   });
-  expect(glob.conflicts.map((c) => c.path)).toEqual(["src/*"]);
+  expect(glob.conflicts.map((c: any) => c.path)).toEqual(["src/*"]);
   await call("release_file_reservations", { project_key: P, agent_name: "GreenCastle" });
 });
 
@@ -689,14 +702,14 @@ test("a directory reservation covers the files under it, with or without its tra
       agent_name: "GreenCastle",
       paths: ["docs/guide.md", "docsite/index.md"],
     });
-    expect(inside.conflicts.map((c) => c.path)).toEqual(["docs/guide.md"]);
+    expect(inside.conflicts.map((c: any) => c.path)).toEqual(["docs/guide.md"]);
     await call("release_file_reservations", { project_key: P, agent_name: "BlueLake" });
     await call("release_file_reservations", { project_key: P, agent_name: "GreenCastle" });
   }
 });
 
 test("the endpoint answers notifications, bad JSON, unknown methods and foreign origins per MCP", async () => {
-  const post = (body, headers = {}) =>
+  const post = (body: string, headers: Record<string, string> = {}) =>
     fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", ...headers },
@@ -705,13 +718,16 @@ test("the endpoint answers notifications, bad JSON, unknown methods and foreign 
   expect(
     (await post(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }))).status,
   ).toBe(202);
-  expect((await (await post("{nope")).json()).error.code).toBe(-32700);
+  expect(((await (await post("{nope")).json()) as any).error.code).toBe(-32700);
   for (const body of ["null", "3", '"ping"']) {
-    expect((await (await post(body)).json()).error.code).toBe(-32600);
+    expect(((await (await post(body)).json()) as any).error.code).toBe(-32600);
   }
   expect(
-    (await (await post(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "resources/list" }))).json())
-      .error.code,
+    (
+      (await (
+        await post(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "resources/list" }))
+      ).json()) as any
+    ).error.code,
   ).toBe(-32601);
   expect(
     (
@@ -720,7 +736,7 @@ test("the endpoint answers notifications, bad JSON, unknown methods and foreign 
       })
     ).status,
   ).toBe(403);
-  await expect(call("constructor", {})).rejects.toMatchObject({ type: "NOT_FOUND" });
+  expect(call("constructor", {})).rejects.toMatchObject({ type: "NOT_FOUND" });
 });
 
 test("every call an agent makes counts as activity for list_agents", async () => {
@@ -729,13 +745,13 @@ test("every call an agent makes counts as activity for list_agents", async () =>
   await call("fetch_inbox", { project_key: P, agent_name: "BlueLake" });
   expect((await call("list_agents", { project_key: P }))[0].name).toBe("BlueLake");
   await call("retire_agent", { project_key: P, agent_name: "RedStone" });
-  expect((await call("list_agents", { project_key: P })).map((a) => a.name)).not.toContain(
+  expect((await call("list_agents", { project_key: P })).map((a: any) => a.name)).not.toContain(
     "RedStone",
   );
 });
 
 test("register_agent rejects a descriptive name and generates one when omitted", async () => {
-  await expect(register("not a name")).rejects.toMatchObject({ type: "INVALID_AGENT_NAME" });
+  expect(register("not a name")).rejects.toMatchObject({ type: "INVALID_AGENT_NAME" });
   const generated = await call("register_agent", { project_key: P, program: "codex", model: "m" });
   expect(generated.name).toMatch(/^[A-Z][a-z]+[A-Z][a-z]+$/);
 });
@@ -743,16 +759,20 @@ test("register_agent rejects a descriptive name and generates one when omitted",
 test("a call that fails partway writes nothing", async () => {
   const key = "/w/fails-partway";
   const rows = () => ({
-    projects: db.query("SELECT count(*) AS n FROM projects WHERE human_key = ?").get(key).n,
-    agents: db.query("SELECT count(*) AS n FROM agents WHERE name = 'AmberFinch'").get().n,
+    projects: db
+      .query<{ n: number }, [string]>("SELECT count(*) AS n FROM projects WHERE human_key = ?")
+      .get(key)!.n,
+    agents: db
+      .query<{ n: number }, []>("SELECT count(*) AS n FROM agents WHERE name = 'AmberFinch'")
+      .get()!.n,
   });
   // The project row comes before the name check.
-  await expect(
+  expect(
     call("register_agent", { project_key: key, program: "codex", model: "m", name: "not a name" }),
   ).rejects.toMatchObject({ type: "INVALID_AGENT_NAME" });
   expect(rows()).toEqual({ projects: 0, agents: 0 });
   // The project and agent come before the reservation, whose TTL check rejects "soon".
-  await expect(
+  expect(
     call("macro_start_session", {
       human_key: key,
       program: "codex",
@@ -767,7 +787,7 @@ test("a call that fails partway writes nothing", async () => {
   });
   expect(rows()).toEqual({ projects: 0, agents: 0 });
   // Without paths nothing is reserved, but the TTL is still checked.
-  await expect(
+  expect(
     call("macro_start_session", {
       human_key: key,
       program: "codex",
@@ -801,37 +821,40 @@ test("a reservation time or activity window that is not a usable number is an ar
   const before = state();
   const bad = ["30", 0, -60, 1.5, 30 * 86_400 + 1, 1e300, null];
   for (const ttl_seconds of bad) {
-    await expect(
+    expect(
       call("file_reservation_paths", { ...as, paths: ["b/*"], ttl_seconds }),
     ).rejects.toMatchObject({ type: "INVALID_ARGUMENT", data: { field: "ttl_seconds" } });
   }
   for (const extend_seconds of bad) {
-    await expect(call("renew_file_reservations", { ...as, extend_seconds })).rejects.toMatchObject({
+    expect(call("renew_file_reservations", { ...as, extend_seconds })).rejects.toMatchObject({
       type: "INVALID_ARGUMENT",
       data: { field: "extend_seconds" },
     });
   }
   for (const active_within_days of ["1", 0, -1, null]) {
-    await expect(
-      call("list_agents", { project_key: key, active_within_days }),
-    ).rejects.toMatchObject({ type: "INVALID_ARGUMENT", data: { field: "active_within_days" } });
+    expect(call("list_agents", { project_key: key, active_within_days })).rejects.toMatchObject({
+      type: "INVALID_ARGUMENT",
+      data: { field: "active_within_days" },
+    });
   }
   // An uncapped field names no upper limit; a capped one does.
-  await expect(call("list_agents", { project_key: key, active_within_days: 0 })).rejects.toThrow(
+  expect(call("list_agents", { project_key: key, active_within_days: 0 })).rejects.toThrow(
     /^active_within_days must be a number above 0$/,
   );
-  await expect(call("renew_file_reservations", { ...as, extend_seconds: 0 })).rejects.toThrow(
+  expect(call("renew_file_reservations", { ...as, extend_seconds: 0 })).rejects.toThrow(
     /^extend_seconds must be a whole number above 0 and at most 2592000$/,
   );
   expect(state()).toEqual(before);
   expect(
-    (await call("list_agents", { project_key: key, active_within_days: 0.5 })).map((a) => a.name),
+    (await call("list_agents", { project_key: key, active_within_days: 0.5 })).map(
+      (a: any) => a.name,
+    ),
   ).toEqual(["CoralRidge"]);
 });
 
 test("a registration without a name keeps the name of the session or T3 thread its tag names", async () => {
   const project = "/w/one-identity";
-  const start = (task, extra = {}) =>
+  const start = (task: string, extra: Record<string, unknown> = {}) =>
     call("macro_start_session", {
       human_key: project,
       program: "codex",
@@ -872,9 +895,9 @@ test("a registration without a name keeps the name of the session or T3 thread i
 test("SWARMAIL_SYNCHRONOUS picks normal or full durability and rejects anything else", () => {
   const dir = mkdtempSync(join(tmpdir(), "swarmail-sync-"));
   try {
-    const sync = (mode) => {
+    const sync = (mode: string) => {
       const db = openDatabase(join(dir, `${mode}.sqlite3`), mode);
-      const value = db.query("PRAGMA synchronous").get().synchronous;
+      const value = db.query<{ synchronous: number }, []>("PRAGMA synchronous").get()!.synchronous;
       db.close();
       return value;
     };
@@ -900,7 +923,7 @@ test("pagination rejects invalid sizes before reading mail or enrolling a sessio
     ack_required: true,
   });
   const message = sent.id;
-  const cases = [
+  const cases: [string, Record<string, unknown>, string][] = [
     ["list_agents", { project_key: project }, "limit"],
     ["fetch_inbox", { project_key: project, agent_name: "PageReceiver" }, "limit"],
     ["search_messages", { project_key: project, query: "pagination" }, "limit"],
@@ -913,14 +936,16 @@ test("pagination rejects invalid sizes before reading mail or enrolling a sessio
   ];
   for (const [name, args, field] of cases) {
     for (const value of [-1, 0, 1.5, "2", null, Number.MAX_SAFE_INTEGER + 1]) {
-      await expect(call(name, { ...args, [field]: value })).rejects.toMatchObject({
+      expect(call(name, { ...args, [field]: value })).rejects.toMatchObject({
         type: "INVALID_ARGUMENT",
         data: { field },
       });
     }
   }
   expect(
-    db.query("SELECT count(*) AS n FROM projects WHERE human_key=?").get("/w/invalid-enrollment").n,
+    db
+      .query<{ n: number }, [string]>("SELECT count(*) AS n FROM projects WHERE human_key=?")
+      .get("/w/invalid-enrollment")!.n,
   ).toBe(0);
   expect(
     (await call("get_message_delivery_receipt", { project_key: project, message_id: message }))
@@ -939,7 +964,7 @@ test("pagination rejects invalid sizes before reading mail or enrolling a sessio
     `o${Number.MAX_SAFE_INTEGER}`,
     "o999999999999999999999",
   ]) {
-    await expect(
+    expect(
       call("search_messages", { project_key: project, query: "pagination", cursor }),
     ).rejects.toMatchObject({ type: "INVALID_ARGUMENT", data: { field: "cursor" } });
   }
@@ -954,8 +979,10 @@ test("large valid page sizes remain capped and search cursors advance", async ()
     model: "m",
     name: "CapReceiver",
   });
-  const agent = db.query("SELECT * FROM agents WHERE name='CapReceiver'").get();
-  const add = db.query(
+  const agent = db
+    .query<{ id: number; project_id: number }, []>("SELECT * FROM agents WHERE name='CapReceiver'")
+    .get()!;
+  const add = db.query<{ id: number }, [number, number, string, string, number]>(
     "INSERT INTO messages(project_id,sender_id,subject,body_md,created_ts) VALUES(?,?,?,?,?) RETURNING id",
   );
   const recipient = db.query(
@@ -969,7 +996,7 @@ test("large valid page sizes remain capped and search cursors advance", async ()
         "bounded pagination",
         "bounded pagination",
         index + 1,
-      );
+      )!;
       recipient.run(id, agent.id, index + 1);
     }
   })();
@@ -992,7 +1019,7 @@ test("large valid page sizes remain capped and search cursors advance", async ()
 });
 
 test("re-registering without a tag keeps the wake tag; a new tag replaces it", async () => {
-  const tagged = (description) =>
+  const tagged = (description: string) =>
     call("register_agent", {
       project_key: P,
       program: "codex",
@@ -1013,7 +1040,7 @@ test("re-registering without a tag keeps the wake tag; a new tag replaces it", a
     "[codex:session-2 cwd:/w/project] [WIP] fourth",
   );
   const listed = (await call("list_agents", { project_key: P })).find(
-    (agent) => agent.name === "TaggedOtter",
+    (agent: any) => agent.name === "TaggedOtter",
   );
   expect(listed).toMatchObject({
     host: "codex",
@@ -1025,7 +1052,7 @@ test("re-registering without a tag keeps the wake tag; a new tag replaces it", a
 
 test("a worktree or subdirectory path names its repository's primary checkout", async () => {
   const repo = join(dir, "repo");
-  const git = (...args) => {
+  const git = (...args: string[]) => {
     const r = Bun.spawnSync(["git", ...args], { cwd: repo, stderr: "pipe" });
     expect(r.exitCode).toBe(0);
   };
@@ -1056,7 +1083,7 @@ test("a worktree or subdirectory path names its repository's primary checkout", 
     });
     expect(legacy.name).toBe("BlueIsland");
     expect(
-      (await call("list_agents", { project_key: island })).find((a) => a.name === "BlueIsland")
+      (await call("list_agents", { project_key: island })).find((a: any) => a.name === "BlueIsland")
         .location.worktree,
     ).toBe(join("~", "repo-island"));
   } finally {
@@ -1161,11 +1188,11 @@ test("the hourly sweep forgets old idempotency keys and long-ended registrations
   ]);
   const registry = join(dir, "registry");
   mkdirSync(registry);
-  const ended = (days) => new Date(now - days * 86_400_000).toISOString();
+  const ended = (days: number) => new Date(now - days * 86_400_000).toISOString();
   // A file was last written when its session ended (30 days ago without one), unless `writtenDaysAgo` says otherwise.
   const write = (
-    file,
-    state,
+    file: string,
+    state: Record<string, unknown> & { ended?: string },
     writtenDaysAgo = state.ended ? (now - Date.parse(state.ended)) / 86_400_000 : 30,
   ) => {
     const path = join(registry, file);
@@ -1199,7 +1226,7 @@ test("locations follow the edited checkout while messages keep their sender snap
     const repo = join(dir, "location-repo");
     const other = join(dir, "location-worktree");
     const unrelated = join(dir, "unrelated-repo");
-    const git = (cwd, ...args) => {
+    const git = (cwd: string, ...args: string[]) => {
       const out = Bun.spawnSync(["git", "-C", cwd, ...args]);
       expect(out.exitCode).toBe(0);
     };
@@ -1253,34 +1280,38 @@ test("locations follow the edited checkout while messages keep their sender snap
     await call("register_agent", { ...registration, task_description: "new task" });
     git(other, "switch", "-qc", "renamed");
     const roster = await call("list_agents", { project_key: repo });
-    expect(roster.find((a) => a.name === "BlueBranch")).toMatchObject({
+    expect(roster.find((a: any) => a.name === "BlueBranch")).toMatchObject({
       name: "BlueBranch",
       cwd: "/launch",
       location: { worktree: other, branch: "renamed" },
     });
-    expect(roster.find((a) => a.name === "GreenBranch").location).toBeNull();
+    expect(roster.find((a: any) => a.name === "GreenBranch").location).toBeNull();
     const replay = await call("send_message", message);
     expect(replay.id).toBe(first.id);
     expect(replay.sender_location).toEqual(first.sender_location);
     const second = await call("send_message", { ...message, idempotency_key: "location-second" });
     expect(second.sender_location.branch).toBe("renamed");
-    server.stop(true);
+    await server.stop(true);
     db.close();
     ({ server, db } = createServer(join(dir, "mail.sqlite3"), 0));
     url = `http://127.0.0.1:${server.port}/mcp/`;
     const inbox = await call("fetch_inbox", { project_key: repo, agent_name: "GreenBranch" });
-    expect(inbox.find((m) => m.id === first.id).sender_location).toEqual(first.sender_location);
-    expect(inbox.find((m) => m.id === second.id).sender_location.worktree).toBe(other);
-    expect(inbox.find((m) => m.id === second.id).sender_location).toEqual(second.sender_location);
-    await expect(
-      call("register_agent", { ...registration, worktree: unrelated }),
-    ).rejects.toMatchObject({ type: "INVALID_ARGUMENT" });
-    await expect(
+    expect(inbox.find((m: any) => m.id === first.id).sender_location).toEqual(
+      first.sender_location,
+    );
+    expect(inbox.find((m: any) => m.id === second.id).sender_location.worktree).toBe(other);
+    expect(inbox.find((m: any) => m.id === second.id).sender_location).toEqual(
+      second.sender_location,
+    );
+    expect(call("register_agent", { ...registration, worktree: unrelated })).rejects.toMatchObject({
+      type: "INVALID_ARGUMENT",
+    });
+    expect(
       call("register_agent", { ...registration, worktree: join(repo, ".git") }),
     ).rejects.toMatchObject({ type: "INVALID_ARGUMENT", data: { field: "worktree" } });
     git(other, "switch", "-q", "--detach");
     expect(
-      (await call("list_agents", { project_key: repo })).find((a) => a.name === "BlueBranch")
+      (await call("list_agents", { project_key: repo })).find((a: any) => a.name === "BlueBranch")
         .location.branch,
     ).toBeNull();
   } finally {
@@ -1322,7 +1353,7 @@ test("MCP roster native titles refresh while sender titles remain send-time snap
       model: "m",
     });
     const [agent] = (await call("list_agents", { project_key: repo })).filter(
-      (row) => row.name === "NativeBranch",
+      (row: any) => row.name === "NativeBranch",
     );
     expect(agent.location.title).toBe("First title");
     expect(Object.keys(agent).sort()).toEqual([
@@ -1355,8 +1386,9 @@ test("MCP roster native titles refresh while sender titles remain send-time snap
       { flag: "a" },
     );
     expect(
-      (await call("list_agents", { project_key: repo })).find((row) => row.name === "NativeBranch")
-        .location.title,
+      (await call("list_agents", { project_key: repo })).find(
+        (row: any) => row.name === "NativeBranch",
+      ).location.title,
     ).toBe("Renamed title");
     expect((await call("send_message", message)).sender_location.title).toBe("First title");
     expect(
@@ -1364,12 +1396,13 @@ test("MCP roster native titles refresh while sender titles remain send-time snap
         .sender_location.title,
     ).toBe("Renamed title");
     const inbox = await call("fetch_inbox", { project_key: repo, agent_name: "NativeReader" });
-    expect(inbox.find((row) => row.id === first.id).sender_location.title).toBe("First title");
+    expect(inbox.find((row: any) => row.id === first.id).sender_location.title).toBe("First title");
   } finally {
-    for (const [key, value] of [
+    const saved: [string, string | undefined][] = [
       ["HOME", previousHome],
       ["CODEX_HOME", previousCodex],
-    ]) {
+    ];
+    for (const [key, value] of saved) {
       if (value === undefined) {
         delete process.env[key];
       } else {

@@ -24,6 +24,7 @@ import {
   rowForSession,
   withLock,
 } from "../src/registry.ts";
+import type { Register, RegisterState } from "../src/registry.ts";
 import { t3StatePath, t3ThreadId } from "../src/t3-state.ts";
 import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.ts";
 import { parseTag, sessionTag } from "../src/tag.ts";
@@ -33,18 +34,18 @@ import { createServer } from "../src/server.ts";
 function freePort() {
   const probe = Bun.serve({ port: 0, fetch: () => new Response() });
   const { port } = probe;
-  probe.stop(true);
-  return port;
+  void probe.stop(true);
+  return port!;
 }
 
 /** A stand-in Swarmail MCP endpoint: `handler(tool, args)` returns the tool result and every call is recorded. */
-function fakeMail(handler) {
-  const calls = [];
+function fakeMail(handler: (name: string, args: any) => unknown) {
+  const calls: any[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
-      const msg = await req.json();
+      const msg = (await req.json()) as any;
       calls.push(msg.params);
       const value = await handler(msg.params.name, msg.params.arguments);
       return Response.json({
@@ -60,7 +61,7 @@ function fakeMail(handler) {
 test("resolves a worktree to its primary checkout and skips bare or missing repositories", () => {
   const root = tmpdir();
   // Git prints forward slashes on every platform; the checkout comes back in the native form.
-  const run = (common) => () => common.replaceAll("\\", "/");
+  const run = (common: string) => () => common.replaceAll("\\", "/");
   const repo = join(root, "repo");
   expect(primaryCheckout(join(root, "w", "repo-task"), run(join(repo, ".git")))).toBe(repo);
   expect(primaryCheckout(repo, run(join(repo, ".git")))).toBe(repo);
@@ -91,12 +92,12 @@ test("resolves the edited file's folder, falling back to the session cwd", () =>
 });
 
 test("registers once per repository and tag, keeping one name across repositories", () => {
-  const calls = [];
-  const register = (project, name) => {
+  const calls: [string, string | null][] = [];
+  const register = (project: string, name: string | null) => {
     calls.push([project, name]);
     return name ?? "BlueLake";
   };
-  let state = { name: null, projects: [] };
+  let state: RegisterState = { name: null, projects: [] };
   state = ensureRegistered(state, "/home/u/a", "[t1]", register);
   state = ensureRegistered(state, "/home/u/a", "[t1]", register);
   state = ensureRegistered(state, "/home/u/b", "[t1]", register);
@@ -109,12 +110,12 @@ test("registers once per repository and tag, keeping one name across repositorie
     projects: ["/home/u/a", "/home/u/b"],
     tags: { "/home/u/a": "[t1]", "/home/u/b": "[t1]" },
   });
-  const failed = { name: null, projects: [] };
+  const failed: RegisterState = { name: null, projects: [] };
   expect(ensureRegistered(failed, "/home/u/c", "[t1]", () => null)).toBe(failed);
 });
 
 test("a name another session holds in a project is replaced there only", () => {
-  const taken = (project, name) => {
+  const taken: Register = (project, name) => {
     if (name === "TanOwl" && project === "/home/u/b") {
       taken.refusal = "Registration cannot replace a bound lifecycle identity.";
       return null;
@@ -122,15 +123,19 @@ test("a name another session holds in a project is replaced there only", () => {
     taken.refusal = undefined;
     return name ?? "BlueHarbor";
   };
-  const first = { name: "TanOwl", projects: ["/home/u/a"], tags: { "/home/u/a": "[t1]" } };
+  const first: RegisterState = {
+    name: "TanOwl",
+    projects: ["/home/u/a"],
+    tags: { "/home/u/a": "[t1]" },
+  };
   const state = ensureRegistered(first, "/home/u/b", "[t1]", taken);
   expect(state.name).toBe("TanOwl");
   expect(state.names).toEqual({ "/home/u/b": "BlueHarbor" });
   expect(nameIn(state, "/home/u/a")).toBe("TanOwl");
   expect(nameIn(state, "/home/u/b")).toBe("BlueHarbor");
   // Later registrations in each project ask for that project's name.
-  const calls = [];
-  const record = (project, name) => {
+  const calls: [string, string | null][] = [];
+  const record = (project: string, name: string | null) => {
     calls.push([project, name]);
     return name;
   };
@@ -148,10 +153,12 @@ test("the notice names a different project name on a first registration, not on 
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
-      const msg = await req.json();
+      const msg = (await req.json()) as any;
       const { name, arguments: args } = msg.params;
-      const reply = (result) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
-      const text = (value) => ({ content: [{ type: "text", text: JSON.stringify(value) }] });
+      const reply = (result: unknown) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
+      const text = (value: unknown) => ({
+        content: [{ type: "text", text: JSON.stringify(value) }],
+      });
       if (name === "list_agents") {
         return reply(text([]));
       }
@@ -184,7 +191,7 @@ test("the notice names a different project name on a first registration, not on 
       XDG_STATE_HOME: join(dir, "state"),
       HOME: dir,
     };
-    const run = async (input) => {
+    const run = async (input: unknown): Promise<any> => {
       const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
         stdin: new Blob([JSON.stringify(input)]),
         env,
@@ -205,7 +212,7 @@ test("the notice names a different project name on a first registration, not on 
     );
     expect(await run(edit)).toBe("");
   } finally {
-    server.stop(true);
+    await server.stop(true);
     rmSync(dir, { recursive: true, force: true });
   }
 }, 30000);
@@ -224,17 +231,20 @@ test("ending a session releases each project's reservations under that project's
       since: 0,
       project: "/home/u/a",
       tag: "[t1]",
-      register: (_project, name) => name ?? "TanOwl",
+      register: (_project: string, name: string | null) => name ?? "TanOwl",
     });
     registry.settle("s1", {
       since: 0,
       project: "/home/u/b",
       tag: "[t1]",
-      register: Object.assign((_project, name) => (name ? null : "BlueHarbor"), {
-        refusal: "held",
-      }),
+      register: Object.assign(
+        (_project: string, name: string | null) => (name ? null : "BlueHarbor"),
+        {
+          refusal: "held",
+        },
+      ),
     });
-    const released = [];
+    const released: [string, string][] = [];
     registry.end("s1", (project, name) => released.push([project, name]), new Date(1));
     expect(released).toEqual([
       ["/home/u/a", "TanOwl"],
@@ -246,12 +256,12 @@ test("ending a session releases each project's reservations under that project's
 });
 
 test("re-registers under the same name when the tag changed or state predates tags", () => {
-  const calls = [];
-  const register = (project, name) => {
+  const calls: [string, string | null][] = [];
+  const register = (project: string, name: string | null) => {
     calls.push([project, name]);
     return name;
   };
-  const legacy = { name: "TanOwl", projects: ["/home/u/a"] };
+  const legacy: RegisterState = { name: "TanOwl", projects: ["/home/u/a"] };
   const next = ensureRegistered(legacy, "/home/u/a", "[t3:x claude:s]", register);
   expect(calls).toEqual([["/home/u/a", "TanOwl"]]);
   expect(next).toEqual({
@@ -280,7 +290,7 @@ test("finds a hand-registered row by the session id in its tag", () => {
     },
     { name: "DarkDune", task_description: "[claude:a5ff cwd:~/w] TLA+ pilot" },
   ];
-  const find = (tag) => rowForSession(rows, parseTag(tag))?.name ?? null;
+  const find = (tag: string) => rowForSession(rows, parseTag(tag))?.name ?? null;
   expect(find("[claude:a5ff cwd:~/w]")).toBe("DarkDune");
   expect(find("[claude:a5ff-46 cwd:~/w]")).toBe("WildDeer");
   expect(find("[claude:zzzz cwd:~/w]")).toBeNull();
@@ -478,7 +488,7 @@ test("a held lock makes a second registrar wait or give up, and a stale one is t
 
 test("two concurrent first edits of one session register once", async () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-race-")));
-  const mail = fakeMail(async (name) => {
+  const mail = fakeMail(async (name: string) => {
     if (name === "list_agents") {
       return [];
     }
@@ -504,7 +514,7 @@ test("two concurrent first edits of one session register once", async () => {
       JSON.parse(readFileSync(join(dir, "state/swarmail-register/race-1.json"), "utf8")).name,
     ).toBe("BlueLake");
   } finally {
-    mail.stop();
+    await mail.stop();
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -549,7 +559,7 @@ test("an edit from a session registered before tags retags its row and keeps nam
       `[claude:legacy-1 cwd:${join("~", "repo")}] Claude Code session legacy-1 Room C90`,
     );
   } finally {
-    mail.stop();
+    await mail.stop();
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -600,7 +610,7 @@ test("a new provider session in a T3 thread takes over the thread's name", async
       `[t3:thread-1 claude:new-sid cwd:${join("~", "repo")}] Swarmail release`,
     );
   } finally {
-    mail.stop();
+    await mail.stop();
     rmSync(dir, { recursive: true, force: true });
   }
 });
@@ -608,7 +618,7 @@ test("a new provider session in a T3 thread takes over the thread's name", async
 test("register --tag takes the session id from the host's shell variable when none is given", () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-tag-")));
   try {
-    const tag = (args, env) =>
+    const tag = (args: string[], env: Record<string, string>) =>
       Bun.spawnSync(["bun", join(import.meta.dir, "../src/cli.ts"), "register", ...args], {
         cwd: dir,
         env: { ...process.env, HOME: dir, CODEX_THREAD_ID: "", ...env },
@@ -626,7 +636,7 @@ test("register --tag takes the session id from the host's shell variable when no
 });
 
 test("finds the agent host above the hook and records its PID and start time", () => {
-  const procs = {
+  const procs: Record<number, { comm: string; ppid: number; start: string }> = {
     40: { comm: "sh", ppid: 30, start: "900" },
     30: { comm: "opencode.exe", ppid: 20, start: "800" },
     20: { comm: "node-MainThread", ppid: 1, start: "700" },
@@ -642,7 +652,7 @@ test("finds the agent host above the hook and records its PID and start time", (
 
 test("a registration the server refuses says so instead of blaming an unanswered server", async () => {
   // serverRegister blocks on curl, so it runs in its own process, away from the stand-in server.
-  const attempt = async (url) => {
+  const attempt = async (url: string) => {
     const code = `
       import { serverRegister } from ${JSON.stringify(join(import.meta.dir, "../src/registry.ts"))};
       const session = { host: "claude", program: "claude-code", model: null, sessionId: "s1", cwd: null };
@@ -656,8 +666,8 @@ test("a registration the server refuses says so instead of blaming an unanswered
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
-      const msg = await req.json();
-      const reply = (result) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
+      const msg = (await req.json()) as any;
+      const reply = (result: unknown) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
       if (msg.params.name === "list_agents") {
         return reply({ content: [{ type: "text", text: "[]" }] });
       }
@@ -680,7 +690,7 @@ test("a registration the server refuses says so instead of blaming an unanswered
       "the server refused it (Registration cannot replace a bound lifecycle identity.)",
     );
   } finally {
-    refused.stop(true);
+    await refused.stop(true);
   }
   expect(await attempt("http://127.0.0.1:1/mcp/")).toEqual({ name: null, refusal: null });
   expect(failureNotice("/home/u/c", "[claude:s1]")).toContain("the server did not answer");
@@ -688,16 +698,18 @@ test("a registration the server refuses says so instead of blaming an unanswered
 
 test("the hook registers under a fresh name when the server refuses the session's own", async () => {
   // serverRegister blocks on curl, so it runs in its own process, away from the stand-in server.
-  const calls = [];
+  const calls: [string, string | undefined][] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
-      const msg = await req.json();
+      const msg = (await req.json()) as any;
       const { name, arguments: args } = msg.params;
       calls.push([name, args.name]);
-      const reply = (result) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
-      const text = (value) => ({ content: [{ type: "text", text: JSON.stringify(value) }] });
+      const reply = (result: unknown) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
+      const text = (value: unknown) => ({
+        content: [{ type: "text", text: JSON.stringify(value) }],
+      });
       if (name === "list_agents") {
         return reply(text([]));
       }
@@ -728,7 +740,7 @@ test("the hook registers under a fresh name when the server refuses the session'
       ["register_agent", undefined],
     ]);
   } finally {
-    server.stop(true);
+    await server.stop(true);
   }
 });
 
@@ -746,7 +758,7 @@ test("a failed registration tells Claude, then the next prompt retries against t
       HOME: dir,
     };
     const script = join(import.meta.dir, "../src/cli.ts");
-    const run = async (input) => {
+    const run = async (input: unknown): Promise<any> => {
       const proc = Bun.spawn(["bun", script, "register"], {
         stdin: new Blob([JSON.stringify(input)]),
         env,
@@ -790,7 +802,7 @@ test("a failed registration tells Claude, then the next prompt retries against t
     expect(await run(prompt)).toBe("");
     expect(await run(edit)).toBe("");
   } finally {
-    server?.server.stop(true);
+    await server?.server.stop(true);
     server?.db.close();
     rmSync(dir, { recursive: true, force: true });
   }
@@ -811,7 +823,7 @@ test("a claude -p run registers on its first edit, not at start", async () => {
       XDG_STATE_HOME: join(dir, "state"),
       HOME: dir,
     };
-    const run = async (input) => {
+    const run = async (input: unknown): Promise<any> => {
       const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
         stdin: new Blob([JSON.stringify(input)]),
         env,
@@ -843,7 +855,7 @@ test("a claude -p run registers on its first edit, not at start", async () => {
     await run(edit);
     expect(roster()).toHaveLength(1);
   } finally {
-    server.server.stop(true);
+    await server.server.stop(true);
     server.db.close();
     rmSync(dir, { recursive: true, force: true });
   }
@@ -863,7 +875,7 @@ test("a session registers at start, keeps that one name through edits, restarts 
       XDG_STATE_HOME: join(dir, "state"),
       HOME: dir,
     };
-    const run = async (input) => {
+    const run = async (input: unknown): Promise<any> => {
       const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
         stdin: new Blob([JSON.stringify(input)]),
         env,
@@ -921,12 +933,12 @@ test("a session registers at start, keeps that one name through edits, restarts 
         },
       }),
     });
-    const hand = JSON.parse((await res.json()).result.content[0].text);
+    const hand = JSON.parse(((await res.json()) as any).result.content[0].text);
     expect(hand.agent.name).toBe(name);
     expect(roster()).toHaveLength(1);
 
     // The edit location follows another worktree of the same project, while the launch tag and name stay.
-    const git = (...args) => {
+    const git = (...args: string[]) => {
       const result = Bun.spawnSync(["git", "-C", repo, ...args]);
       expect(result.exitCode).toBe(0);
     };
@@ -945,17 +957,21 @@ test("a session registers at start, keeps that one name through edits, restarts 
     expect(await run({ ...edit, tool_input: { file_path: join(edited, "new", "a.txt") } })).toBe(
       "",
     );
-    const row = server.db.query("SELECT name, cwd, worktree FROM agents WHERE name = ?").get(name);
+    const row = server.db.query("SELECT name, cwd, worktree FROM agents WHERE name = ?").get(name!);
     expect(row).toEqual({ name, cwd: join("~", "repo"), worktree: edited });
     await run({ ...start, source: "compact" });
-    expect(server.db.query("SELECT worktree FROM agents WHERE name = ?").get(name).worktree).toBe(
-      edited,
-    );
+    expect(
+      server.db
+        .query<{ worktree: string }, [string]>("SELECT worktree FROM agents WHERE name = ?")
+        .get(name!)!.worktree,
+    ).toBe(edited);
 
     expect(await run(edit)).toBe("");
-    expect(server.db.query("SELECT worktree FROM agents WHERE name = ?").get(name).worktree).toBe(
-      repo,
-    );
+    expect(
+      server.db
+        .query<{ worktree: string }, [string]>("SELECT worktree FROM agents WHERE name = ?")
+        .get(name!)!.worktree,
+    ).toBe(repo);
 
     // A failed edit in B must be superseded by a newer successful edit in A before the prompt retries it.
     const online = env.SWARMAIL_URL;
@@ -970,9 +986,11 @@ test("a session registers at start, keeps that one name through edits, restarts 
     await run(edit);
     expect(JSON.parse(readFileSync(stateFile, "utf8")).pending).toBeUndefined();
     await run({ ...claude, hook_event_name: "UserPromptSubmit" });
-    expect(server.db.query("SELECT worktree FROM agents WHERE name = ?").get(name).worktree).toBe(
-      repo,
-    );
+    expect(
+      server.db
+        .query<{ worktree: string }, [string]>("SELECT worktree FROM agents WHERE name = ?")
+        .get(name!)!.worktree,
+    ).toBe(repo);
 
     // Cursor's own sessionStart payload (captured from the Cursor CLI) gets Cursor's flat output.
     const cursor = await run({
@@ -986,7 +1004,7 @@ test("a session registers at start, keeps that one name through edits, restarts 
     const cursorName = /registered as (\w+) in/.exec(cursor.additional_context)?.[1];
     expect(cursorName).toBeTruthy();
     expect(cursorName).not.toBe(name);
-    expect(roster().map((row) => row.name)).toEqual([name, cursorName]);
+    expect(roster().map((row: any) => row.name)).toEqual([name, cursorName]);
 
     // Outside a repository there is nothing to register in, so the session learns its tag.
     const home = join(dir, "elsewhere");
@@ -996,7 +1014,7 @@ test("a session registers at start, keeps that one name through edits, restarts 
     expect(loose).toContain("your session tag is [claude:start-2 cwd:");
     expect(roster()).toHaveLength(2);
   } finally {
-    server.server.stop(true);
+    await server.server.stop(true);
     server.db.close();
     rmSync(dir, { recursive: true, force: true });
   }
@@ -1046,7 +1064,7 @@ test("SessionEnd records the end and releases reservations in each project, keep
     });
 
     writeFileSync(statePath, JSON.stringify({ name: "TanOwl", projects: ["/a", "/b"] }));
-    const released = [];
+    const released: [string, string][] = [];
     registry.end(
       "s1",
       (project, name) => {

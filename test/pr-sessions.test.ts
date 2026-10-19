@@ -6,12 +6,12 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:
 import { join } from "node:path";
 import { testScratch } from "./fixtures/test-scratch.ts";
 
+// Loose JSON payloads: the malformed cases need fields the store would never hold.
+type Extra = Record<string, any>;
+
 // CLI-boundary coverage: projection joins, schema failures, provenance and no database writes.
-const scratch = testScratch(
-  "swarmail-pr-sessions-tests",
-  "isolated read-only T3 PR lookup fixtures",
-);
-const dirs = [];
+const scratch = testScratch();
+const dirs: string[] = [];
 afterEach(() => {
   for (const dir of dirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
@@ -19,7 +19,7 @@ afterEach(() => {
 });
 const date = "2026-10-05T00:00:00.000Z";
 const url = (n = 7, repo = "owner/repo") => `https://github.com/${repo}/pull/${n}`;
-const link = (n = 7, extra = {}) => ({
+const link = (n = 7, extra: Extra = {}) => ({
   host: "github.com",
   repository: "owner/repo",
   number: n,
@@ -31,7 +31,7 @@ const link = (n = 7, extra = {}) => ({
   ...extra,
 });
 const legacy = (n = 7) => ({ projectId: "p", repository: "owner/repo", number: n, url: url(n) });
-const snapshot = (head, base) => ({
+const snapshot = (head: string, base: string) => ({
   state: "open",
   title: head,
   headBranch: head,
@@ -40,7 +40,7 @@ const snapshot = (head, base) => ({
   updatedAt: null,
   syncedAt: date,
 });
-const thread = (id, extra = {}) => ({
+const thread = (id: string, extra: Extra = {}): Extra => ({
   id,
   projectId: "p",
   title: id,
@@ -59,7 +59,12 @@ const thread = (id, extra = {}) => ({
   pullRequests: [link()],
   ...extra,
 });
-const provider = (id, appThreadId, nativeId, extra = {}) => ({
+const provider = (
+  id: string,
+  appThreadId: string | null,
+  nativeId: string | null,
+  extra: Extra = {},
+): Extra => ({
   id,
   appThreadId,
   ownerNodeId: null,
@@ -103,7 +108,7 @@ function fixture() {
     roster,
     db,
     room,
-    add(t) {
+    add(t: Extra) {
       db.run("INSERT INTO orchestration_v2_projection_threads VALUES (?,?,?,?)", [
         t.id,
         t.projectId,
@@ -111,7 +116,7 @@ function fixture() {
         JSON.stringify(t),
       ]);
     },
-    addProvider(p) {
+    addProvider(p: Extra) {
       db.run("INSERT INTO orchestration_v2_projection_provider_threads VALUES (?,?,?,?,?,?)", [
         p.id,
         p.appThreadId,
@@ -121,7 +126,7 @@ function fixture() {
         JSON.stringify(p),
       ]);
     },
-    agent(name, tag, retired = null) {
+    agent(name: string, tag: string, retired: number | null = null) {
       room.run("INSERT INTO agents VALUES (1,?,'codex','fixture',?,?,1)", [name, tag, retired]);
     },
     close() {
@@ -130,7 +135,8 @@ function fixture() {
     },
   };
 }
-function run(f, target = url(), flags = []) {
+type Fixture = ReturnType<typeof fixture>;
+function run(f: Fixture, target = url(), flags: string[] = []) {
   const child = spawnSync(
     process.execPath,
     [
@@ -148,7 +154,7 @@ function run(f, target = url(), flags = []) {
   return {
     status: child.status,
     error: child.stderr,
-    output: child.status === 0 ? JSON.parse(child.stdout) : null,
+    output: child.status === 0 ? (JSON.parse(child.stdout) as any) : null,
   };
 }
 test("secondary, multiple, retained and project-scoped associations use V2 payloads", () => {
@@ -185,7 +191,7 @@ test("secondary, multiple, retained and project-scoped associations use V2 paylo
   f.close();
   const result = run(f, "https://github.com/OWNER/REPO/pull/7");
   expect(result.status).toBe(0);
-  expect(result.output.matches.map((m) => m.threadId)).toEqual(["fork", "secondary"]);
+  expect(result.output.matches.map((m: any) => m.threadId)).toEqual(["fork", "secondary"]);
   const m = result.output.matches[1];
   expect({
     archive: m.archivedAt,
@@ -221,7 +227,7 @@ test("absent arrays allow legacy links; empty arrays suppress fallback and disco
   f.close();
   const result = run(f);
   expect(result.status).toBe(0);
-  expect(result.output.matches.map((m) => m.threadId)).toEqual(["discovered", "legacy"]);
+  expect(result.output.matches.map((m: any) => m.threadId)).toEqual(["discovered", "legacy"]);
   expect(result.output.matches[0].associations).toEqual([]);
   expect(result.output.matches[0].branchDiscovery.number).toBe(7);
   expect(result.output.matches[1].associations[0].linkedAt).toBe("1970-01-01T00:00:00.000Z");
@@ -265,8 +271,12 @@ test("exact active references are independent of root history and native IDs ide
       nativeId: "NewNative",
       providerSessionId: "runtime-new",
     });
-    expect(m.providerHistory.entries.map((p) => p.providerThreadId)).toEqual(["old"]);
-    expect(m.swarmail.identities.map((a) => a.name)).toEqual(["Current", "Retired", "SecondName"]);
+    expect(m.providerHistory.entries.map((p: any) => p.providerThreadId)).toEqual(["old"]);
+    expect(m.swarmail.identities.map((a: any) => a.name)).toEqual([
+      "Current",
+      "Retired",
+      "SecondName",
+    ]);
     expect(m.swarmail.identities[1].retiredAt).toBe(3);
   }
 });
@@ -287,7 +297,7 @@ test("missing active rows, null native IDs and missing roster retain the associa
   expect(result.status).toBe(0);
   expect(result.output.matches[0].currentProvider).toBeNull();
   expect(result.output.matches[1].currentProvider.nativeId).toBeNull();
-  expect(result.output.matches.every((m) => m.swarmail.status === "unavailable")).toBe(true);
+  expect(result.output.matches.every((m: any) => m.swarmail.status === "unavailable")).toBe(true);
 });
 test("native layers do not create visible associations and dismissed links require explicit inclusion", () => {
   const f = fixture();
@@ -347,7 +357,7 @@ test("derived chains order bottom to top; ambiguous heads and cycles remain unor
   f.close();
   const result = run(f);
   expect(result.status).toBe(0);
-  const byId = Object.fromEntries(result.output.matches.map((m) => [m.threadId, m]));
+  const byId = Object.fromEntries(result.output.matches.map((m: any) => [m.threadId, m]));
   expect(byId.ordered.chains.derived[0]).toMatchObject({ ordered: true, links: [7, 8] });
   expect(byId.ambiguous.chains.derived[0].ordered).toBe(false);
   expect(byId.cycle.chains.derived[0].ordered).toBe(false);
@@ -380,17 +390,18 @@ test("partially refreshed native stack snapshots preserve associations and expos
     snapshotAgreement: false,
     links: [7, 8],
   });
-  expect(m.visibleLinks.map((l) => l.stack.layers[0].state)).toEqual(["open", "merged"]);
+  expect(m.visibleLinks.map((l: any) => l.stack.layers[0].state)).toEqual(["open", "merged"]);
 });
 test("malformed or unsupported recognized input fails visibly without reporting zero matches", () => {
   for (const mutate of [
-    (f) => f.add(thread("bad", { pullRequests: null })),
-    (f) => f.add(thread("bad", { pullRequests: [link(7, { url: url(8) })] })),
-    (f) => f.add(thread("bad", { pullRequests: [link(7, { source: "future-source" })] })),
-    (f) => f.add(thread("bad", { pullRequests: [link(7, { host: "gitlab.com" })] })),
-    (f) => f.db.run("DROP TABLE orchestration_v2_projection_threads"),
-    (f) => f.db.run("DROP TABLE orchestration_v2_projection_provider_threads"),
-    (f) => f.db.run("INSERT INTO orchestration_v2_projection_threads VALUES ('bad','p',NULL,'{')"),
+    (f: Fixture) => f.add(thread("bad", { pullRequests: null })),
+    (f: Fixture) => f.add(thread("bad", { pullRequests: [link(7, { url: url(8) })] })),
+    (f: Fixture) => f.add(thread("bad", { pullRequests: [link(7, { source: "future-source" })] })),
+    (f: Fixture) => f.add(thread("bad", { pullRequests: [link(7, { host: "gitlab.com" })] })),
+    (f: Fixture) => f.db.run("DROP TABLE orchestration_v2_projection_threads"),
+    (f: Fixture) => f.db.run("DROP TABLE orchestration_v2_projection_provider_threads"),
+    (f: Fixture) =>
+      f.db.run("INSERT INTO orchestration_v2_projection_threads VALUES ('bad','p',NULL,'{')"),
   ]) {
     const f = fixture();
     mutate(f);

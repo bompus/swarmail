@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { discoverT3Backend, verifyT3Backend } from "../src/wake-backend.ts";
 import { testScratch } from "./fixtures/test-scratch.ts";
 
-const scratch = testScratch("swarmail-backend-tests", "local backend identity contract");
+const scratch = testScratch();
 
 test.skipIf(process.platform !== "linux")(
   "backend verification binds the listening executable to its open database",
@@ -27,38 +27,38 @@ test.skipIf(process.platform !== "linux")(
     // The verified listener's binary is the CLI to run, so an upgrade needs no configured path.
     const listener = realpathSync(process.execPath);
     try {
-      await expect(verifyT3Backend(config)).resolves.toBe(listener);
+      expect(verifyT3Backend(config)).resolves.toBe(listener);
       const { executable, ...unpinned } = config;
-      await expect(verifyT3Backend(unpinned)).resolves.toBe(listener);
+      expect(verifyT3Backend(unpinned)).resolves.toBe(listener);
       const otherAddress = Bun.serve({
         hostname: "127.0.0.2",
         port: 0,
         fetch: () => new Response("other address"),
       });
       try {
-        await expect(
+        expect(
           verifyT3Backend({ ...config, url: `http://127.0.0.1:${otherAddress.port}` }),
         ).rejects.toThrow("unavailable; retrying");
       } finally {
-        otherAddress.stop(true);
+        await otherAddress.stop(true);
       }
       for (const mismatch of [
         { executable: "/bin/false" },
         { executable: join(root, "removed-runtime") },
         { baseDir: join(root, "other-store") },
       ]) {
-        await expect(verifyT3Backend({ ...config, ...mismatch })).rejects.toThrow(
+        expect(verifyT3Backend({ ...config, ...mismatch })).rejects.toThrow(
           "stop the timer and reconcile",
         );
       }
       // T3 publishes its listener; the published port wins over the configured fallback.
       const runtime = join(root, "userdata/server-runtime.json");
-      const publish = (fields) =>
+      const publish = (fields: { version?: number; pid?: number; port?: number }) =>
         writeFileSync(
           runtime,
           JSON.stringify({ version: 1, pid: process.pid, port: server.port, ...fields }),
         );
-      const discover = async (url) => {
+      const discover = async (url?: string) => {
         const backend = await discoverT3Backend({
           executable: process.execPath,
           baseDir: root,
@@ -67,43 +67,43 @@ test.skipIf(process.platform !== "linux")(
         expect(backend.executable).toBe(listener);
         return backend.url;
       };
-      await expect(discover()).rejects.toThrow("unavailable; retrying");
-      await expect(discover(config.url)).resolves.toBe(config.url);
+      expect(discover()).rejects.toThrow("unavailable; retrying");
+      expect(discover(config.url)).resolves.toBe(config.url);
       publish({});
-      await expect(discover("http://127.0.0.1:1")).resolves.toBe(config.url);
+      expect(discover("http://127.0.0.1:1")).resolves.toBe(config.url);
       for (const stale of [{ pid: process.pid + 1 }, { port: 0 }]) {
         publish(stale);
-        await expect(discover(config.url)).rejects.toThrow("unavailable; retrying");
+        expect(discover(config.url)).rejects.toThrow("unavailable; retrying");
       }
       publish({ version: 2 });
-      await expect(discover(config.url)).rejects.toThrow("backend identity");
+      expect(discover(config.url)).rejects.toThrow("backend identity");
       writeFileSync(runtime, "{");
-      await expect(discover(config.url)).rejects.toThrow("unavailable; retrying");
+      expect(discover(config.url)).rejects.toThrow("unavailable; retrying");
       publish({});
-      await expect(discoverT3Backend({ executable: "/bin/false", baseDir: root })).rejects.toThrow(
+      expect(discoverT3Backend({ executable: "/bin/false", baseDir: root })).rejects.toThrow(
         "backend identity",
       );
       // Matching path text is insufficient after a data file is replaced.
       renameSync(path, path + ".old");
       writeFileSync(path, "replacement");
-      await expect(verifyT3Backend(config)).rejects.toThrow("backend identity");
+      expect(verifyT3Backend(config)).rejects.toThrow("backend identity");
       renameSync(path + ".old", path);
-      await expect(verifyT3Backend(config)).resolves.toBe(listener);
+      expect(verifyT3Backend(config)).resolves.toBe(listener);
       // Once V2 has created its database, the listener must hold that one, not V1's frozen file.
       const v2Path = join(root, "userdata/statev2.sqlite");
       new Database(v2Path, { create: true }).close();
-      await expect(verifyT3Backend(config)).rejects.toThrow("backend identity");
+      expect(verifyT3Backend(config)).rejects.toThrow("backend identity");
       const v2 = new Database(v2Path);
       try {
-        await expect(verifyT3Backend(config)).resolves.toBe(listener);
+        expect(verifyT3Backend(config)).resolves.toBe(listener);
       } finally {
         v2.close();
       }
-      server.stop(true);
-      await expect(verifyT3Backend(config)).rejects.toThrow("unavailable; retrying");
-      await expect(discover()).rejects.toThrow("unavailable; retrying");
+      await server.stop(true);
+      expect(verifyT3Backend(config)).rejects.toThrow("unavailable; retrying");
+      expect(discover()).rejects.toThrow("unavailable; retrying");
     } finally {
-      server.stop(true);
+      await server.stop(true);
       database.close();
       rmSync(root, { recursive: true, force: true });
     }

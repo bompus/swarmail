@@ -8,10 +8,10 @@ const CLI = join(import.meta.dir, "../src/cli.ts");
 const dir = mkdtempSync(join(tmpdir(), "swarmail-cli-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-const entry = (name, body) => {
+const entry = (name: string, body: string) => {
   const path = join(dir, name);
   writeFileSync(path, `import { main } from ${JSON.stringify(CLI)};\n${body}\n`);
-  return (...args) => spawnSync(process.execPath, [path, ...args], { encoding: "utf8" });
+  return (...args: string[]) => spawnSync(process.execPath, [path, ...args], { encoding: "utf8" });
 };
 
 test("an entry adds commands through main(), after the built-ins and without replacing one", () => {

@@ -1,28 +1,34 @@
 import { expect, test } from "bun:test";
 import { register } from "../src/claude-wake-mod.js";
+import type { Handler, ModApi, ModEvent } from "../src/claude-wake-mod.js";
+
+type Response = { status: number; text: string; headers?: Record<string, string> };
 
 /** Loads the mod against a fake `$`. `tick` runs the next timer and returns the delay of the one it schedules. */
-function session({ registered = true, entrypoint = "cli", home = { HOME: "/h" } } = {}) {
-  const on = {};
+function session({
+  registered = true,
+  entrypoint = "cli",
+  home = { HOME: "/h" } as Record<string, string>,
+} = {}) {
+  const on: Record<string, Handler> = {};
   register((event, hook) => (on[event] = hook));
-  const timers = [];
+  const timers: { ms: number; fn: () => void }[] = [];
   const state = {
     sid: "s-1",
     registered,
     eligible: true,
     statusCalls: 0,
     statusRead: async () => {},
-    /** @type {({ status: number, text: string, headers?: object } | Error | (() => object))[]} */
-    responses: [],
-    fetched: [],
-    submitted: [],
-    env: {},
+    responses: [] as (Response | Error | (() => Response))[],
+    fetched: [] as string[],
+    submitted: [] as string[],
+    env: {} as Record<string, string>,
   };
-  const $ = {
-    clock: { after: (ms, fn) => timers.push({ ms, fn }) },
+  const $: ModApi = {
+    clock: { after: (ms, fn) => void timers.push({ ms, fn }) },
     env: {
       get: async (name) => ({ ...home, CLAUDE_CODE_ENTRYPOINT: entrypoint })[name],
-      set: async (name, value) => (state.env[name] = value),
+      set: async (name, value) => void (state.env[name] = value),
     },
     fs: {
       read: async (path) => {
@@ -51,25 +57,26 @@ function session({ registered = true, entrypoint = "cli", home = { HOME: "/h" } 
     },
     prompt: { submit: async ({ text }) => void state.submitted.push(text) },
   };
-  const pass = async (e) => e;
+  const pass = async (e: ModEvent) => e;
   return {
     state,
-    start: (e = {}) => on["session.start"]($, e, pass),
-    turnStart: () => on["turn.start"]($, {}, pass),
-    turnComplete: (e = {}) => on["turn.complete"]($, e, pass),
-    toolCall: (e, result) => on["tool.call"]($, e, async () => result),
+    start: (e: ModEvent = {}) => on["session.start"]!($, e, pass),
+    turnStart: () => on["turn.start"]!($, {}, pass),
+    turnComplete: (e: ModEvent = {}) => on["turn.complete"]!($, e, pass),
+    toolCall: (e: ModEvent & { tool?: string }, result: object) =>
+      on["tool.call"]!($, e, async () => result),
     timers,
     async tick() {
-      timers.shift().fn();
+      timers.shift()!.fn();
       while (!timers.length) {
         await Bun.sleep(0);
       }
-      return timers[0].ms;
+      return timers[0]!.ms;
     },
   };
 }
 
-const hint = (eventId, text = "Swarmail: 1 new message") => ({
+const hint = (eventId: number, text = "Swarmail: 1 new message") => ({
   status: 200,
   text: `${text}\n`,
   headers: { "x-swarmail-event-id": String(eventId) },

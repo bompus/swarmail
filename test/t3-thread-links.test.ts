@@ -8,21 +8,24 @@ import { mail } from "../src/mail.ts";
 import { AGENT_GUIDANCE, SENDING_GUIDANCE } from "../src/guidance.ts";
 
 const P = "/w/t3-links";
-let dir, server, db, url;
+let dir: string;
+let server: ReturnType<typeof createServer>["server"];
+let db: ReturnType<typeof createServer>["db"];
+let url: string;
 
 beforeAll(() => {
   dir = realpathSync.native(mkdtempSync(join(tmpdir(), "swarmail-t3-links-")));
   ({ server, db } = createServer(join(dir, "mail.sqlite3"), 0));
   url = `http://127.0.0.1:${server.port}/mcp/`;
 });
-afterAll(() => {
-  server.stop(true);
+afterAll(async () => {
+  await server.stop(true);
   db.close();
   rmSync(dir, { recursive: true, force: true });
 });
 
 let nextId = 0;
-async function call(name, args) {
+async function call(name: string, args: Record<string, unknown>): Promise<any> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -33,14 +36,14 @@ async function call(name, args) {
       params: { name, arguments: args },
     }),
   });
-  const r = (await res.json()).result;
+  const r = ((await res.json()) as any).result;
   const value = JSON.parse(r.content[0].text);
   if (r.isError) {
     throw Object.assign(new Error(value.error.message), value.error);
   }
   return value;
 }
-const register = (name, task_description) =>
+const register = (name: string, task_description: string) =>
   call("register_agent", {
     project_key: P,
     program: "claude-code",
@@ -81,7 +84,7 @@ test("an inbox entry names the sender's T3 thread, or null for a sender outside 
     agent_name: "GreenLake",
     mark_read: false,
   });
-  const by = Object.fromEntries(inbox.map((m) => [m.from, m.sender_t3_thread]));
+  const by = Object.fromEntries(inbox.map((m: any) => [m.from, m.sender_t3_thread]));
   expect(by).toEqual({ AmberFox: "mcp:sender-thread", IndigoHill: null });
 });
 
@@ -93,7 +96,7 @@ test("the guidance tells a T3 session to link threads and keep names as the fall
 });
 
 test("the inbox command shows the sender's thread link target beside a registered name, only under T3", async () => {
-  const message = (id, from, sender_t3_thread) => ({
+  const message = (id: number, from: string, sender_t3_thread: string | null) => ({
     id,
     from,
     subject: `s${id}`,
@@ -135,6 +138,6 @@ test("the inbox command shows the sender's thread link target beside a registere
     expect(text).toContain("from IndigoHill (Work): s2");
   } finally {
     log.mockRestore();
-    fixture.stop(true);
+    await fixture.stop(true);
   }
 });

@@ -2,6 +2,7 @@ import { expect, test as bunTest } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { hostAlive } from "../src/proc.ts";
+import type { HostProcess } from "../src/proc.ts";
 import { createServer } from "../src/server.ts";
 import { createTools } from "../src/tools.ts";
 import {
@@ -23,13 +24,17 @@ import {
   heldT3State,
   rescanDue,
 } from "../src/wake-auto-t3.ts";
+import type { RegisterState } from "../src/registry.ts";
 import { testScratch } from "./fixtures/test-scratch.ts";
 import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.ts";
+
+/** Settles a test server's pending response; the barriers below hold these. */
+type Resolve = (response: Response) => void;
 
 // The supervisor needs Unix file permissions for credential rotation and the tests use POSIX shell wrappers.
 const test = process.platform === "linux" ? bunTest : bunTest.skip;
 
-const scratch = testScratch("swarmail-auto-tests", "automatic T3 wake regression tests");
+const scratch = testScratch();
 
 function fixture() {
   const root = mkdtempSync(join(scratch, "case-"));
@@ -68,7 +73,7 @@ test("first read-only Codex tool registers a T3 mailbox, the next scan makes it 
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
-      const message = await req.json();
+      const message = (await req.json()) as any;
       const value = message.params.name === "list_agents" ? [] : { name: "BlueLake" };
       return Response.json({
         jsonrpc: "2.0",
@@ -117,7 +122,7 @@ test("first read-only Codex tool registers a T3 mailbox, the next scan makes it 
       expect([...automaticT3Threads(f.registry, join(f.root, ".t3"))]).toEqual(["thread-1"]);
     }
   } finally {
-    server.stop(true);
+    await server.stop(true);
     f.close();
   }
 });
@@ -148,22 +153,23 @@ test("after the V2 cutover, enrollment and selection read V2's Codex and Cursor 
   // Claude's own stop hook wakes a Claude thread, so the service leaves it alone.
   addT3V2Thread(db, { threadId: "thread-6", nativeId: "native-6", driver: "claudeAgent" });
   addT3V2Thread(db, { threadId: "thread-7", nativeId: "agent-7", driver: "cursor" });
-  for (const [threadId, nativeId, driver, field, value] of [
+  const settledThreads: [string, string, string, string, string][] = [
     ["thread-8", "native-8", "codex", "settledOverride", "settled"],
     ["thread-9", "agent-9", "cursor", "settledAt", "2026-10-03T03:00:00Z"],
-  ]) {
+  ];
+  for (const [threadId, nativeId, driver, field, value] of settledThreads) {
     addT3V2Thread(db, { threadId, nativeId, driver });
     db.query(
       "UPDATE orchestration_v2_projection_threads SET payload_json=json_set(payload_json,?,?) WHERE thread_id=?",
     ).run(`$.${field}`, value, threadId);
   }
   db.close();
-  const calls = [];
+  const calls: any[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
-      const message = await req.json();
+      const message = (await req.json()) as any;
       calls.push(message.params);
       const value = message.params.name === "list_agents" ? [] : { name: "BlueLake" };
       return Response.json({
@@ -229,7 +235,7 @@ test("after the V2 cutover, enrollment and selection read V2's Codex and Cursor 
       current.close();
     }
   } finally {
-    server.stop(true);
+    await server.stop(true);
     f.close();
   }
 });
@@ -238,7 +244,7 @@ test("thread selection survives registration, end, resume, archive and provider 
   const f = fixture();
   try {
     const events = ["register", "end", "resume", "archive", "replace", "settle", "reactivate"];
-    const sequences = [[]];
+    const sequences: string[][] = [[]];
     for (let depth = 0; depth < 3; depth++) {
       for (const prefix of sequences.filter((x) => x.length === depth)) {
         for (const event of events) {
@@ -247,7 +253,7 @@ test("thread selection survives registration, end, resume, archive and provider 
       }
     }
     for (const sequence of sequences) {
-      let state = {
+      let state: RegisterState = {
         name: "BlueLake",
         projects: ["/repo"],
         tags: { "/repo": "[t3:thread-1 codex:native-1 cwd:/repo]" },
@@ -304,12 +310,12 @@ test("runtime enrollment registers a fresh read-only T3 session without native h
   Bun.spawnSync(["git", "init", "-q", repo]);
   f.db.query("INSERT INTO projection_projects VALUES ('project-1',?)").run(repo);
   f.db.query("UPDATE provider_session_runtime SET last_seen_at='2026-09-30T22:00:00Z'").run();
-  const calls = [];
+  const calls: any[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
-      const message = await req.json();
+      const message = (await req.json()) as any;
       calls.push(message.params);
       const value = message.params.name === "list_agents" ? [] : { name: "BlueLake" };
       return Response.json({
@@ -321,7 +327,7 @@ test("runtime enrollment registers a fresh read-only T3 session without native h
   });
   try {
     const source = join(import.meta.dir, "../src/wake-auto-t3.ts");
-    const run = async (after) => {
+    const run = async (after: string) => {
       const code = `import {enrollT3Threads} from ${JSON.stringify(source)}; enrollT3Threads(${JSON.stringify(f.registry)},${JSON.stringify(join(f.root, ".t3"))},${JSON.stringify(after)},${JSON.stringify(`http://127.0.0.1:${server.port}/mcp/`)});`;
       expect(
         await Bun.spawn([process.execPath, "-e", code], { stdout: "pipe", stderr: "pipe" }).exited,
@@ -339,7 +345,7 @@ test("runtime enrollment registers a fresh read-only T3 session without native h
     });
     expect([...automaticT3Threads(f.registry, join(f.root, ".t3"))]).toEqual(["thread-1"]);
   } finally {
-    server.stop(true);
+    await server.stop(true);
     f.close();
   }
 });
@@ -350,12 +356,12 @@ test("enrollment skips a running T3 row last seen before the registration window
   Bun.spawnSync(["git", "init", "-q", repo]);
   f.db.query("INSERT INTO projection_projects VALUES ('project-1',?)").run(repo);
   f.db.query("UPDATE provider_session_runtime SET last_seen_at='2026-09-30T22:00:00Z'").run();
-  const calls = [];
+  const calls: any[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
-      const message = await req.json();
+      const message = (await req.json()) as any;
       calls.push(message.params);
       const value = message.params.name === "list_agents" ? [] : { name: "BlueLake" };
       return Response.json({
@@ -367,7 +373,7 @@ test("enrollment skips a running T3 row last seen before the registration window
   });
   try {
     const source = join(import.meta.dir, "../src/wake-auto-t3.ts");
-    const run = async (now) => {
+    const run = async (now: string) => {
       const after = enrollSince("2026-09-01T00:00:00Z", Date.parse(now));
       const code = `import {enrollT3Threads} from ${JSON.stringify(source)}; enrollT3Threads(${JSON.stringify(f.registry)},${JSON.stringify(join(f.root, ".t3"))},${JSON.stringify(after)},${JSON.stringify(`http://127.0.0.1:${server.port}/mcp/`)});`;
       expect(await Bun.spawn([process.execPath, "-e", code]).exited).toBe(0);
@@ -379,7 +385,7 @@ test("enrollment skips a running T3 row last seen before the registration window
     await run("2026-10-05T00:00:00Z");
     expect(JSON.parse(readFileSync(f.state, "utf8")).wakeThread).toBe("thread-1");
   } finally {
-    server.stop(true);
+    await server.stop(true);
     f.close();
   }
 });
@@ -409,12 +415,12 @@ for (const mode of [
     if (mode === "stopped-after-end") {
       f.db.query("UPDATE provider_session_runtime SET status='stopped'").run();
     }
-    let release;
-    const held = new Promise((done) => {
+    let release!: () => void;
+    const held = new Promise<void>((done) => {
       release = done;
     });
-    let reached;
-    const registering = new Promise((done) => {
+    let reached!: () => void;
+    const registering = new Promise<void>((done) => {
       reached = done;
     });
     let attempts = 0;
@@ -422,7 +428,7 @@ for (const mode of [
       hostname: "127.0.0.1",
       port: 0,
       async fetch(req) {
-        const msg = await req.json();
+        const msg = (await req.json()) as any;
         if (msg.params.name === "register_agent") {
           attempts++;
           reached();
@@ -451,7 +457,7 @@ for (const mode of [
         });
       },
     });
-    const children = [];
+    const children: Bun.Subprocess[] = [];
     const module = join(import.meta.dir, "../src/wake-auto-t3.ts");
     const start = () => {
       const code = `import {enrollT3Threads} from ${JSON.stringify(module)};enrollT3Threads(${JSON.stringify(f.registry)},${JSON.stringify(join(f.root, ".t3"))},"2026-09-30T20:00:00Z",${JSON.stringify(`http://127.0.0.1:${server.port}/mcp/`)});`;
@@ -502,7 +508,7 @@ for (const mode of [
         }
         await child.exited;
       }
-      server.stop(true);
+      await server.stop(true);
       f.close();
     }
   });
@@ -547,7 +553,7 @@ test("supervisor state survives a T3 upgrade and credential cutover, but not a n
   process.env.XDG_STATE_HOME = root;
   try {
     const path = join(root, "config.json");
-    const configure = (target, rotation) => {
+    const configure = (target: Record<string, unknown>, rotation: Record<string, unknown>) => {
       writeFileSync(
         path,
         JSON.stringify({
@@ -559,7 +565,7 @@ test("supervisor state survives a T3 upgrade and credential cutover, but not a n
       );
       return automaticT3Configuration(path);
     };
-    const open = (binding) =>
+    const open = (binding: string) =>
       openWakeState("http://127.0.0.1:18765", "t3-auto", binding, "swarmail-auto-t3").close();
     // The binding saved before it dropped the binary, version and credential file.
     const before = configure(
@@ -594,7 +600,7 @@ test("supervisor state survives a T3 upgrade and credential cutover, but not a n
 test("SessionEnd before the first enrollment lock prevents a stale runtime snapshot from enrolling", async () => {
   const f = fixture();
   const repo = join(f.root, "repo");
-  const actualGit = Bun.which("git");
+  const actualGit = Bun.which("git")!;
   Bun.spawnSync([actualGit, "init", "-q", repo]);
   f.db.query("INSERT INTO projection_projects VALUES ('project-1',?)").run(repo);
   f.db.query("UPDATE provider_session_runtime SET last_seen_at='2026-09-30T22:00:00Z'").run();
@@ -602,7 +608,7 @@ test("SessionEnd before the first enrollment lock prevents a stale runtime snaps
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
-      const msg = await req.json();
+      const msg = (await req.json()) as any;
       return Response.json({
         jsonrpc: "2.0",
         id: 1,
@@ -658,7 +664,7 @@ import {writeFileSync,existsSync} from "node:fs";writeFileSync(${JSON.stringify(
       child.kill("SIGKILL");
     }
     await child.exited;
-    server.stop(true);
+    await server.stop(true);
     f.close();
   }
 });
@@ -681,7 +687,10 @@ test("explicit thread recovery requires the supervisor lock, preserves other fai
   db.exec(
     "CREATE TABLE state(id INTEGER PRIMARY KEY,binding TEXT,acknowledged INTEGER,pending TEXT); CREATE TABLE context(id INTEGER PRIMARY KEY,value TEXT);",
   );
-  db.query("INSERT INTO state VALUES(1,?,0,NULL)").run(automaticBinding(config));
+  // Only the fields the binding reads; the supervisor never starts here.
+  db.query("INSERT INTO state VALUES(1,?,0,NULL)").run(
+    automaticBinding(config as unknown as Parameters<typeof automaticBinding>[0]),
+  );
   const saved = JSON.stringify({ failures: { "thread-1": "rejected", "thread-2": "ambiguous" } });
   db.query("INSERT INTO context VALUES(1,?)").run(saved);
   const mailboxKey = createHash("sha256").update(`${config.swarmailUrl}\nthread-1`).digest("hex");
@@ -714,7 +723,8 @@ test("explicit thread recovery requires the supervisor lock, preserves other fai
     const error = new Response(child.stderr).text();
     return { exit: await child.exited, error: await error };
   };
-  const read = () => db.query("SELECT value FROM context WHERE id=1").get().value;
+  const read = () =>
+    db.query<{ value: string }, []>("SELECT value FROM context WHERE id=1").get()!.value;
   const lock = new Database(join(ownerDir, `${key}.lock.sqlite`));
   try {
     lock.exec("BEGIN EXCLUSIVE");
@@ -767,22 +777,22 @@ for (const timing of [
     const f = fixture();
     const stateRoot = join(f.root, "state");
     const expiresAt = new Date(Date.now() + 86400000).toISOString();
-    let fatalCommand = null;
-    let pausedDelivery;
+    let fatalCommand: any = null;
+    let pausedDelivery: Resolve | undefined;
     let pauseDelivery = false;
-    let stopBarrier;
+    let stopBarrier: Resolve | undefined;
     const stopGate = join(f.root, "stop-gate");
     const healthyEvent = duringRemoval && !ownRemoval ? 2 : 1;
     const pausedThread = ownRemoval ? "thread-1" : "thread-2";
-    const commands = [];
-    const requests = new Set();
+    const commands: any[] = [];
+    const requests = new Set<string>();
     let authenticated = true;
     const clock = join(f.root, "clock");
     writeFileSync(clock, String(Date.now()));
     const targetOptions = {
       hostname: "127.0.0.1",
       port: 0,
-      async fetch(request) {
+      async fetch(request: Request) {
         const path = new URL(request.url).pathname;
         requests.add(new URL(request.url).host + path);
         if (path === "/api/auth/session") {
@@ -797,7 +807,7 @@ for (const timing of [
           });
         }
         if (path === "/api/orchestration/dispatch") {
-          const command = await request.json();
+          const command = (await request.json()) as any;
           commands.push(command);
           if (!authenticated) {
             return new Response("private-auth-body", { status: 403 });
@@ -806,7 +816,7 @@ for (const timing of [
             fatalCommand = command;
           }
           if (pauseDelivery && command.threadId === pausedThread) {
-            return new Promise((resolve) => {
+            return new Promise<Response>((resolve) => {
               pausedDelivery = resolve;
             });
           }
@@ -827,9 +837,9 @@ for (const timing of [
       },
     };
     const target = Bun.serve(targetOptions);
-    let movedTarget;
-    const waiting = new Map();
-    let scanBarrier;
+    let movedTarget: Bun.Server<undefined> | undefined;
+    const waiting = new Map<string | null, Resolve>();
+    let scanBarrier: Resolve | undefined;
     const offer = (eventId = 1) =>
       new Response("Swarmail: 1 new message. Call fetch_inbox.", {
         headers: { "x-swarmail-event-id": String(eventId) },
@@ -846,18 +856,18 @@ for (const timing of [
           return Response.json({ eligible: true });
         }
         if (new URL(request.url).pathname === "/stop") {
-          return new Promise((resolve) => {
+          return new Promise<Response>((resolve) => {
             stopBarrier = resolve;
           });
         }
         if (new URL(request.url).pathname === "/scan") {
-          return new Promise((resolve) => {
+          return new Promise<Response>((resolve) => {
             scanBarrier = resolve;
           });
         }
         const id = new URL(request.url).searchParams.get("session");
-        return new Promise((resolve) => {
-          const finish = (response) => {
+        return new Promise<Response>((resolve) => {
+          const finish = (response: Response) => {
             if (waiting.get(id) === finish) {
               waiting.delete(id);
             }
@@ -899,14 +909,17 @@ for (const timing of [
       }
       const db = new Database(ownerPath, { readonly: true });
       try {
-        return JSON.parse(db.query("SELECT value FROM context WHERE id=1").get()?.value ?? "null");
+        return JSON.parse(
+          db.query<{ value: string }, []>("SELECT value FROM context WHERE id=1").get()?.value ??
+            "null",
+        );
       } catch {
         return null;
       } finally {
         db.close();
       }
     };
-    const stopped = (id) => {
+    const stopped = (id: string) => {
       const key = createHash("sha256").update(`${config.swarmailUrl}\n${id}`).digest("hex");
       const db = new Database(join(stateRoot, "swarmail-bridge", key + ".lock.sqlite"));
       try {
@@ -918,13 +931,13 @@ for (const timing of [
         db.close();
       }
     };
-    const journal = (id) => {
+    const journal = (id: string) => {
       const key = createHash("sha256").update(`${config.swarmailUrl}\n${id}`).digest("hex");
       const db = new Database(join(stateRoot, "swarmail-bridge", key + ".sqlite"), {
         readonly: true,
       });
       try {
-        return db.query("SELECT * FROM state WHERE id=1").get();
+        return db.query("SELECT * FROM state WHERE id=1").get() as any;
       } finally {
         db.close();
       }
@@ -944,8 +957,8 @@ for (const timing of [
       );
     }
     writeFileSync(configPath, JSON.stringify(config));
-    let child;
-    let errors;
+    let child: Bun.Subprocess<"ignore", "ignore", "pipe">;
+    let errors: Promise<string>;
     const launch = () =>
       Bun.spawn(
         [
@@ -972,7 +985,7 @@ for (const timing of [
       );
     child = launch();
     errors = new Response(child.stderr).text();
-    const until = async (predicate) => {
+    const until = async (predicate: () => unknown) => {
       const deadline = Date.now() + 10000;
       while (!predicate()) {
         if (child.exitCode !== null) {
@@ -988,7 +1001,7 @@ for (const timing of [
       await until(() => scanBarrier);
       const release = scanBarrier;
       scanBarrier = undefined;
-      release(new Response());
+      release!(new Response());
       await until(() => scanBarrier);
     };
     try {
@@ -1001,7 +1014,9 @@ for (const timing of [
       const observer = new Database(ownerPath, { readonly: true });
       expect(observer.query("PRAGMA journal_mode").get()).toEqual({ journal_mode: "wal" });
       observer.exec("BEGIN");
-      const observed = observer.query("SELECT value FROM context WHERE id=1").get().value;
+      const observed = observer
+        .query<{ value: string }, []>("SELECT value FROM context WHERE id=1")
+        .get()!.value;
       try {
         f.db.exec(
           "UPDATE projection_threads SET archived_at='archived' WHERE thread_id='thread-1'",
@@ -1009,7 +1024,10 @@ for (const timing of [
         await scan();
         await until(() => Object.keys(status()?.subscriptions ?? {}).length === 1);
         await until(() => !waiting.has("thread-1")); // The removed bridge stopped polling.
-        expect(observer.query("SELECT value FROM context WHERE id=1").get().value).toBe(observed);
+        expect(
+          observer.query<{ value: string }, []>("SELECT value FROM context WHERE id=1").get()!
+            .value,
+        ).toBe(observed);
       } finally {
         observer.exec("ROLLBACK");
         observer.close();
@@ -1020,11 +1038,11 @@ for (const timing of [
       await until(
         () => Object.keys(status()?.subscriptions ?? {}).length === 2 && waiting.has("thread-1"),
       );
-      const receipts = Object.values(status().subscriptions);
+      const receipts = Object.values(status().subscriptions) as HostProcess[];
       if (duringRemoval) {
         // Stop the healthy bridge first; the sibling fails while that stop is awaiting delivery.
         pauseDelivery = true;
-        waiting.get(pausedThread)(offer());
+        waiting.get(pausedThread)!(offer());
         await until(() => pausedDelivery);
         writeFileSync(stopGate, "1");
         f.db.exec(
@@ -1036,7 +1054,7 @@ for (const timing of [
         if (shuttingDown) {
           child.kill("SIGTERM");
         }
-        scanBarrier(new Response());
+        scanBarrier!(new Response());
         scanBarrier = undefined;
         await until(() => stopBarrier);
         expect(stopped(pausedThread)).toBe(false);
@@ -1044,12 +1062,12 @@ for (const timing of [
           await until(() => stopped("thread-2"));
         }
         if (!ownRemoval) {
-          waiting.get("thread-1")(offer());
+          waiting.get("thread-1")!(offer());
           await until(() => fatalCommand && stopped("thread-1"));
         }
         pauseDelivery = false;
         rmSync(stopGate);
-        pausedDelivery(Response.json(ownRemoval ? {} : { sequence: 1 }));
+        pausedDelivery!(Response.json(ownRemoval ? {} : { sequence: 1 }));
         pausedDelivery = undefined;
         if (shuttingDown) {
           expect(await child.exited).toBe(0);
@@ -1058,7 +1076,7 @@ for (const timing of [
         } else {
           await until(() => scanBarrier);
         }
-        stopBarrier(new Response());
+        stopBarrier!(new Response());
         stopBarrier = undefined;
         f.db.exec("UPDATE projection_threads SET archived_at=NULL");
         if (shuttingDown) {
@@ -1067,7 +1085,7 @@ for (const timing of [
         }
         await scan();
       } else {
-        waiting.get("thread-1")(offer());
+        waiting.get("thread-1")!(offer());
         await until(() => fatalCommand);
         await scan();
       }
@@ -1093,17 +1111,17 @@ for (const timing of [
       const originalPending = saved.pending;
       // Enumerate eligibility changes and scans at the real supervisor boundary.
       const events = ["archive", "settle", "resume", "scan"];
-      const visit = async (sequence = []) => {
+      const visit = async (sequence: string[] = []) => {
         if (sequence.length === 3) {
           return;
         }
         for (const event of events) {
           const next = [...sequence, event];
           const before = f.db
-            .query(
+            .query<{ archived_at: string | null; settled_override: string | null }, []>(
               "SELECT archived_at, settled_override FROM projection_threads WHERE thread_id='thread-1'",
             )
-            .get();
+            .get()!;
           if (event !== "scan") {
             f.db
               .query(
@@ -1142,11 +1160,11 @@ for (const timing of [
         false,
       );
       expect(journal("thread-1").pending).toBe(originalPending);
-      waiting.get("thread-2")(offer(healthyEvent));
+      waiting.get("thread-2")!(offer(healthyEvent));
       await until(() => journal("thread-2").acknowledged === healthyEvent);
       // Restart cannot silently retry a permanently failed thread.
       child.kill("SIGTERM");
-      scanBarrier(new Response());
+      scanBarrier!(new Response());
       scanBarrier = undefined;
       expect(await child.exited).toBe(0);
       if (!shuttingDown) {
@@ -1189,7 +1207,7 @@ for (const timing of [
           tags: { "/w/auto": "[t3:thread-4 codex:native-4 cwd:/w/auto]" },
         }),
       );
-      scanBarrier(new Response());
+      scanBarrier!(new Response());
       scanBarrier = undefined;
       await until(() => child.exitCode !== null || status()?.failures?.["thread-4"]);
       expect(status().failures).not.toHaveProperty("thread-4");
@@ -1210,13 +1228,13 @@ for (const timing of [
       await until(() => scanBarrier && waiting.has("thread-2"));
       const previousCommands = commands.filter((command) => command.threadId === "thread-2").length;
       authenticated = false;
-      waiting.get("thread-2")(offer(healthyEvent + 1));
+      waiting.get("thread-2")!(offer(healthyEvent + 1));
       await until(
         () =>
           commands.filter((command) => command.threadId === "thread-2").length ===
             previousCommands + 1 && stopped("thread-2"),
       );
-      scanBarrier(new Response());
+      scanBarrier!(new Response());
       scanBarrier = undefined;
       await until(() => child.exitCode !== null || status()?.failures?.["thread-2"]);
       expect(status().failures).not.toHaveProperty("thread-2");
@@ -1236,9 +1254,9 @@ for (const timing of [
       for (const resolve of waiting.values()) {
         resolve(new Response(null, { status: 204 }));
       }
-      mail.stop(true);
-      target.stop(true);
-      movedTarget?.stop(true);
+      await mail.stop(true);
+      await target.stop(true);
+      await movedTarget?.stop(true);
       f.close();
     }
   }, 20000);
@@ -1354,7 +1372,7 @@ test("automatic supervisor waits out a T3 restart and follows its new port", asy
   );
   const configPath = join(f.root, "config.json");
   writeFileSync(configPath, JSON.stringify(config));
-  const publish = (server) =>
+  const publish = (server: Bun.Server<undefined>) =>
     writeFileSync(
       join(baseDir, "userdata/server-runtime.json"),
       JSON.stringify({ version: 1, pid: process.pid, port: server.port }),
@@ -1375,7 +1393,7 @@ test("automatic supervisor waits out a T3 restart and follows its new port", asy
     },
   );
   const errors = new Response(child.stderr).text();
-  const until = async (predicate) => {
+  const until = async (predicate: () => unknown) => {
     const deadline = Date.now() + 15000;
     while (!predicate()) {
       if (child.exitCode !== null) {
@@ -1388,8 +1406,8 @@ test("automatic supervisor waits out a T3 restart and follows its new port", asy
     }
   };
   const first = t3();
-  let second;
-  let stalled;
+  let second: Bun.Server<undefined> | undefined;
+  let stalled: Bun.Server<undefined> | undefined;
   try {
     await Bun.sleep(2500); // No runtime file and no configured URL: T3 is down, not changed.
     expect(child.exitCode).toBeNull();
@@ -1398,9 +1416,9 @@ test("automatic supervisor waits out a T3 restart and follows its new port", asy
     expect(seen.has(`${first.port} /api/orchestration/threads/thread-1`)).toBe(true);
     second = t3();
     publish(second);
-    first.stop(true);
+    await first.stop(true);
     await until(
-      () => seen.has(`${second.port} /api/orchestration/threads/thread-1`) && waiting.size === 1,
+      () => seen.has(`${second!.port} /api/orchestration/threads/thread-1`) && waiting.size === 1,
     );
     expect(seen.has(`${second.port} /api/auth/session`)).toBe(true);
     const ownedPaths = [config.target.authorizationFile, join(rotation, "state.json"), f.state];
@@ -1424,10 +1442,10 @@ test("automatic supervisor waits out a T3 restart and follows its new port", asy
     }
     await child.exited;
     await errors;
-    mail.stop(true);
-    first.stop(true);
-    second?.stop(true);
-    stalled?.stop(true);
+    await mail.stop(true);
+    await first.stop(true);
+    await second?.stop(true);
+    await stalled?.stop(true);
     f.close();
   }
   expect(await errors).toContain(
@@ -1492,7 +1510,7 @@ test("automatic scans repeat only after a T3 commit, a registry write, a reopen 
   }
 });
 
-const HOLD_REASONS = {
+const HOLD_REASONS: Record<string, string> = {
   unavailable: "core reported unavailable",
   malformed: "unexpected response",
   missing: "HTTP 404",
@@ -1503,7 +1521,7 @@ for (const initial of ["unavailable", "malformed", "missing"]) {
     const core = createServer(join(f.root, "mail.sqlite"), 0);
     let mode = initial,
       stopping = false,
-      releaseScan;
+      releaseScan: Resolve | undefined;
     let targetReads = 0;
     const expiresAt = new Date(Date.now() + 86400000).toISOString();
     const target = Bun.serve({
@@ -1519,7 +1537,7 @@ for (const initial of ["unavailable", "malformed", "missing"]) {
         });
       },
     });
-    const requests = [];
+    const requests: { method: string; body: string }[] = [];
     const proxy = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
@@ -1528,7 +1546,7 @@ for (const initial of ["unavailable", "malformed", "missing"]) {
         if (url.pathname === "/scan") {
           return stopping
             ? new Response()
-            : new Promise((resolve) => {
+            : new Promise<Response>((resolve) => {
                 releaseScan = resolve;
               });
         }
@@ -1590,7 +1608,7 @@ for (const initial of ["unavailable", "malformed", "missing"]) {
       },
     );
     const errors = new Response(child.stderr).text();
-    const until = async (fn) => {
+    const until = async (fn: () => unknown) => {
       const deadline = Date.now() + 8000;
       while (!fn()) {
         if (child.exitCode !== null) {
@@ -1611,7 +1629,7 @@ for (const initial of ["unavailable", "malformed", "missing"]) {
       mode = "ready";
       const resume = releaseScan;
       releaseScan = undefined;
-      resume(new Response());
+      resume!(new Response());
       await until(() => releaseScan && targetReads > 0);
       expect(existsSync(header)).toBe(true);
       expect(requests).toHaveLength(2);
@@ -1622,9 +1640,9 @@ for (const initial of ["unavailable", "malformed", "missing"]) {
       }
       releaseScan?.(new Response());
       await child.exited;
-      proxy.stop(true);
-      target.stop(true);
-      core.server.stop(true);
+      await proxy.stop(true);
+      await target.stop(true);
+      await core.server.stop(true);
       core.db.close();
       f.close();
     }
@@ -1659,22 +1677,22 @@ test("scan orderings reconcile verified closure and recovery while the T3 backen
     },
   });
   const tools = createTools(core.db, { databasePath: join(f.root, "mail.sqlite") });
-  tools.register_agent({
+  tools.register_agent!({
     project_key: f.root,
     name: "GreenCastle",
     program: "codex",
     model: "test",
     task_description: "[t3:thread-one codex:native-one]",
   });
-  tools.register_agent({ project_key: f.root, name: "BlueLake", program: "test", model: "test" });
-  tools.send_message({
+  tools.register_agent!({ project_key: f.root, name: "BlueLake", program: "test", model: "test" });
+  tools.send_message!({
     project_key: f.root,
     sender_name: "BlueLake",
     to: ["GreenCastle"],
     subject: "retained",
     body_md: "history",
   });
-  let releaseScan,
+  let releaseScan: Resolve | undefined,
     stopping = false,
     requests = 0;
   const proxy = Bun.serve({
@@ -1748,13 +1766,15 @@ test("scan orderings reconcile verified closure and recovery while the T3 backen
   const scan = async () => {
     const resume = releaseScan;
     releaseScan = undefined;
-    resume(new Response());
+    resume!(new Response());
     await until();
   };
   const roster = () =>
-    tools.list_agents({ project_key: f.root }).some((agent) => agent.name === "GreenCastle");
+    (tools.list_agents!({ project_key: f.root }) as { name: string }[]).some(
+      (agent) => agent.name === "GreenCastle",
+    );
   let revision = 1;
-  const transition = (state) => {
+  const transition = (state: string) => {
     revision++;
     source
       .query("INSERT INTO orchestration_events VALUES (?,?)")
@@ -1795,7 +1815,9 @@ test("scan orderings reconcile verified closure and recovery while the T3 backen
           verifiedActive = intendedActive;
         }
         expect(roster(), `${first} -> ${second}`).toBe(verifiedActive);
-        expect(core.db.query("SELECT count(*) AS n FROM messages").get().n).toBe(1);
+        expect(
+          core.db.query<{ n: number }, []>("SELECT count(*) AS n FROM messages").get()!.n,
+        ).toBe(1);
       }
       sequences++;
     }
@@ -1809,8 +1831,8 @@ test("scan orderings reconcile verified closure and recovery while the T3 backen
     }
     releaseScan?.(new Response());
     await child.exited;
-    proxy.stop(true);
-    core.server.stop(true);
+    await proxy.stop(true);
+    await core.server.stop(true);
     core.db.close();
     source.close();
     f.close();
