@@ -25,6 +25,8 @@ changed either (CONTRIBUTING.md, "Releasing").
    `tools/list` response the prompts embed; leave out `--tools` to ask a
    running server on `127.0.0.1:18765` instead. `--rules <file>` puts other
    rule text in place of `docs/usage.md`.
+   The prompts embed `cases/` and `tools.json` byte for byte, so `.oxfmtrc.json`
+   leaves them out of formatting: reformatting them would change the prompts.
 
    ```bash
    bun evals/docs-check/build-prompts.ts --tree . --arm current --out docs-check-run/prompts --tools evals/docs-check/tools.json

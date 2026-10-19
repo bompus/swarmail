@@ -1,7 +1,6 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "printWidth": 100,
-  // The docs check embeds these files in model prompts byte for byte, so reformatting would change the prompts.
   "ignorePatterns": ["bun.lock", "evals/docs-check/cases/", "evals/docs-check/tools.json"],
-  "sortPackageJson": true,
+  "sortPackageJson": true
 }
