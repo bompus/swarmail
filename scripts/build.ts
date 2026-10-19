@@ -2,7 +2,7 @@
 // Compiles the swarmail command (src/cli.ts, or main.ts beside it when a build adds its own
 // commands there, with bytecode laid out by scripts/swarmail.order and an embedded source map) into
 // ~/.local/bin/swarmail, which the service, the host hooks and the git guard run. The binary hashes server sources,
-// the dependency manifest and lockfile, the bytecode-order profile, and Bun.
+// the dependency manifest and lockfile, the bytecode-order profile, this build script (its flags), and Bun.
 // `--if-stale` rebuilds when one of those inputs changes.
 // A running server keeps its old build until the service restarts.
 // Usage: bun scripts/build.ts [--if-stale] [--out path]
@@ -18,7 +18,7 @@ export const defaultBinary = (home = homeDir()) => binaryPath(home);
 /** The bytecode-order profile; scripts/train-bytecode-order.ts records it. Bun before 1.4.3 ignores the flag. */
 export const orderProfile = (root = REPO_ROOT) => join(root, "scripts", "swarmail.order");
 
-/** Hash the server sources, dependency manifest and lockfile, the bytecode-order profile, and the Bun version. */
+/** Hash the server sources, dependency manifest and lockfile, the bytecode-order profile, this script, and the Bun version. */
 export function sourceHash(root = REPO_ROOT, bun = Bun.version): string {
   const dir = join(root, "src");
   const hash = createHash("sha256").update(`bun ${bun}\0`);
@@ -30,8 +30,9 @@ export function sourceHash(root = REPO_ROOT, bun = Bun.version): string {
       .update(readFileSync(join(dir, name)))
       .update("\0");
   }
-  // Compiled runtime dependencies change when the manifest or resolved versions change; the profile changes the layout.
-  for (const name of ["package.json", "bun.lock", "scripts/swarmail.order"]) {
+  // Compiled runtime dependencies change when the manifest or resolved versions change; the profile changes the layout;
+  // this script holds the build flags.
+  for (const name of ["package.json", "bun.lock", "scripts/swarmail.order", "scripts/build.ts"]) {
     const path = join(root, name);
     if (existsSync(path)) {
       hash.update(`${name}\0`).update(readFileSync(path)).update("\0");
@@ -115,8 +116,8 @@ export function buildSwarmail(
       ...(order ? [`--bytecode-order=${order}`] : []),
       // Stack traces name the source file, line and function; --minify saved 40 KB of 84 MB and no startup time.
       "--sourcemap",
-      // Hooks and the git guard run inside other projects, whose .env or bunfig.toml would otherwise
-      // be loaded into this program and could point it at another database, server or guard setting.
+      // Hooks and the git guard run inside other projects. Their .env would otherwise set this program's
+      // environment (database, server, guard), and a bunfig.toml preload would run their code inside it.
       "--no-compile-autoload-dotenv",
       "--no-compile-autoload-bunfig",
       // A dynamic import that cannot be resolved fails the build instead of the installed binary.
