@@ -14,7 +14,7 @@ function pause() {
 if (boundary === "startup") {
   pause();
 } else {
-  const query = Database.prototype.query;
+  const query = Reflect.get(Database.prototype, "query");
   // A test double for every query signature, so it is typed loosely.
   (Database.prototype as any).query = function (this: Database, sql: string, ...options: any[]) {
     const statement = (query as any).call(this, sql, ...options);

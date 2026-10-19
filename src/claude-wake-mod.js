@@ -102,17 +102,20 @@ async function eligible($, sid) {
   }
 }
 
-/** @param {ModApi} $ */
+/**
+ * Offers the held hint as a new prompt. Returns whether it was delivered.
+ * @param {ModApi} $
+ */
 async function submit($) {
   const pending = held;
   if (!pending) {
-    return;
+    return false;
   }
   const allowed = await eligible($, pending.sid);
   const sid = await $.session.id();
   const live = await registered($, pending.sid);
   if (!allowed || !live || sid !== pending.sid || held !== pending || pending.submitting) {
-    return;
+    return false;
   }
   pending.submitting = true;
   try {
@@ -123,6 +126,7 @@ async function submit($) {
     throw error;
   }
   delivered();
+  return true;
 }
 
 // One wait for mail to the session's agents, once it is registered: the pause before the next step.
@@ -176,10 +180,8 @@ async function round($) {
     if (!held) {
       delay = await wait($);
     } else {
-      if (!busy) {
-        await submit($);
-      }
-      delay = held ? HELD_MS : 0;
+      const sent = !busy && (await submit($));
+      delay = sent ? 0 : HELD_MS;
     }
   } catch {
     delay = ERROR_MS;
