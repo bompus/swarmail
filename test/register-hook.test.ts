@@ -615,6 +615,61 @@ test("a new provider session in a T3 thread takes over the thread's name", async
   }
 });
 
+test("finds the T3 thread in the data directory T3CODE_HOME names", async () => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-t3-home-")));
+  const mail = fakeMail((name, args) =>
+    name === "list_agents"
+      ? [
+          {
+            name: "BoldWillow",
+            task_description: "[t3:thread-1 claude:old-sid cwd:~/repo] Swarmail release",
+          },
+        ]
+      : { name: args.name ?? "FreshName" },
+  );
+  try {
+    const repo = join(dir, "repo");
+    Bun.spawnSync(["git", "init", "-q", repo]);
+    // A decoy under ~/.t3 maps the session to another thread; T3CODE_HOME must win over it.
+    for (const [base, threadId] of [
+      [join(dir, ".t3"), "decoy"],
+      [join(dir, "profiles/work"), "thread-1"],
+    ] as const) {
+      mkdirSync(join(base, "userdata"), { recursive: true });
+      const t3 = new Database(join(base, "userdata/statev2.sqlite"));
+      createT3V2Tables(t3);
+      addT3V2Thread(t3, { threadId, nativeId: "new-sid", driver: "claudeAgent" });
+      t3.close();
+    }
+    const env = {
+      ...process.env,
+      SWARMAIL_URL: mail.url,
+      XDG_STATE_HOME: join(dir, "state"),
+      HOME: dir,
+      T3CODE_HOME: "~/profiles/work",
+      GROK_SESSION_ID: "",
+      DEVIN_PROJECT_DIR: "",
+      CLAUDECODE: "",
+    };
+    const input = JSON.stringify({
+      session_id: "new-sid",
+      transcript_path: join(dir, ".claude/projects/repo/new-sid.jsonl"),
+      cwd: repo,
+      tool_input: { file_path: join(repo, "a.txt") },
+    });
+    await Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
+      stdin: new Blob([input]),
+      env,
+    }).exited;
+    const register = mail.calls.find((call) => call.name === "register_agent").arguments;
+    expect(register.name).toBe("BoldWillow");
+    expect(register.task_description).toStartWith("[t3:thread-1 claude:new-sid ");
+  } finally {
+    await mail.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("register --tag takes the session id from the host's shell variable when none is given", () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-tag-")));
   try {

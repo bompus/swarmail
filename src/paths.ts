@@ -3,7 +3,7 @@
 // scripts/configure-hooks.ts writes a shell hook command. Windows keeps the same layout under the user's profile,
 // as Claude Code's own Windows install does with ~/.local/bin.
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 
 export const DEFAULT_PORT = 18765;
 
@@ -19,8 +19,19 @@ export const binaryPath = (
   platform: NodeJS.Platform = process.platform,
 ): string => join(home, ".local", "bin", platform === "win32" ? "swarmail.exe" : "swarmail");
 
-/** T3 Code's data directory. */
-export const t3Home = (env: NodeJS.ProcessEnv = process.env): string => join(homeDir(env), ".t3");
+/** T3 Code's data directory: T3CODE_HOME, resolved the way T3 Code resolves it (a leading `~` is the home), else ~/.t3. */
+export function t3Home(env: NodeJS.ProcessEnv = process.env): string {
+  const home = homeDir(env);
+  const configured = env.T3CODE_HOME?.trim();
+  if (!configured) {
+    return join(home, ".t3");
+  }
+  if (configured === "~") {
+    return home;
+  }
+  const relative = configured.startsWith("~/") || configured.startsWith("~\\");
+  return resolve(relative ? join(home, configured.slice(2)) : configured);
+}
 
 /**
  * The rest of `path` after `base` (empty, or starting with a separator) when `path` is `base` or lies inside it,
