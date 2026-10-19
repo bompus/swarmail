@@ -1,8 +1,10 @@
 // T3 Code Orchestrator V2's thread tables, as its migrations leave them (055_OrchestrationV2 plus
 // OrchestrationV2/Foundation), for tests of what Swarmail reads from `statev2.sqlite`.
 
+import type { Database } from "bun:sqlite";
+
 /** Adds V2's thread, provider-thread and project tables to `db`. */
-export function createT3V2Tables(db) {
+export function createT3V2Tables(db: Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS projection_projects(project_id TEXT PRIMARY KEY, workspace_root TEXT);
     CREATE TABLE orchestration_v2_projection_threads (
@@ -20,7 +22,7 @@ export function createT3V2Tables(db) {
 
 /** One app thread whose current root provider thread runs `nativeId` on `driver`. */
 export function addT3V2Thread(
-  db,
+  db: Database,
   {
     threadId,
     projectId = "project-1",
@@ -32,6 +34,17 @@ export function addT3V2Thread(
     nativeId,
     status = "idle",
     updatedAt = "2026-10-03T02:00:00.000Z",
+  }: {
+    threadId: string;
+    projectId?: string;
+    title?: string;
+    worktreePath?: string | null;
+    relationshipToParent?: string | null;
+    archivedAt?: string | null;
+    driver?: string;
+    nativeId: string;
+    status?: string;
+    updatedAt?: string;
   },
 ) {
   const providerThreadId = `provider-${threadId}`;

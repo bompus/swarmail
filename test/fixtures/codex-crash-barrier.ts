@@ -15,8 +15,9 @@ if (boundary === "startup") {
   pause();
 } else {
   const query = Database.prototype.query;
-  Database.prototype.query = function (sql, ...options) {
-    const statement = query.call(this, sql, ...options);
+  // A test double for every query signature, so it is typed loosely.
+  (Database.prototype as any).query = function (this: Database, sql: string, ...options: any[]) {
+    const statement = (query as any).call(this, sql, ...options);
     if (!sql.startsWith("UPDATE state SET")) {
       return statement;
     }
@@ -25,7 +26,7 @@ if (boundary === "startup") {
         if (property !== "run") {
           return Reflect.get(target, property);
         }
-        return (...args) => {
+        return (...args: any[]) => {
           const attempted =
             sql.startsWith("UPDATE state SET pending=") &&
             JSON.parse(args[0]).command.phase === "attempted";

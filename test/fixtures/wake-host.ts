@@ -15,7 +15,7 @@ if (HOST_NEST) {
   });
   process.exit(await new Promise((done) => child.on("exit", (code) => done(code ?? 1))));
 }
-const child = Bun.spawn(JSON.parse(HOST_HOOK), {
+const child = Bun.spawn(JSON.parse(HOST_HOOK ?? "[]"), {
   env: { ...env, CLAUDE_PID: String(process.pid) },
   stdin: new Blob([HOST_INPUT]),
   stdout: HOST_OUT ? Bun.file(HOST_OUT) : "inherit",
