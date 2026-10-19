@@ -89,10 +89,12 @@ function headers(target: WakeTarget): Record<string, string> {
 
 async function request(target: WakeTarget, path: string, body?: unknown): Promise<any> {
   let response: Response;
+  let sent: Record<string, string>;
   try {
+    sent = headers(target);
     response = await fetch(target.url + path, {
       method: body === undefined ? "GET" : "POST",
-      headers: headers(target),
+      headers: sent,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       redirect: "error",
       signal: AbortSignal.timeout(15_000),
@@ -107,9 +109,17 @@ async function request(target: WakeTarget, path: string, body?: unknown): Promis
     if (response.status === 403) {
       throw new TargetAuthenticationError("target HTTP 403");
     }
+    if (response.status === 401) {
+      // Rotation writes the new header before revoking the old token, so a request sent with the old one is retried.
+      // A rejected current header is revoked or expired, and retrying it would never succeed.
+      if (headers(target).authorization === sent.authorization) {
+        throw new TargetAuthenticationError("target HTTP 401");
+      }
+      throw new BridgeError("target HTTP 401", true);
+    }
     throw new BridgeError(
       `target HTTP ${response.status}`,
-      response.status >= 500 || response.status === 429 || response.status === 401,
+      response.status >= 500 || response.status === 429,
     );
   }
   let text: string;

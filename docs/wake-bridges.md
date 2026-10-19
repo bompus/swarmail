@@ -74,9 +74,15 @@ A native Codex or Grok delivery whose outcome is unknown after its attempt
 exits with status `1` and retains the command without resending it. Restart
 the bridge to reconcile admission evidence, or inspect the session.
 
-T3 V2 holds delivery during settlement or pending operator requests. It uses
-agent messages and explicit steering, preserves user prompts and automatic
-notifications, and consolidates bridge-owned queued mail notices.
+T3 V2 holds delivery during settlement or pending operator requests. It
+steers explicitly, preserves user prompts and automatic notifications, and
+consolidates queued mail notices the bridge owns. T3 records every message a
+client sends as `createdBy: "user"`, so ownership comes from the notice message
+ids the bridge saved (and the `agent` label on notices older T3 releases
+recorded); a queued `Swarmail: ` message the bridge cannot prove it sent is left
+alone. A 401 for the token the authorization file currently holds stops the
+bridge as an authentication failure; a 401 for a token that rotation already
+replaced is retried.
 
 ## Notification deduplication
 
