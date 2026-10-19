@@ -3,7 +3,7 @@ import { openDatabase } from "../src/db.ts";
 import { createTools } from "../src/tools.ts";
 import { createWaiters } from "../src/wake.ts";
 import { join } from "node:path";
-import { testScratch } from "./fixtures/test-scratch.js";
+import { testScratch } from "./fixtures/test-scratch.ts";
 import { isMessageResult } from "../src/message-validation.ts";
 
 const scratch = testScratch();

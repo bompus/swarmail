@@ -6,7 +6,7 @@ import { deliverGrok } from "../src/wake-grok.ts";
 import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
-import { testScratch } from "./fixtures/test-scratch.js";
+import { testScratch } from "./fixtures/test-scratch.ts";
 
 // Native socket delivery requires Unix sockets and POSIX ownership.
 const test = process.platform === "win32" ? bunTest.skip : bunTest;

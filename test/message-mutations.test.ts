@@ -10,7 +10,7 @@ import { MailStore } from "../src/store.ts";
 import { createWaiters, PING_SUBJECT } from "../src/wake.ts";
 import { unreadQueues } from "../src/who.ts";
 import { mail } from "../src/mail.ts";
-import { testScratch } from "./fixtures/test-scratch.js";
+import { testScratch } from "./fixtures/test-scratch.ts";
 
 const scratch = testScratch();
 let serial = 0;

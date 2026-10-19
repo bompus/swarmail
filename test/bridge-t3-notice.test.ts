@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { openWakeState, peekUnreadMailboxes } from "../src/wake-state.ts";
 import { t3NoticeAdapter } from "../src/wake-t3-notice.ts";
 import { createServer } from "../src/server.ts";
-import { testScratch } from "./fixtures/test-scratch.js";
+import { testScratch } from "./fixtures/test-scratch.ts";
 
 const scratch = testScratch();
 const savedHome = process.env.XDG_STATE_HOME;

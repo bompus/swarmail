@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { testScratch } from "./fixtures/test-scratch.js";
+import { testScratch } from "./fixtures/test-scratch.ts";
 
 // Native socket delivery requires Unix sockets and POSIX ownership.
 const test = process.platform === "win32" ? bunTest.skip : bunTest;
@@ -230,7 +230,7 @@ function fixture() {
       [
         process.execPath,
         ...(boundary
-          ? ["--preload", join(import.meta.dir, "fixtures/codex-crash-barrier.js")]
+          ? ["--preload", join(import.meta.dir, "fixtures/codex-crash-barrier.ts")]
           : []),
         join(import.meta.dir, "../src/cli.ts"),
         "wake-bridge",

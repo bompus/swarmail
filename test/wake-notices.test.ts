@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { testScratch } from "./fixtures/test-scratch.js";
+import { testScratch } from "./fixtures/test-scratch.ts";
 import { openDatabase } from "../src/db.ts";
 import { createTools } from "../src/tools.ts";
 import { createWaiters } from "../src/wake.ts";

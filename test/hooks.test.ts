@@ -149,7 +149,7 @@ test("adds the Claude register and wake hooks once, keeping other hooks", () => 
   expect(rearm[0].hooks[0]).toMatchObject({ asyncRewake: true, timeout: 2_000_000 });
 });
 
-// Windows hooks run `swarmail hook rearm` instead of this shell (rearmHook, tested in wake.test.js).
+// Windows hooks run `swarmail hook rearm` instead of this shell (rearmHook, tested in wake.test.ts).
 test.skipIf(windows)(
   "the PostToolUse re-arm starts a wait only for a registered session with no live waiter",
   () => {

@@ -7,7 +7,7 @@ import { createServer } from "../src/server.ts";
 import { openWakeState, wakeStatePath } from "../src/wake-state.ts";
 import { BridgeError, t3V1Adapter, t3V2Adapter } from "../src/wake-target.ts";
 import { bridgeBinding } from "../src/wake-bridge.ts";
-import { testScratch } from "./fixtures/test-scratch.js";
+import { testScratch } from "./fixtures/test-scratch.ts";
 
 const scratch = testScratch();
 const cleanups = [];

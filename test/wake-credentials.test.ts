@@ -13,7 +13,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { testScratch } from "./fixtures/test-scratch.js";
+import { testScratch } from "./fixtures/test-scratch.ts";
 
 // Rotation and listener identity require Linux process and private-file semantics.
 describe.skipIf(process.platform !== "linux")("credential ownership and rotation", () => {

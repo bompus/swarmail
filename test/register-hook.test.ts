@@ -25,7 +25,7 @@ import {
   withLock,
 } from "../src/registry.ts";
 import { t3StatePath, t3ThreadId } from "../src/t3-state.ts";
-import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.js";
+import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.ts";
 import { parseTag, sessionTag } from "../src/tag.ts";
 import { createServer } from "../src/server.ts";
 

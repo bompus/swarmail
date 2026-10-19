@@ -11,7 +11,7 @@ delete process.env.SWARMAIL_WAKE_MOD;
 
 const P = "/w/project";
 // Stands in for the host that runs the hook.
-const HOST = join(import.meta.dir, "fixtures/wake-host.js");
+const HOST = join(import.meta.dir, "fixtures/wake-host.ts");
 const HOOKS = {
   "swarmail hook wake": [process.execPath, join(import.meta.dir, "../src/cli.ts"), "hook", "wake"],
 };

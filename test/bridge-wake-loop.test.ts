@@ -5,7 +5,7 @@ import { Database } from "bun:sqlite";
 import { deliveryLoop, pause } from "../src/wake-loop.ts";
 import { openWakeState, wakeStatePath } from "../src/wake-state.ts";
 import { BridgeError } from "../src/wake-target.ts";
-import { testScratch } from "./fixtures/test-scratch.js";
+import { testScratch } from "./fixtures/test-scratch.ts";
 
 const scratch = testScratch();
 const URL = "http://127.0.0.1:1";

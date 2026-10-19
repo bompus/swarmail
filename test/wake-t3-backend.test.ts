@@ -15,7 +15,7 @@ import { credentialService, T3SessionTransportUnavailable } from "../src/wake-cr
 import { followT3Backend } from "../src/wake-t3-backend.ts";
 import { verifyT3Backend } from "../src/wake-backend.ts";
 import { BridgeError } from "../src/wake-target.ts";
-import { testScratch } from "./fixtures/test-scratch.js";
+import { testScratch } from "./fixtures/test-scratch.ts";
 
 const scratch = testScratch();
 const cleanup = [];

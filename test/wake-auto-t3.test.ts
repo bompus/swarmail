@@ -23,8 +23,8 @@ import {
   heldT3State,
   rescanDue,
 } from "../src/wake-auto-t3.ts";
-import { testScratch } from "./fixtures/test-scratch.js";
-import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.js";
+import { testScratch } from "./fixtures/test-scratch.ts";
+import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.ts";
 
 // The supervisor needs Unix file permissions for credential rotation and the tests use POSIX shell wrappers.
 const test = process.platform === "linux" ? bunTest : bunTest.skip;
@@ -951,7 +951,7 @@ for (const timing of [
         [
           process.execPath,
           "--preload",
-          join(import.meta.dir, "fixtures/t3-auto-cli-preload.js"),
+          join(import.meta.dir, "fixtures/t3-auto-cli-preload.ts"),
           join(import.meta.dir, "../src/cli.ts"),
           "wake-auto-t3",
           configPath,
@@ -1363,7 +1363,7 @@ test("automatic supervisor waits out a T3 restart and follows its new port", asy
     [
       process.execPath,
       "--preload",
-      join(import.meta.dir, "fixtures/t3-auto-cli-preload.js"),
+      join(import.meta.dir, "fixtures/t3-auto-cli-preload.ts"),
       join(import.meta.dir, "../src/cli.ts"),
       "wake-auto-t3",
       configPath,
@@ -1573,7 +1573,7 @@ for (const initial of ["unavailable", "malformed", "missing"]) {
       [
         process.execPath,
         "--preload",
-        join(import.meta.dir, "fixtures/t3-auto-cli-preload.js"),
+        join(import.meta.dir, "fixtures/t3-auto-cli-preload.ts"),
         join(import.meta.dir, "../src/cli.ts"),
         "wake-auto-t3",
         config,
@@ -1717,7 +1717,7 @@ test("scan orderings reconcile verified closure and recovery while the T3 backen
     [
       process.execPath,
       "--preload",
-      join(import.meta.dir, "fixtures/t3-auto-cli-preload.js"),
+      join(import.meta.dir, "fixtures/t3-auto-cli-preload.ts"),
       join(import.meta.dir, "../src/cli.ts"),
       "wake-auto-t3",
       config,

@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 test("Cursor hooks leave a settled automatic T3 registration to its bridge and keep the native hook for every other registration", async () => {
   const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import("node:fs");
-  const { testScratch } = await import("./fixtures/test-scratch.js");
+  const { testScratch } = await import("./fixtures/test-scratch.ts");
   const scratch = testScratch();
   const dir = mkdtempSync(join(scratch, "case-"));
   const registry = join(dir, "swarmail-register");

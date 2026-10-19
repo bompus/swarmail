@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.js";
+import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.ts";
 import {
   mkdirSync,
   mkdtempSync,

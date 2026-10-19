@@ -8,7 +8,7 @@ import { createServer } from "../src/server.ts";
 import { createWaiters } from "../src/wake.ts";
 import { openHookDelivery } from "../src/hook-delivery.ts";
 import { BridgeError, sendT3Command } from "../src/wake-target.ts";
-import { testScratch } from "./fixtures/test-scratch.js";
+import { testScratch } from "./fixtures/test-scratch.ts";
 
 const scratch = testScratch();
 const cleanups = [];

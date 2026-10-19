@@ -8,7 +8,7 @@ import { MailStore } from "../src/store.ts";
 import { createTools } from "../src/tools.ts";
 import { createServer } from "../src/server.ts";
 import { processIdentity } from "../src/proc.ts";
-import { testScratch } from "./fixtures/test-scratch.js";
+import { testScratch } from "./fixtures/test-scratch.ts";
 
 const scratch = testScratch();
 let serial = 0;
