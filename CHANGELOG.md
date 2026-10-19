@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- `pr-sessions` shows which conversations T3 Code is watching a pull request for. Each link now has `watchingSince`:
+  when T3 started watching that pull request for the conversation, or null when it is not watching (including after a
+  watch ended). A watch whose start time is not a string fails the lookup like other malformed link metadata.
+
 - The local T3 lifecycle reader no longer stops tracking after T3 Code deletes old history. T3 Code 0.1.1 preview and
   nightly builds delete events that a newer event of the same thread supersedes, which could remove the event the reader
   saved at its last reconciliation; every later reconciliation then reported `unavailable` and held wakes for good. A missing saved

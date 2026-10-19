@@ -36,6 +36,8 @@ type Stack = {
 type Link = Pr & {
   source: string;
   linkedAt: string;
+  /** When T3 started watching the pull request for this conversation; null when it is not watching. */
+  watchingSince: string | null;
   snapshot: Snapshot | null;
   stack: Stack | null;
 };
@@ -189,6 +191,7 @@ function links(thread: ObjectValue, projectId: string): Link[] {
         ...pr(thread.linkedPullRequest, projectId, true),
         source: "manual",
         linkedAt: "1970-01-01T00:00:00.000Z",
+        watchingSince: null,
         snapshot: null,
         stack: null,
       },
@@ -204,6 +207,10 @@ function links(thread: ObjectValue, projectId: string): Link[] {
         "link.source",
       ),
       linkedAt: string(v.linkedAt, "link.linkedAt"),
+      watchingSince:
+        v.watch === undefined
+          ? null
+          : string(object(v.watch, "link.watch").startedAt, "link.watch.startedAt"),
       snapshot: snapshot(v.snapshot),
       stack: stack(v.stack),
     };
