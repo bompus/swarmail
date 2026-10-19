@@ -25,5 +25,7 @@ history and `swarmail.identities`: the swarmail agents whose registration tags n
 ## Limits
 
 The links are associations, not proof of who implemented the change or released a checkout. Remote environments, T3 V1
-stores, non-GitHub hosts, hard-deleted conversations and unlinked sessions are not covered. Agent registrations can be
-overwritten, and historical coverage is incomplete.
+stores, hard-deleted conversations and unlinked sessions are not covered. Only GitHub pull requests are supported: if any
+conversation in the project links a pull request on another host, such as GitLab, the command fails and exits 1 for
+every lookup in that project, not only for that pull request. Agent registrations can be overwritten, and historical
+coverage is incomplete.

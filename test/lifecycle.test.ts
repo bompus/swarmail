@@ -243,6 +243,7 @@ test.each([
   "replace-equal",
   "replace-higher",
   "prune",
+  "move",
   "missing-thread",
   "thread-json",
   "thread-schema",
@@ -271,6 +272,10 @@ test.each([
   if (failure === "prune") {
     f.source.run("DELETE FROM orchestration_events WHERE sequence=2");
   }
+  if (failure === "move") {
+    f.source.run("UPDATE orchestration_events SET sequence=5 WHERE sequence=2");
+    f.transition(6);
+  }
   if (failure === "missing-thread") {
     f.source.run("DELETE FROM orchestration_v2_projection_threads");
   }
@@ -291,6 +296,24 @@ test.each([
   }
   expect(f.lifecycle.reconcile()).toEqual({ status: "unavailable", changed: 0 });
   expect(f.db.query("SELECT * FROM lifecycle_sources").get()).toEqual(cursor);
+  expect(f.roster()).not.toContain("GreenCastle");
+});
+
+test("a saved anchor deleted by T3 history compaction does not stop tracking", () => {
+  const f = fixture();
+  f.transition(2, "settled");
+  expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+  // A newer event of the same thread supersedes the anchor, then compaction deletes the anchor.
+  f.transition(3);
+  f.source.run("DELETE FROM orchestration_events WHERE sequence=2");
+  expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+  expect(f.roster()).toContain("GreenCastle");
+  expect(f.db.query("SELECT sequence, event_id FROM lifecycle_sources").get()).toEqual({
+    sequence: 3,
+    event_id: "event-3",
+  });
+  f.transition(4, "archived");
+  expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
   expect(f.roster()).not.toContain("GreenCastle");
 });
 

@@ -342,6 +342,15 @@ All statements here are documented. None were tested.
   swarmail mail to a T3 thread, from any sender, wakes it only through the
   opt-in T3 bridge. The optional lifecycle reader stops wakes to settled,
   archived or deleted threads.
+- **Muse and Pi (documented from T3 Code source, not run).** T3 Code has
+  native `muse` and `pi` providers. swarmail has no register hook, wake hook,
+  session variable or bridge for either, and `wake-auto-t3` starts bridges only
+  for Codex and Cursor threads. An agent on either provider can use the
+  swarmail tools only if its T3 session has the swarmail MCP server, and it
+  sees mail only when it reads its inbox. swarmail looks a T3 thread up by
+  using the registration tag's host name as T3's provider driver name (only
+  `claude` and `agy` are renamed), so a tag such as `muse:<session id>` or
+  `pi:<session id>` would match those drivers.
 - **Direction.** swarmail prefers T3 Code's own messaging, delegated tasks and
   queue between T3 threads, and keeps a T3-specific part only for something T3
   Code does not provide. Where there is a gap, the choice can be to leave it
@@ -368,6 +377,7 @@ T3 Code does not provide what it does.
 - Antigravity delivery to a recipient in the middle of a turn.
 - Cursor in the IDE and through the SDK.
 - Everything under OpenCode and Grok Build.
+- Muse and Pi inside T3 Code.
 
 ## Sources
 

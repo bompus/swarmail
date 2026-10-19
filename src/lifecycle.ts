@@ -7,6 +7,7 @@ export interface LifecycleConfig {
   /** Stable local profile name. Changing its database or event table requires explicit rebinding. */
   profile: string;
   databasePath: string;
+  /** T3 Code 0.1.0 and later write `orchestration_events`; `orchestration_v2_events` is for earlier releases. */
   eventTable: "orchestration_events" | "orchestration_v2_events";
 }
 
@@ -70,13 +71,24 @@ function readSnapshot(
       const anchor = source.query<{ event_id: string }, [number]>(
         `SELECT event_id FROM ${config.eventTable} WHERE sequence = ?`,
       );
-      if (
-        previous &&
-        (meta.last_sequence < previous.sequence ||
-          anchor.get(previous.sequence)?.event_id !== previous.event_id)
-      ) {
-        throw new Error("source history changed");
+      const located = source.query<{ sequence: number }, [string]>(
+        `SELECT sequence FROM ${config.eventTable} WHERE event_id = ?`,
+      );
+      // T3 compaction deletes events that a newer event of the same thread supersedes, so the saved anchor may be
+      // gone. Sequences are never reused, so a missing anchor whose event id appears nowhere else is a deletion; a
+      // different event at that sequence, the anchor at another sequence or a lower watermark is a rewrite.
+      if (previous) {
+        const atPrevious = anchor.get(previous.sequence)?.event_id;
+        if (
+          meta.last_sequence < previous.sequence ||
+          (atPrevious === undefined
+            ? located.get(previous.event_id) !== null
+            : atPrevious !== previous.event_id)
+        ) {
+          throw new Error("source history changed");
+        }
       }
+      // The watermark is the newest projected event, which compaction keeps until a newer one moves the watermark.
       const eventId = anchor.get(meta.last_sequence)?.event_id;
       if (typeof eventId !== "string" || !eventId) {
         throw new Error("missing history anchor");

@@ -4,6 +4,15 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- The local T3 lifecycle reader no longer stops tracking after T3 Code deletes old history. T3 Code 0.1.1 preview and
+  nightly builds delete events that a newer event of the same thread supersedes, which could remove the event the reader
+  saved at its last reconciliation; every later reconciliation then reported `unavailable` and held wakes for good. A missing saved
+  event now counts as a deletion when its event id appears nowhere else in the table. A different event at that
+  sequence, the saved event at another sequence or a watermark that moved backwards still holds the last verified state.
+  `docs/wake-bridges.md` now says to use `orchestration_events` for T3 Code 0.1.0 and later,
+  `docs/pr-sessions.md` says that one non-GitHub link in a project makes every lookup there exit 1, and
+  `docs/provider-coverage.md` covers T3 Code's Muse and Pi providers.
+
 - The `swarmail` binary no longer loads a `.env` or `bunfig.toml` from the directory it runs in. Hooks and the git guard run
   inside other projects, so a project's `.env` could set `SWARMAIL_DB`, `SWARMAIL_URL`, `SWARMAIL_GUARD` or `XDG_*` and point
   them at another database, server or guard setting, and a `preload` in its `bunfig.toml` ran that project's code inside

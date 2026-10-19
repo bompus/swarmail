@@ -167,8 +167,11 @@ Use separate mail databases for separate profiles.
 
 Verify the installed source before activation. The reader supports
 `thread-projections` metadata schema 2 and a configured event table with
-stable `sequence` and `event_id` columns. Choose `orchestration_events` or
-`orchestration_v2_events` according to the running app's actual event history.
+stable `sequence` and `event_id` columns. For T3 Code 0.1.0 and later, use
+`orchestration_events`: its projection watermark counts that table, and
+`orchestration_v2_events` is only a one-time copy made by the upgrade
+migration. `orchestration_v2_events` stays accepted only for T3 Code releases
+before 0.1.0 that wrote their history there.
 A copied, empty event table cannot establish continuity. Projection updates
 and their metadata watermark must commit in the same source transaction.
 
@@ -193,8 +196,13 @@ existing expiry because they lack activation provenance.
 A new registration whose thread projection is missing or invalid stays
 ineligible without holding healthy identities. It becomes eligible after the
 source supplies a valid active projection. The reader holds its last verified
-state when a previously verified row or an anchor disappears,
-the schema is unknown, or source history regresses or changes. Renaming the
+state when a previously verified row or the event at the current watermark
+disappears, the schema is unknown, or source history regresses or changes.
+T3 Code deletes older events that a newer event of the same thread
+supersedes, so the event saved at the previous reconciliation may be gone.
+That alone is not a change: tracking continues unless that sequence now holds
+a different event, the event appears at another sequence, or the watermark
+moved backwards. Renaming the
 profile or replacing its path cannot silently rebind that history. Repair the
 source history before resuming; rebinding retained data requires a separate,
 explicit migration and is not exposed by this interface. Omitting configuration

@@ -179,6 +179,7 @@ function stack(value: unknown): Stack | null {
   };
 }
 function links(thread: ObjectValue, projectId: string): Link[] {
+  // Only T3 databases before migration 064 store the single linkedPullRequest instead of pullRequests.
   if (!("pullRequests" in thread)) {
     if (thread.linkedPullRequest == null) {
       return [];
