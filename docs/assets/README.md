@@ -5,3 +5,15 @@ the image shown when a link to the repository is shared. It is uploaded by
 hand under Settings, General, Social preview, so a change here does not reach
 GitHub by itself. When the banner (`banner-dark.png`, `banner-light.png`)
 changes, remake this image to match and upload it again.
+
+`scripts/render-assets.ts` renders both banners and the social preview from one
+template, so a change to the name, tagline or chips reaches all three. It needs
+a Chrome or Chromium binary and the Lato font:
+
+```bash
+CHROME=/path/to/chrome bun scripts/render-assets.ts
+```
+
+It renders the social preview pixel for pixel like the committed file. The
+banners were first rendered through Playwright, so a rerun redraws their text
+edges slightly differently (about 1.4% of their pixels).
