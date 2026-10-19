@@ -232,6 +232,32 @@ test("absent arrays allow legacy links; empty arrays suppress fallback and disco
   expect(result.output.matches[0].branchDiscovery.number).toBe(7);
   expect(result.output.matches[1].associations[0].linkedAt).toBe("1970-01-01T00:00:00.000Z");
 });
+test("a link reports when T3 started watching it, and an ended watch is not watching", () => {
+  const f = fixture();
+  const watch = (startedAt: string) => ({
+    startedAt,
+    headSha: null,
+    failedChecks: [],
+    passed: false,
+    passedChecks: [],
+    remarksThrough: startedAt,
+    remarkIds: [],
+    conflicting: false,
+    wakes: 0,
+  });
+  f.add(
+    thread("watched", { pullRequests: [link(7, { watch: watch("2026-10-06T00:00:00.000Z") })] }),
+  );
+  f.add(thread("ended", { pullRequests: [link(7, { endedWatch: watch(date) })] }));
+  f.add(thread("never"));
+  f.close();
+  const result = run(f);
+  expect(result.status).toBe(0);
+  const since = Object.fromEntries(
+    result.output.matches.map((m: any) => [m.threadId, m.associations[0].watchingSince]),
+  );
+  expect(since).toEqual({ ended: null, never: null, watched: "2026-10-06T00:00:00.000Z" });
+});
 test("exact active references are independent of root history and native IDs identify all available roster matches", () => {
   for (const [driver, host] of [
     ["codex", "codex"],
@@ -398,6 +424,7 @@ test("malformed or unsupported recognized input fails visibly without reporting 
     (f: Fixture) => f.add(thread("bad", { pullRequests: [link(7, { url: url(8) })] })),
     (f: Fixture) => f.add(thread("bad", { pullRequests: [link(7, { source: "future-source" })] })),
     (f: Fixture) => f.add(thread("bad", { pullRequests: [link(7, { host: "gitlab.com" })] })),
+    (f: Fixture) => f.add(thread("bad", { pullRequests: [link(7, { watch: { startedAt: 5 } })] })),
     (f: Fixture) => f.db.run("DROP TABLE orchestration_v2_projection_threads"),
     (f: Fixture) => f.db.run("DROP TABLE orchestration_v2_projection_provider_threads"),
     (f: Fixture) =>

@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- `pr-sessions` shows which conversations T3 Code is watching a pull request for. Each link now has `watchingSince`:
+  when T3 started watching that pull request for the conversation, or null when it is not watching (including after a
+  watch ended). A watch whose start time is not a string fails the lookup like other malformed link metadata.
+
 - Swarmail now finds T3 Code's data where T3 Code keeps it. T3 Code reads its data directory from `T3CODE_HOME`
   (a leading `~` means the home directory) and uses `~/.t3` only when that is unset; Swarmail always read `~/.t3`, so
   with `T3CODE_HOME` set the register hook, `who`, agent locations and `pr-sessions` read the wrong database or none.
