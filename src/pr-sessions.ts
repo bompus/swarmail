@@ -5,7 +5,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { primaryCheckout } from "./checkout.ts";
 import { databasePath, t3Home } from "./paths.ts";
-import { isT3V2, t3StatePath } from "./t3-state.ts";
+import { t3StateReady, t3StatePath } from "./t3-state.ts";
 import { identity } from "./tag.ts";
 
 // ACP registry/custom drivers do not identify a native program; only exact manual tags can match them.
@@ -586,7 +586,7 @@ export async function prSessions(args: string[]): Promise<number> {
     requireArgument(existsSync(file), "local T3 store is missing");
     const db = new Database(file, { readonly: true });
     try {
-      requireValue(isT3V2(db), "T3 V1 is unsupported");
+      requireValue(t3StateReady(db), "local T3 store has no thread tables yet");
       db.run("BEGIN");
       // Verify the required projection even when no association matches.
       db.query(`SELECT provider_thread_id,thread_id,owner_node_id,provider_session_id,updated_at,payload_json
@@ -617,7 +617,7 @@ export async function prSessions(args: string[]): Promise<number> {
               database: file,
               rosterDatabase: room.database,
               limits:
-                "Associations are not implementer ownership or checkout release evidence. Remote, V1, non-GitHub, hard-deleted and unlinked sessions are unsupported. Roster identities can be overwritten; historical coverage is incomplete.",
+                "Associations are not implementer ownership or checkout release evidence. Remote, non-GitHub, hard-deleted and unlinked sessions are unsupported. Roster identities can be overwritten; historical coverage is incomplete.",
             },
             matches,
           },

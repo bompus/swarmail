@@ -369,10 +369,10 @@ returned page read. It works outside a Git checkout and ignores
 The CLI uses one recognized host session variable, or one registration tied to
 the current host process's PID and start time. Conflicting variables or several
 possible sessions fail instead of choosing one. T3 thread identity also matches
-registrations made by an earlier provider in that thread. V2 database lookup
-requires one matching provider and native ID; V1 uses recorded registration
-tags. If discovery fails,
-use the explicit mailbox interface below. Keep registration tags current.
+registrations made by an earlier provider in that thread. Looking the thread up
+in T3 Code's database needs exactly one T3 thread whose provider and native
+session ID match the current session; no match, or more than one, makes
+discovery fail. If discovery fails, use the explicit mailbox interface below. Keep registration tags current.
 
 `--limit N` sets the page size, capped at 1000, not a total limit. The drain
 stops on a page smaller than that effective limit. `--json` prints one JSON

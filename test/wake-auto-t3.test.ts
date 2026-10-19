@@ -36,22 +36,15 @@ const test = process.platform === "linux" ? bunTest : bunTest.skip;
 
 const scratch = testScratch();
 
+/** T3's database with one running Codex thread, `thread-1` on native session `native-1`. */
 function fixture() {
   const root = mkdtempSync(join(scratch, "case-"));
   const registry = join(root, "state/swarmail-register");
   mkdirSync(registry, { recursive: true });
   mkdirSync(join(root, ".t3/userdata"), { recursive: true });
-  const db = new Database(join(root, ".t3/userdata/state.sqlite"));
-  db.exec(`CREATE TABLE projection_threads(thread_id TEXT PRIMARY KEY, deleted_at TEXT, archived_at TEXT, project_id TEXT, worktree_path TEXT, settled_at TEXT, settled_override TEXT);
-    CREATE TABLE projection_projects(project_id TEXT PRIMARY KEY, workspace_root TEXT);
-    CREATE TABLE provider_session_runtime(thread_id TEXT PRIMARY KEY, provider_name TEXT, resume_cursor_json TEXT, last_seen_at TEXT, status TEXT);`);
-  db.query("INSERT INTO projection_threads VALUES (?,NULL,NULL,'project-1',NULL,NULL,NULL)").run(
-    "thread-1",
-  );
-  db.query("INSERT INTO provider_session_runtime VALUES (?,'codex',?,'2026-09-30','running')").run(
-    "thread-1",
-    JSON.stringify({ threadId: "native-1" }),
-  );
+  const db = new Database(join(root, ".t3/userdata/statev2.sqlite"));
+  createT3V2Tables(db);
+  addT3V2Thread(db, { threadId: "thread-1", nativeId: "native-1", updatedAt: "2026-09-30" });
   return {
     root,
     registry,
@@ -62,6 +55,20 @@ function fixture() {
       rmSync(root, { recursive: true, force: true });
     },
   };
+}
+
+/** Sets a T3 thread's settlement override; null reactivates it. Without `thread`, every thread's. */
+function settleT3(db: Database, override: string | null, thread?: string) {
+  db.query(
+    `UPDATE orchestration_v2_projection_threads SET payload_json=json_set(payload_json,'$.settledOverride',?)${thread ? " WHERE thread_id=?" : ""}`,
+  ).run(...(thread ? [override, thread] : [override]));
+}
+
+/** Archives (or with null restores) a T3 thread. Without `thread`, every thread. */
+function archiveT3(db: Database, archived: string | null, thread?: string) {
+  db.query(
+    `UPDATE orchestration_v2_projection_threads SET archived_at=?${thread ? " WHERE thread_id=?" : ""}`,
+  ).run(...(thread ? [archived, thread] : [archived]));
 }
 
 test("first read-only Codex tool registers a T3 mailbox, the next scan makes it eligible for automatic wake, and later registration retains that", async () => {
@@ -112,10 +119,10 @@ test("first read-only Codex tool registers a T3 mailbox, the next scan makes it 
         expect(automaticT3Threads(f.registry, join(f.root, ".t3")).size).toBe(0);
         const source = join(import.meta.dir, "../src/wake-auto-t3.ts");
         const code = `import {enrollT3Threads} from ${JSON.stringify(source)}; enrollT3Threads(${JSON.stringify(f.registry)},${JSON.stringify(join(f.root, ".t3"))},"2026-09-29T00:00:00Z",${JSON.stringify(env.SWARMAIL_URL)});`;
-        f.db.query("UPDATE projection_threads SET settled_override='settled'").run();
+        settleT3(f.db, "settled");
         expect(await Bun.spawn([process.execPath, "-e", code]).exited).toBe(0);
         expect(JSON.parse(readFileSync(f.state, "utf8")).wakeThread).toBeUndefined();
-        f.db.query("UPDATE projection_threads SET settled_override=NULL").run();
+        settleT3(f.db, null);
         expect(await Bun.spawn([process.execPath, "-e", code]).exited).toBe(0);
       }
       expect(JSON.parse(readFileSync(f.state, "utf8")).wakeThread).toBe("thread-1");
@@ -127,20 +134,15 @@ test("first read-only Codex tool registers a T3 mailbox, the next scan makes it 
   }
 });
 
-test("after the V2 cutover, enrollment and selection read V2's Codex and Cursor threads, not the frozen V1 copy", async () => {
+test("enrollment and selection read only running, active Codex and Cursor threads", async () => {
   const f = fixture();
   const repo = join(f.root, "repo");
   Bun.spawnSync(["git", "init", "-q", repo]);
   f.db.query("INSERT INTO projection_projects VALUES ('project-1',?)").run(repo);
-  // V2 starts from a copy of V1's database, so its stale running row for native-1 comes along.
-  f.db.query("UPDATE provider_session_runtime SET last_seen_at='2026-10-03T02:00:00Z'").run();
-  const v2 = join(f.root, ".t3/userdata/statev2.sqlite");
-  f.db.exec(`VACUUM INTO '${v2}'`);
-  const db = new Database(v2);
-  createT3V2Tables(db);
-  // Imported V1 threads have no provider thread until their next turn.
+  const db = f.db;
+  // Imported threads have no provider thread until their next turn.
   db.query(
-    "INSERT INTO orchestration_v2_projection_threads VALUES ('thread-1','project-1','t','codex','full-access','default',NULL,'x','x',NULL,NULL,'{}','codex')",
+    "INSERT INTO orchestration_v2_projection_threads VALUES ('thread-0','project-1','t','codex','full-access','default',NULL,'x','x',NULL,NULL,'{}','codex')",
   ).run();
   addT3V2Thread(db, { threadId: "thread-2", nativeId: "native-2", status: "active" });
   addT3V2Thread(db, {
@@ -163,7 +165,6 @@ test("after the V2 cutover, enrollment and selection read V2's Codex and Cursor 
       "UPDATE orchestration_v2_projection_threads SET payload_json=json_set(payload_json,?,?) WHERE thread_id=?",
     ).run(`$.${field}`, value, threadId);
   }
-  db.close();
   const calls: any[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -201,39 +202,26 @@ test("after the V2 cutover, enrollment and selection read V2's Codex and Cursor 
     ]);
     expect(existsSync(join(f.registry, "native-8.json"))).toBe(false);
     expect(existsSync(join(f.registry, "agent-9.json"))).toBe(false);
-    const current = new Database(v2);
-    try {
-      current
-        .query(
-          "UPDATE orchestration_v2_projection_threads SET payload_json=json_set(payload_json,'$.settledOverride','settled') WHERE thread_id='thread-2'",
-        )
-        .run();
-      current
-        .query(
-          "UPDATE orchestration_v2_projection_threads SET payload_json=json_set(payload_json,'$.settledAt','settled') WHERE thread_id='thread-7'",
-        )
-        .run();
-      expect([...automaticT3Threads(f.registry, join(f.root, ".t3"))]).toEqual([]);
-      current
-        .query(
-          "UPDATE orchestration_v2_projection_threads SET payload_json=json_set(payload_json,'$.settledOverride','active','$.settledAt',NULL)",
-        )
-        .run();
-      expect([...automaticT3Threads(f.registry, join(f.root, ".t3"))].sort()).toEqual([
-        "thread-2",
-        "thread-7",
-      ]);
-      const resumed = Bun.spawn([process.execPath, "-e", code], { stdout: "pipe", stderr: "pipe" });
-      expect(await resumed.exited, await new Response(resumed.stderr).text()).toBe(0);
-      expect([...automaticT3Threads(f.registry, join(f.root, ".t3"))].sort()).toEqual([
-        "thread-2",
-        "thread-7",
-        "thread-8",
-        "thread-9",
-      ]);
-    } finally {
-      current.close();
-    }
+    settleT3(db, "settled", "thread-2");
+    db.query(
+      "UPDATE orchestration_v2_projection_threads SET payload_json=json_set(payload_json,'$.settledAt','settled') WHERE thread_id='thread-7'",
+    ).run();
+    expect([...automaticT3Threads(f.registry, join(f.root, ".t3"))]).toEqual([]);
+    db.query(
+      "UPDATE orchestration_v2_projection_threads SET payload_json=json_set(payload_json,'$.settledOverride','active','$.settledAt',NULL)",
+    ).run();
+    expect([...automaticT3Threads(f.registry, join(f.root, ".t3"))].sort()).toEqual([
+      "thread-2",
+      "thread-7",
+    ]);
+    const resumed = Bun.spawn([process.execPath, "-e", code], { stdout: "pipe", stderr: "pipe" });
+    expect(await resumed.exited, await new Response(resumed.stderr).text()).toBe(0);
+    expect([...automaticT3Threads(f.registry, join(f.root, ".t3"))].sort()).toEqual([
+      "thread-2",
+      "thread-7",
+      "thread-8",
+      "thread-9",
+    ]);
   } finally {
     await server.stop(true);
     f.close();
@@ -287,13 +275,13 @@ test("thread selection survives registration, end, resume, archive and provider 
       writeFileSync(f.state, JSON.stringify(state));
       // Duplicate state must not spawn a second bridge; an old provider cannot claim its replacement.
       writeFileSync(join(f.registry, "native-old.json"), JSON.stringify(state));
-      f.db.query("UPDATE projection_threads SET archived_at=?").run(archived ? "archived" : null);
+      archiveT3(f.db, archived ? "archived" : null);
+      settleT3(f.db, settled ? "settled" : null);
       f.db
-        .query("UPDATE projection_threads SET settled_at=?,settled_override=?")
-        .run(settled ? "settled" : null, settled ? "settled" : null);
-      f.db
-        .query("UPDATE provider_session_runtime SET resume_cursor_json=?")
-        .run(JSON.stringify({ threadId: replaced ? "native-new" : "native-1" }));
+        .query(
+          "UPDATE orchestration_v2_projection_provider_threads SET payload_json=json_set(payload_json,'$.nativeThreadRef.nativeId',?)",
+        )
+        .run(replaced ? "native-new" : "native-1");
       const selected = [...automaticT3Threads(f.registry, join(f.root, ".t3"))];
       expect(selected, sequence.join(" → ")).toEqual(
         state.wakeThread && !state.ended && !archived && !replaced && !settled ? ["thread-1"] : [],
@@ -309,7 +297,11 @@ test("runtime enrollment registers a fresh read-only T3 session without native h
   const repo = join(f.root, "repo");
   Bun.spawnSync(["git", "init", "-q", repo]);
   f.db.query("INSERT INTO projection_projects VALUES ('project-1',?)").run(repo);
-  f.db.query("UPDATE provider_session_runtime SET last_seen_at='2026-09-30T22:00:00Z'").run();
+  f.db
+    .query(
+      "UPDATE orchestration_v2_projection_provider_threads SET updated_at='2026-09-30T22:00:00Z'",
+    )
+    .run();
   const calls: any[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -355,7 +347,11 @@ test("enrollment skips a running T3 row last seen before the registration window
   const repo = join(f.root, "repo");
   Bun.spawnSync(["git", "init", "-q", repo]);
   f.db.query("INSERT INTO projection_projects VALUES ('project-1',?)").run(repo);
-  f.db.query("UPDATE provider_session_runtime SET last_seen_at='2026-09-30T22:00:00Z'").run();
+  f.db
+    .query(
+      "UPDATE orchestration_v2_projection_provider_threads SET updated_at='2026-09-30T22:00:00Z'",
+    )
+    .run();
   const calls: any[] = [];
   const server = Bun.serve({
     hostname: "127.0.0.1",
@@ -401,7 +397,11 @@ for (const mode of [
     const repo = join(f.root, "repo");
     Bun.spawnSync(["git", "init", "-q", repo]);
     f.db.query("INSERT INTO projection_projects VALUES ('project-1',?)").run(repo);
-    f.db.query("UPDATE provider_session_runtime SET last_seen_at='2026-09-30T22:00:00Z'").run();
+    f.db
+      .query(
+        "UPDATE orchestration_v2_projection_provider_threads SET updated_at='2026-09-30T22:00:00Z'",
+      )
+      .run();
     if (mode !== "end-before-first-registration") {
       writeFileSync(
         f.state,
@@ -413,7 +413,7 @@ for (const mode of [
       );
     }
     if (mode === "stopped-after-end") {
-      f.db.query("UPDATE provider_session_runtime SET status='stopped'").run();
+      f.db.query("UPDATE orchestration_v2_projection_provider_threads SET status='closed'").run();
     }
     let release!: () => void;
     const held = new Promise<void>((done) => {
@@ -524,7 +524,7 @@ test("automatic config rejects unverified rotation before touching credentials",
       JSON.stringify({
         swarmailUrl: "http://127.0.0.1:18765",
         target: {
-          type: "t3-v1-steer",
+          type: "t3-v2-queue",
           url: "http://127.0.0.1:3775",
           id: "t3-auto-wake",
           authorizationFile: header,
@@ -582,9 +582,10 @@ test("supervisor state survives a T3 upgrade and credential cutover, but not a n
     expect(() => open(automaticBinding(configure({}, {})))).not.toThrow();
     expect(() => open(automaticBinding(configure({ delivery: "auto" }, {})))).not.toThrow();
     expect(() => configure({ delivery: "restart" }, {})).toThrow("explicit protocol");
-    expect(() => configure({ type: "t3-v1-steer", delivery: "auto" }, {})).toThrow(
-      "explicit protocol",
+    expect(() => configure({ type: "t3-v1-steer" }, {})).toThrow(
+      "target type t3-v1-steer was removed: current T3 Code runs only its V2 engine, which has no V1 route; use t3-v2-queue",
     );
+    expect(() => configure({ type: "opencode-v2-queue" }, {})).toThrow("explicit protocol");
     const moved = configure({}, { baseDir: join(root, "other-t3") });
     expect(() => open(automaticBinding(moved))).toThrow("binding differs");
   } finally {
@@ -603,7 +604,11 @@ test("SessionEnd before the first enrollment lock prevents a stale runtime snaps
   const actualGit = Bun.which("git")!;
   Bun.spawnSync([actualGit, "init", "-q", repo]);
   f.db.query("INSERT INTO projection_projects VALUES ('project-1',?)").run(repo);
-  f.db.query("UPDATE provider_session_runtime SET last_seen_at='2026-09-30T22:00:00Z'").run();
+  f.db
+    .query(
+      "UPDATE orchestration_v2_projection_provider_threads SET updated_at='2026-09-30T22:00:00Z'",
+    )
+    .run();
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -654,7 +659,7 @@ import {writeFileSync,existsSync} from "node:fs";writeFileSync(${JSON.stringify(
     }
     const { openRegistry } = await import("../src/registry.ts");
     openRegistry(dirname(f.state)).end("native-1", () => {}, new Date("2026-09-30T23:00:00Z"));
-    f.db.query("UPDATE provider_session_runtime SET status='stopped'").run();
+    f.db.query("UPDATE orchestration_v2_projection_provider_threads SET status='closed'").run();
     writeFileSync(released, "yes");
     expect(await child.exited).toBe(0);
     expect(JSON.parse(readFileSync(f.state, "utf8")).ended).toBe("2026-09-30T23:00:00.000Z");
@@ -674,7 +679,7 @@ test("explicit thread recovery requires the supervisor lock, preserves other fai
   const stateRoot = join(f.root, "state");
   const config = {
     swarmailUrl: "http://127.0.0.1:1",
-    target: { type: "t3-v1-steer", id: "t3-auto-wake" },
+    target: { type: "t3-v2-queue", id: "t3-auto-wake" },
     rotation: { verifyBackend: true, baseDir: join(f.root, ".t3") },
     enrollAfter: "2099-01-01T00:00:00Z",
   };
@@ -703,8 +708,8 @@ test("explicit thread recovery requires the supervisor lock, preserves other fai
   journal
     .query("INSERT INTO state VALUES(1,?,4,?)")
     .run(
-      JSON.stringify({ type: "t3-v1-steer", url: "http://127.0.0.1:1", id: "thread-1" }),
-      JSON.stringify({ eventId: 5, command: { commandId: "original-command" } }),
+      JSON.stringify({ type: "t3-v2-queue", id: "thread-1" }),
+      JSON.stringify({ eventId: 5, command: { type: "t3.notice", messageId: "original-message" } }),
     );
   journal.close();
   const originalMailbox = readFileSync(mailbox);
@@ -778,7 +783,7 @@ for (const timing of [
     const stateRoot = join(f.root, "state");
     const expiresAt = new Date(Date.now() + 86400000).toISOString();
     let fatalCommand: any = null;
-    let pausedDelivery: Resolve | undefined;
+    let pausedDelivery: ((receipt: object) => void) | undefined;
     let pauseDelivery = false;
     let stopBarrier: Resolve | undefined;
     const stopGate = join(f.root, "stop-gate");
@@ -787,12 +792,13 @@ for (const timing of [
     const commands: any[] = [];
     const requests = new Set<string>();
     let authenticated = true;
+    let refusedTickets = 0;
     const clock = join(f.root, "clock");
     writeFileSync(clock, String(Date.now()));
     const targetOptions = {
       hostname: "127.0.0.1",
       port: 0,
-      async fetch(request: Request) {
+      async fetch(request: Request, server: Bun.Server<undefined>) {
         const path = new URL(request.url).pathname;
         requests.add(new URL(request.url).host + path);
         if (path === "/api/auth/session") {
@@ -806,34 +812,54 @@ for (const timing of [
             scopes: ["orchestration:operate"],
           });
         }
-        if (path === "/api/orchestration/dispatch") {
-          const command = (await request.json()) as any;
-          commands.push(command);
+        if (path === "/ws") {
+          return server.upgrade(request) ? undefined : new Response(null, { status: 400 });
+        }
+        if (path === "/api/auth/websocket-ticket") {
           if (!authenticated) {
+            refusedTickets++;
             return new Response("private-auth-body", { status: 403 });
           }
-          if (command.threadId === "thread-1") {
-            fatalCommand = command;
-          }
-          if (pauseDelivery && command.threadId === pausedThread) {
-            return new Promise<Response>((resolve) => {
-              pausedDelivery = resolve;
-            });
-          }
-          return Response.json(command.threadId === "thread-1" ? {} : { sequence: 1 });
+          return Response.json({ ticket: "fixture-ticket" });
         }
         if (path.endsWith("/thread-3")) {
           return Response.json({ private: "private-thread-body" });
         }
+        const id = path.split("/").at(path.endsWith("/bounded") ? -2 : -1);
         return Response.json({
-          thread: {
-            id: path.split("/").at(-1),
-            runtimeMode: "approval-required",
-            settledAt: null,
-            settledOverride: null,
-            interactionMode: "default",
+          projection: {
+            thread: { id, settledAt: null, settledOverride: null },
+            runs: [],
+            messages: [],
+            runtimeRequests: [],
           },
         });
+      },
+      websocket: {
+        message(ws: Bun.ServerWebSocket<undefined>, raw: string | Buffer) {
+          const frame = JSON.parse(String(raw));
+          if (frame._tag !== "Request") {
+            return;
+          }
+          const command = frame.payload;
+          commands.push(command);
+          const reply = (receipt: object) =>
+            ws.send(
+              JSON.stringify({
+                _tag: "Exit",
+                requestId: frame.id,
+                exit: { _tag: "Success", value: receipt },
+              }),
+            );
+          if (command.threadId === "thread-1") {
+            fatalCommand = command;
+          }
+          if (pauseDelivery && command.threadId === pausedThread) {
+            pausedDelivery = reply;
+            return;
+          }
+          reply(command.threadId === "thread-1" ? {} : { sequence: 1 });
+        },
       },
     };
     const target = Bun.serve(targetOptions);
@@ -854,6 +880,12 @@ for (const timing of [
         }
         if (path === "/wait/status") {
           return Response.json({ eligible: true });
+        }
+        if (path === "/wait/peek") {
+          const session = new URL(request.url).searchParams.get("session");
+          return Response.json({
+            mailboxes: [{ recipient: `AutoReceiver-${session}`, project: "/w/auto" }],
+          });
         }
         if (new URL(request.url).pathname === "/stop") {
           return new Promise<Response>((resolve) => {
@@ -888,7 +920,7 @@ for (const timing of [
     const config = {
       swarmailUrl: `http://127.0.0.1:${mail.port}`,
       target: {
-        type: "t3-v1-steer",
+        type: "t3-v2-queue",
         url: `http://127.0.0.1:${target.port}`,
         id: "t3-auto-wake",
         authorizationFile: join(f.root, "authorization"),
@@ -942,9 +974,7 @@ for (const timing of [
         db.close();
       }
     };
-    f.db
-      .exec(`INSERT INTO projection_threads VALUES ('thread-2',NULL,NULL,'project-1',NULL,NULL,NULL);
-    INSERT INTO provider_session_runtime VALUES ('thread-2','codex','{"threadId":"native-2"}','2026-09-30','running');`);
+    addT3V2Thread(f.db, { threadId: "thread-2", nativeId: "native-2", updatedAt: "2026-09-30" });
     for (const index of [1, 2]) {
       writeFileSync(
         join(f.registry, `native-${index}.json`),
@@ -1018,9 +1048,7 @@ for (const timing of [
         .query<{ value: string }, []>("SELECT value FROM context WHERE id=1")
         .get()!.value;
       try {
-        f.db.exec(
-          "UPDATE projection_threads SET archived_at='archived' WHERE thread_id='thread-1'",
-        );
+        archiveT3(f.db, "archived", "thread-1");
         await scan();
         await until(() => Object.keys(status()?.subscriptions ?? {}).length === 1);
         await until(() => !waiting.has("thread-1")); // The removed bridge stopped polling.
@@ -1033,7 +1061,7 @@ for (const timing of [
         observer.close();
       }
       expect(journal("thread-1").acknowledged).toBe(0);
-      f.db.exec("UPDATE projection_threads SET archived_at=NULL WHERE thread_id='thread-1'");
+      archiveT3(f.db, null, "thread-1");
       await scan();
       await until(
         () => Object.keys(status()?.subscriptions ?? {}).length === 2 && waiting.has("thread-1"),
@@ -1045,11 +1073,7 @@ for (const timing of [
         waiting.get(pausedThread)!(offer());
         await until(() => pausedDelivery);
         writeFileSync(stopGate, "1");
-        f.db.exec(
-          ownRemoval
-            ? "UPDATE projection_threads SET archived_at='archived' WHERE thread_id='thread-1'"
-            : "UPDATE projection_threads SET archived_at='archived'",
-        );
+        archiveT3(f.db, "archived", ownRemoval ? "thread-1" : undefined);
         await until(() => scanBarrier);
         if (shuttingDown) {
           child.kill("SIGTERM");
@@ -1067,7 +1091,7 @@ for (const timing of [
         }
         pauseDelivery = false;
         rmSync(stopGate);
-        pausedDelivery!(Response.json(ownRemoval ? {} : { sequence: 1 }));
+        pausedDelivery!(ownRemoval ? {} : { sequence: 1 });
         pausedDelivery = undefined;
         if (shuttingDown) {
           expect(await child.exited).toBe(0);
@@ -1078,7 +1102,7 @@ for (const timing of [
         }
         stopBarrier!(new Response());
         stopBarrier = undefined;
-        f.db.exec("UPDATE projection_threads SET archived_at=NULL");
+        archiveT3(f.db, null);
         if (shuttingDown) {
           child = launch();
           errors = new Response(child.stderr).text();
@@ -1103,7 +1127,7 @@ for (const timing of [
       expect(saved.acknowledged).toBe(0);
       expect(JSON.parse(saved.pending)).toMatchObject({
         eventId: 1,
-        command: { commandId: fatalCommand.commandId },
+        command: { type: "t3.notice", operation: { commandId: fatalCommand.commandId } },
       });
       // A restarted bridge publishes its subscription before asynchronous retry acceptance.
       await until(() => journal("thread-2").acknowledged === healthyEvent - 1);
@@ -1119,15 +1143,12 @@ for (const timing of [
           const next = [...sequence, event];
           const before = f.db
             .query<{ archived_at: string | null; settled_override: string | null }, []>(
-              "SELECT archived_at, settled_override FROM projection_threads WHERE thread_id='thread-1'",
+              "SELECT archived_at, json_extract(payload_json,'$.settledOverride') AS settled_override FROM orchestration_v2_projection_threads WHERE thread_id='thread-1'",
             )
             .get()!;
           if (event !== "scan") {
-            f.db
-              .query(
-                "UPDATE projection_threads SET archived_at=?,settled_override=? WHERE thread_id='thread-1'",
-              )
-              .run(event === "archive" ? "archived" : null, event === "settle" ? "settled" : null);
+            archiveT3(f.db, event === "archive" ? "archived" : null, "thread-1");
+            settleT3(f.db, event === "settle" ? "settled" : null, "thread-1");
           }
           await scan();
           expect(Object.keys(status().subscriptions), next.join(" -> ")).toEqual(["thread-2"]);
@@ -1137,11 +1158,8 @@ for (const timing of [
             next.join(" -> "),
           ).toHaveLength(1);
           await visit(next);
-          f.db
-            .query(
-              "UPDATE projection_threads SET archived_at=?,settled_override=? WHERE thread_id='thread-1'",
-            )
-            .run(before.archived_at, before.settled_override);
+          archiveT3(f.db, before.archived_at, "thread-1");
+          settleT3(f.db, before.settled_override, "thread-1");
           await scan();
         }
       };
@@ -1170,7 +1188,7 @@ for (const timing of [
       if (!shuttingDown) {
         expect(await errors).toContain("bridge thread-1 quarantined");
       }
-      f.db.exec("UPDATE projection_threads SET archived_at=NULL WHERE thread_id='thread-1'");
+      archiveT3(f.db, null, "thread-1");
       child = launch();
       errors = new Response(child.stderr).text();
       await until(() => scanBarrier);
@@ -1178,9 +1196,7 @@ for (const timing of [
       expect(journal("thread-1").pending).toBe(originalPending);
       expect(commands.filter((command) => command.threadId === "thread-1")).toHaveLength(1);
       // A thread-local protocol/preflight failure does not stop a healthy sibling.
-      f.db
-        .exec(`INSERT INTO projection_threads VALUES ('thread-3',NULL,NULL,'project-1',NULL,NULL,NULL);
-      INSERT INTO provider_session_runtime VALUES ('thread-3','codex','{"threadId":"native-3"}','2026-09-30','running');`);
+      addT3V2Thread(f.db, { threadId: "thread-3", nativeId: "native-3", updatedAt: "2026-09-30" });
       writeFileSync(
         join(f.registry, "native-3.json"),
         JSON.stringify({
@@ -1195,9 +1211,7 @@ for (const timing of [
       expect(Object.keys(status().subscriptions)).toEqual(["thread-2"]);
       // Shared authentication failure during the cached minute is global, not thread quarantine.
       authenticated = false;
-      f.db
-        .exec(`INSERT INTO projection_threads VALUES ('thread-4',NULL,NULL,'project-1',NULL,NULL,NULL);
-      INSERT INTO provider_session_runtime VALUES ('thread-4','codex','{"threadId":"native-4"}','2026-09-30','running');`);
+      addT3V2Thread(f.db, { threadId: "thread-4", nativeId: "native-4", updatedAt: "2026-09-30" });
       writeFileSync(
         join(f.registry, "native-4.json"),
         JSON.stringify({
@@ -1226,14 +1240,9 @@ for (const timing of [
       child = launch();
       errors = new Response(child.stderr).text();
       await until(() => scanBarrier && waiting.has("thread-2"));
-      const previousCommands = commands.filter((command) => command.threadId === "thread-2").length;
       authenticated = false;
       waiting.get("thread-2")!(offer(healthyEvent + 1));
-      await until(
-        () =>
-          commands.filter((command) => command.threadId === "thread-2").length ===
-            previousCommands + 1 && stopped("thread-2"),
-      );
+      await until(() => refusedTickets === 1 && stopped("thread-2"));
       scanBarrier!(new Response());
       scanBarrier = undefined;
       await until(() => child.exitCode !== null || status()?.failures?.["thread-2"]);
@@ -1246,7 +1255,7 @@ for (const timing of [
       if (child.exitCode === null) {
         child.kill("SIGTERM");
       }
-      pausedDelivery?.(Response.json({ sequence: 1 }));
+      pausedDelivery?.({ sequence: 1 });
       stopBarrier?.(new Response());
       scanBarrier?.(new Response());
       await child.exited;
@@ -1293,13 +1302,13 @@ test("automatic supervisor waits out a T3 restart and follows its new port", asy
             scopes: ["orchestration:operate"],
           });
         }
+        const id = path.split("/").at(path.endsWith("/bounded") ? -2 : -1);
         return Response.json({
-          thread: {
-            id: path.split("/").at(-1),
-            runtimeMode: "approval-required",
-            settledAt: null,
-            settledOverride: null,
-            interactionMode: "default",
+          projection: {
+            thread: { id, settledAt: null, settledOverride: null },
+            runs: [],
+            messages: [],
+            runtimeRequests: [],
           },
         });
       },
@@ -1333,7 +1342,7 @@ test("automatic supervisor waits out a T3 restart and follows its new port", asy
   const baseDir = join(f.root, ".t3");
   const config = {
     swarmailUrl: `http://127.0.0.1:${mail.port}`,
-    target: { type: "t3-v1-steer", id: "t3-auto-wake", authorizationFile: join(f.root, "auth") },
+    target: { type: "t3-v2-queue", id: "t3-auto-wake", authorizationFile: join(f.root, "auth") },
     rotation: {
       verifyBackend: true,
       baseDir,
@@ -1453,35 +1462,6 @@ test("automatic supervisor waits out a T3 restart and follows its new port", asy
   );
 }, 30000);
 
-test("automatic wake matches the Codex cursor identity, excluding metadata and invalid JSON", () => {
-  const f = fixture();
-  try {
-    writeFileSync(
-      f.state,
-      JSON.stringify({
-        name: "BlueLake",
-        projects: ["/repo"],
-        wakeThread: "thread-1",
-        tags: { "/repo": "[t3:thread-1 codex:native-1 cwd:/repo]" },
-      }),
-    );
-    for (const cursor of [
-      JSON.stringify({ threadId: "native-other", note: "native-1" }),
-      JSON.stringify({ "native-1": "native-other" }),
-      '{"threadId":"native-1", broken}',
-    ]) {
-      f.db.query("UPDATE provider_session_runtime SET resume_cursor_json=?").run(cursor);
-      expect([...automaticT3Threads(f.registry, join(f.root, ".t3"))]).toEqual([]);
-    }
-    f.db
-      .query("UPDATE provider_session_runtime SET resume_cursor_json=?")
-      .run(JSON.stringify({ threadId: "native-1", note: "native-other" }));
-    expect([...automaticT3Threads(f.registry, join(f.root, ".t3"))]).toEqual(["thread-1"]);
-  } finally {
-    f.close();
-  }
-});
-
 test("automatic scans repeat only after a T3 commit, a registry write, a reopen or the rescan interval", () => {
   const f = fixture();
   const t3 = heldT3State(join(f.root, ".t3"));
@@ -1490,7 +1470,9 @@ test("automatic scans repeat only after a T3 commit, a registry write, a reopen 
     const due = rescanDue(t3, f.registry, () => now);
     expect(due()).toBe(true);
     expect(due()).toBe(false);
-    f.db.query("UPDATE provider_session_runtime SET last_seen_at='2026-10-01'").run();
+    f.db
+      .query("UPDATE orchestration_v2_projection_provider_threads SET updated_at='2026-10-01'")
+      .run();
     expect(due()).toBe(true);
     expect(due()).toBe(false);
     Bun.sleepSync(25); // Past the file system's timestamp granularity.
@@ -1574,7 +1556,7 @@ for (const initial of ["unavailable", "malformed", "missing"]) {
       JSON.stringify({
         swarmailUrl: `http://127.0.0.1:${proxy.port}`,
         target: {
-          type: "t3-v1-steer",
+          type: "t3-v2-queue",
           url: `http://127.0.0.1:${target.port}`,
           authorizationFile: header,
         },
@@ -1657,8 +1639,7 @@ for (const initial of ["unavailable", "malformed", "missing"]) {
 test("scan orderings reconcile verified closure and recovery while the T3 backend is unavailable", async () => {
   const f = fixture();
   const sourcePath = join(f.root, ".t3/userdata/statev2.sqlite");
-  const source = new Database(sourcePath);
-  createT3V2Tables(source);
+  const source = f.db;
   addT3V2Thread(source, { threadId: "thread-one", nativeId: "native-one" });
   source.exec(`CREATE TABLE orchestration_v2_projection_metadata(projection_name TEXT PRIMARY KEY,schema_version INTEGER,last_sequence INTEGER);
     INSERT INTO orchestration_v2_projection_metadata VALUES ('thread-projections',2,1);
@@ -1834,7 +1815,6 @@ test("scan orderings reconcile verified closure and recovery while the T3 backen
     await proxy.stop(true);
     await core.server.stop(true);
     core.db.close();
-    source.close();
     f.close();
   }
   expect(await errors).toContain(

@@ -2,13 +2,13 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { isT3V2, T3_V2_THREADS, t3StatePath } from "./t3-state.ts";
+import { t3StateReady, T3_V2_THREADS, t3StatePath } from "./t3-state.ts";
 import {
   checkT3Target,
   BridgeError,
   TargetAuthenticationError,
   localUrl,
-  T3_TYPES,
+  rejectRemovedTargetType,
 } from "./wake-target.ts";
 import type { WakeTarget } from "./wake-target.ts";
 import { primaryCheckout } from "./checkout.ts";
@@ -38,8 +38,7 @@ type AutoState = RegisterState & { wakeThread?: string };
  * Providers whose T3 V2 threads this service wakes. Claude is left out because Claude in T3
  * already waits on its own session id (the wake mod, or the stop hook without it). A bridge would
  * wait on the same id, and the server keeps one waiter per id, so each would replace the other
- * with a 409. Under T3's Cursor SDK, Cursor's stop hook stops waiting when the turn ends. V1 stays
- * Codex-only.
+ * with a 409. Under T3's Cursor SDK, Cursor's stop hook stops waiting when the turn ends.
  */
 const WAKE_PROVIDERS = "('codex','cursor')";
 
@@ -147,37 +146,28 @@ export function enrollT3Threads(
 ): void {
   const states = openRegistry<AutoState>(registry);
   const rows = readT3((db) =>
-    db
-      .query<
-        {
-          thread_id: string;
-          session: unknown;
-          cwd: string;
-          last_seen_at: string;
-          provider_name: string;
-        },
-        [string]
-      >(
-        isT3V2(db)
-          ? `
+    t3StateReady(db)
+      ? db
+          .query<
+            {
+              thread_id: string;
+              session: unknown;
+              cwd: string;
+              last_seen_at: string;
+              provider_name: string;
+            },
+            [string]
+          >(
+            `
       SELECT thread_id, session, last_seen_at, cwd, provider_name FROM (${T3_V2_THREADS}) v
       WHERE deleted_at IS NULL AND archived_at IS NULL AND NOT coalesce(subagent, 0)
         AND ${UNSETTLED_V2}
         AND cwd IS NOT NULL AND provider_name IN ${WAKE_PROVIDERS} AND status='running'
         AND julianday(last_seen_at) >= julianday(?)
-    `
-          : `
-      SELECT t.thread_id, CASE WHEN json_valid(r.resume_cursor_json)
-             THEN json_extract(r.resume_cursor_json,'$.threadId') END AS session, r.last_seen_at,
-             coalesce(t.worktree_path,p.workspace_root) AS cwd, 'codex' AS provider_name
-      FROM projection_threads t JOIN provider_session_runtime r ON r.thread_id=t.thread_id
-      JOIN projection_projects p ON p.project_id=t.project_id
-      WHERE t.deleted_at IS NULL AND t.archived_at IS NULL
-        AND t.settled_at IS NULL AND t.settled_override IS NOT 'settled'
-        AND r.provider_name='codex' AND r.status='running' AND julianday(r.last_seen_at) >= julianday(?)
     `,
-      )
-      .all(after),
+          )
+          .all(after)
+      : [],
   );
   for (const row of rows) {
     const session = row.session;
@@ -229,25 +219,18 @@ export function automaticT3Threads(
 ): Set<string> {
   const states = openRegistry<AutoState>(registry);
   const rows = readT3((db) =>
-    db
-      .query<{ thread_id: string; session: unknown; provider_name: string }, []>(
-        isT3V2(db)
-          ? `
+    t3StateReady(db)
+      ? db
+          .query<{ thread_id: string; session: unknown; provider_name: string }, []>(
+            `
       SELECT thread_id, session, provider_name FROM (${T3_V2_THREADS}) v
       WHERE deleted_at IS NULL AND archived_at IS NULL AND NOT coalesce(subagent, 0)
         AND ${UNSETTLED_V2}
         AND provider_name IN ${WAKE_PROVIDERS}
-    `
-          : `
-      SELECT t.thread_id, CASE WHEN json_valid(r.resume_cursor_json)
-             THEN json_extract(r.resume_cursor_json,'$.threadId') END AS session,
-             'codex' AS provider_name
-      FROM projection_threads t JOIN provider_session_runtime r ON r.thread_id=t.thread_id
-      WHERE t.deleted_at IS NULL AND t.archived_at IS NULL
-        AND t.settled_at IS NULL AND t.settled_override IS NOT 'settled' AND r.provider_name='codex'
     `,
-      )
-      .all(),
+          )
+          .all()
+      : [],
   );
   const threads = new Set<string>();
   // Only the registration named by each thread's provider session can match it.
@@ -284,10 +267,10 @@ export function automaticT3Threads(
 
 export function automaticT3Configuration(path: string) {
   const config = JSON.parse(readFileSync(path, "utf8"));
+  rejectRemovedTargetType(config.target?.type);
   if (
-    !T3_TYPES.includes(config.target?.type) ||
-    (config.target.delivery !== undefined &&
-      (config.target.type !== "t3-v2-queue" || config.target.delivery !== "auto")) ||
+    config.target?.type !== "t3-v2-queue" ||
+    (config.target.delivery !== undefined && config.target.delivery !== "auto") ||
     config.rotation?.verifyBackend !== true ||
     typeof config.rotation?.baseDir !== "string" ||
     typeof config.enrollAfter !== "string" ||

@@ -12,7 +12,7 @@ test.skipIf(process.platform !== "linux")(
   async () => {
     const root = mkdtempSync(join(scratch, "case-"));
     mkdirSync(join(root, "userdata"));
-    const path = join(root, "userdata/state.sqlite");
+    const path = join(root, "userdata/statev2.sqlite");
     const database = new Database(path, { create: true });
     const server = Bun.serve({
       hostname: "127.0.0.1",
@@ -89,16 +89,6 @@ test.skipIf(process.platform !== "linux")(
       expect(verifyT3Backend(config)).rejects.toThrow("backend identity");
       renameSync(path + ".old", path);
       expect(verifyT3Backend(config)).resolves.toBe(listener);
-      // Once V2 has created its database, the listener must hold that one, not V1's frozen file.
-      const v2Path = join(root, "userdata/statev2.sqlite");
-      new Database(v2Path, { create: true }).close();
-      expect(verifyT3Backend(config)).rejects.toThrow("backend identity");
-      const v2 = new Database(v2Path);
-      try {
-        expect(verifyT3Backend(config)).resolves.toBe(listener);
-      } finally {
-        v2.close();
-      }
       await server.stop(true);
       expect(verifyT3Backend(config)).rejects.toThrow("unavailable; retrying");
       expect(discover()).rejects.toThrow("unavailable; retrying");

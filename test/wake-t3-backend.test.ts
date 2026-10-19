@@ -29,7 +29,7 @@ function fixture() {
   const root = join(scratch, crypto.randomUUID());
   const baseDir = join(root, "backend");
   mkdirSync(join(baseDir, "userdata"), { recursive: true });
-  const database = new Database(join(baseDir, "userdata/state.sqlite"));
+  const database = new Database(join(baseDir, "userdata/statev2.sqlite"));
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response("unused") });
   cleanup.push(
     () => database.close(),
@@ -196,11 +196,11 @@ linuxTest(
     f.publish(process.pid + 1000000);
     expect(await poll()).toBeUndefined();
     expect(fetch).toHaveBeenCalledTimes(1);
-    // A different database path is a fatal identity mismatch.
+    // A database file the listener does not hold is a fatal identity mismatch.
     f.publish();
     const dbPath = join(f.baseDir, "userdata/statev2.sqlite");
-    const other = new Database(dbPath);
-    other.close();
+    renameSync(dbPath, dbPath + ".old");
+    new Database(dbPath).close();
     expect(poll()).rejects.toBeInstanceOf(BridgeError);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(f.snapshot()).toEqual(before);

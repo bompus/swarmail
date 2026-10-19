@@ -2,7 +2,6 @@ import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import {
   realpathSync,
-  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -25,7 +24,7 @@ import {
   withLock,
 } from "../src/registry.ts";
 import type { Register, RegisterState } from "../src/registry.ts";
-import { t3StatePath, t3ThreadId } from "../src/t3-state.ts";
+import { t3StatePath, t3ThreadId, t3Threads } from "../src/t3-state.ts";
 import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.ts";
 import { parseTag, sessionTag } from "../src/tag.ts";
 import { createServer } from "../src/server.ts";
@@ -384,16 +383,15 @@ test("tells Claude hook input from Cursor, Devin and Grok input", () => {
   });
 });
 
-test("finds the T3 thread whose resume cursor holds the session id", () => {
+test("finds the T3 thread whose native thread reference holds the session id", () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "t3-state-")));
-  const path = join(dir, "state.sqlite");
+  mkdirSync(join(dir, "userdata"));
+  const path = t3StatePath(dir);
+  expect(path).toBe(join(dir, "userdata/statev2.sqlite"));
   const db = new Database(path);
-  db.run(
-    "create table provider_session_runtime (thread_id text, resume_cursor_json text, last_seen_at text)",
-  );
-  db.run(
-    "insert into provider_session_runtime values ('thread-a', '{\"resume\":\"sess-1\"}', '1'), ('thread-b', '{\"sessionId\":\"sess-2\"}', '2')",
-  );
+  createT3V2Tables(db);
+  addT3V2Thread(db, { threadId: "thread-a", nativeId: "sess-1" });
+  addT3V2Thread(db, { threadId: "thread-b", nativeId: "sess-2" });
   db.close();
   try {
     expect(t3ThreadId("sess-1", path)).toBe("thread-a");
@@ -405,11 +403,12 @@ test("finds the T3 thread whose resume cursor holds the session id", () => {
   }
 });
 
-test("after the V2 cutover, finds the thread from V2's native thread reference", () => {
+test("a T3 database still being created holds no threads", () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "t3-state-")));
   mkdirSync(join(dir, "userdata"));
-  const v1 = join(dir, "userdata/state.sqlite");
-  const db = new Database(v1);
+  const path = t3StatePath(dir);
+  // T3 creates its database by copying its older one, whose tables arrive before its own.
+  const db = new Database(path);
   db.run(
     "create table provider_session_runtime (thread_id text, resume_cursor_json text, last_seen_at text)",
   );
@@ -418,17 +417,9 @@ test("after the V2 cutover, finds the thread from V2's native thread reference",
   );
   db.close();
   try {
-    expect(t3StatePath(dir)).toBe(v1);
-    // V2 starts from a copy of V1's database and leaves the copied runtime rows frozen.
-    const v2 = join(dir, "userdata/statev2.sqlite");
-    copyFileSync(v1, v2);
-    const copy = new Database(v2);
-    createT3V2Tables(copy);
-    addT3V2Thread(copy, { threadId: "thread-b", nativeId: "sess-2" });
-    copy.close();
-    expect(t3StatePath(dir)).toBe(v2);
-    expect(t3ThreadId("sess-2", v2)).toBe("thread-b");
-    expect(t3ThreadId("sess-1", v2)).toBeNull();
+    expect(t3ThreadId("sess-1", path)).toBeNull();
+    expect(t3ThreadId("sess-1", path, "codex")).toBeNull();
+    expect(t3Threads(path).size).toBe(0);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
