@@ -3,6 +3,9 @@
   "options": {
     "typeAware": true
   },
+  "categories": {
+    "correctness": "error"
+  },
   "rules": {
     "no-unused-vars": [
       "error",
@@ -46,6 +49,10 @@
     "import/no-duplicates": "error",
     "import/no-self-import": "error",
     "promise/no-return-in-finally": "error",
+    // Two correctness rules are off as noise: this one flags deliberate callback bridges, and
+    // no-floating-promises catches real misuse; the next one is style only.
+    "promise/no-callback-in-promise": "off",
+    "typescript/no-useless-default-assignment": "off",
     "typescript/no-extra-non-null-assertion": "error",
     "typescript/no-non-null-asserted-nullish-coalescing": "error",
     "typescript/prefer-ts-expect-error": "error",
@@ -58,7 +65,29 @@
     "unicorn/prefer-optional-catch-binding": "error",
     "unicorn/prefer-structured-clone": "error",
     "typescript/await-thenable": "error",
-    "typescript/no-floating-promises": "error",
+    // node:test awaits the promises of its own top-level calls, so only those are exempt;
+    // every other floating promise still fails, in test files too.
+    "typescript/no-floating-promises": [
+      "error",
+      {
+        "allowForKnownSafeCalls": [
+          {
+            "from": "package",
+            "package": "node:test",
+            "name": [
+              "test",
+              "describe",
+              "it",
+              "suite",
+              "before",
+              "after",
+              "beforeEach",
+              "afterEach"
+            ]
+          }
+        ]
+      }
+    ],
     "typescript/no-unnecessary-condition": "error",
     "typescript/prefer-includes": "error",
     "typescript/prefer-optional-chain": "error",
