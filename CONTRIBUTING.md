@@ -55,8 +55,9 @@ an older result with the version it was measured on.
   `evals/docs-check` (its README says how) and read the failures.
 - `docs/benchmarks.md` and the benchmark numbers and charts in the README,
   including the list of versions they were not remeasured for.
-- Graphics in `docs/assets/` (banner, benchmark charts, demo recording) and
-  their alt text.
+- Graphics in `docs/assets/` (banner, GitHub social preview, benchmark
+  charts, demo recording) and their alt text. `docs/assets/README.md` says how
+  the social preview reaches GitHub.
 - `packages/mcp-relay/README.md`, which npm shows, and the descriptions in
   `package.json`, `packages/mcp-relay/package.json`, `server.json` and
   `glama.json`.
