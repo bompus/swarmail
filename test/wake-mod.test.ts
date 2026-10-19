@@ -22,6 +22,8 @@ function session({
     responses: [] as (Response | Error | (() => Response))[],
     fetched: [] as string[],
     submitted: [] as string[],
+    // Replaced by tests that hold or fail the submission.
+    submit: undefined as ((text: string) => Promise<void>) | undefined,
     env: {} as Record<string, string>,
   };
   const $: ModApi = {
@@ -55,7 +57,10 @@ function session({
         return { headers: {}, ...next };
       },
     },
-    prompt: { submit: async ({ text }) => void state.submitted.push(text) },
+    prompt: {
+      submit: async ({ text }) =>
+        state.submit ? state.submit(text) : void state.submitted.push(text),
+    },
   };
   const pass = async (e: ModEvent) => e;
   return {
@@ -102,6 +107,54 @@ test("waits once the session is registered, and starts a turn with the hint when
   s.state.sid = "s-2";
   await s.tick();
   expect(s.state.fetched[2]).toContain("session=s-2&timeout=25&after=0");
+});
+
+test("a new session during a submitted prompt keeps its own cursor", async () => {
+  const s = session();
+  let settle = () => {};
+  s.state.submit = (text) =>
+    new Promise<void>((resolve) => {
+      s.state.submitted.push(text);
+      settle = resolve;
+    });
+  await s.start();
+  s.state.responses.push(hint(7));
+  expect(await s.tick()).toBe(0);
+  // The round that submits the hint, held until the test settles it.
+  s.timers.shift()!.fn();
+  while (!s.state.submitted.length) {
+    await Bun.sleep(0);
+  }
+  // session.start runs while the prompt is in flight, then the old submission completes.
+  await s.start();
+  settle();
+  // The new session's first wait; the old chain's timer, queued behind it, does nothing.
+  s.timers.shift()!.fn();
+  while (s.state.fetched.length < 2) {
+    await Bun.sleep(0);
+  }
+  expect(s.state.fetched[1]).toContain("session=s-1&timeout=25&after=0");
+});
+
+test("a prompt that fails to submit is offered again after the error pause", async () => {
+  const s = session();
+  const failures = [new Error("busy")];
+  s.state.submit = async (text) => {
+    const failure = failures.shift();
+    if (failure) {
+      throw failure;
+    }
+    s.state.submitted.push(text);
+  };
+  await s.start();
+  s.state.responses.push(hint(7));
+  expect(await s.tick()).toBe(0);
+  expect(await s.tick()).toBe(3000);
+  expect(s.state.submitted).toEqual([]);
+  expect(await s.tick()).toBe(0);
+  expect(s.state.submitted).toEqual(["Swarmail: 1 new message"]);
+  await s.tick();
+  expect(s.state.fetched.at(-1)).toEndWith("&after=7");
 });
 
 test("finds the registration under the user profile when HOME is unset, as on Windows", async () => {
