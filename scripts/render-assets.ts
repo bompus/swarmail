@@ -107,9 +107,9 @@ try {
       `--screenshot=${out}`,
       `file://${htmlPath}`,
     ]);
+    // Thrown, not process.exit, so the finally block still removes the work directory.
     if (run.exitCode !== 0) {
-      console.error(run.stderr.toString());
-      process.exit(1);
+      throw new Error(`Chrome exited ${run.exitCode} on ${page.file}:\n${run.stderr.toString()}`);
     }
     console.log(`wrote ${out}`);
   }
