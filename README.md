@@ -468,6 +468,8 @@ bun test
 bun run check   # format, lint and type check
 ```
 
+`bun run check` type-checks with Bun's `bun check`, which needs Bun 1.4.3 or later.
+
 `bun scripts/build.ts --if-stale` rebuilds the binary only when a source file,
 the dependency manifest or lockfile, the bytecode-order profile, the build
 script, or the Bun version changed. Restart the unit

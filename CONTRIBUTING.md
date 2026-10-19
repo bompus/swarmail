@@ -91,7 +91,8 @@ an older result with the version it was measured on.
    to Sync Server, then Deploy. When the build test passes, click Make Release
    and enter `X.Y.Z`. The saved build spec (build steps
    `["npm install -g bun@1.4.2"]`, CMD `["bun", "scripts/glama.ts"]`) needs a
-   change only when the Bun version CI uses or `scripts/glama.ts` changes.
+   change only when the Bun version the server needs (`engines.bun` in `package.json`) or
+   `scripts/glama.ts` changes. CI runs a newer Bun for `bun check`, which the server does not need.
 6. Check every accepted listing in the next section. Update by hand any that
    still shows an older version or outdated details.
 
