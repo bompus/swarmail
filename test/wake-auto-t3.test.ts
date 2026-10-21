@@ -794,6 +794,8 @@ for (const timing of [
     let authenticated = true;
     let refusedTickets = 0;
     const clock = join(f.root, "clock");
+    const monotonic = join(f.root, "monotonic");
+    writeFileSync(monotonic, "0");
     writeFileSync(clock, String(Date.now()));
     const targetOptions = {
       hostname: "127.0.0.1",
@@ -1006,6 +1008,7 @@ for (const timing of [
             AUTO_TEST_EXPIRES: expiresAt,
             AUTO_TEST_SCAN_URL: `http://127.0.0.1:${mail.port}/scan`,
             AUTO_TEST_NOW_FILE: clock,
+            AUTO_TEST_MONOTONIC_FILE: monotonic,
             AUTO_TEST_STOP_GATE: stopGate,
             AUTO_TEST_STOP_URL: `http://127.0.0.1:${mail.port}/stop`,
           },
@@ -1164,6 +1167,20 @@ for (const timing of [
         }
       };
       await visit();
+      // Stay in the same supervisor beyond both the old five-minute grace and the
+      // host's two-hour start-limit window. No restart may clear retained failures.
+      const runtimePath = join(f.root, ".t3/userdata/server-runtime.json");
+      writeFileSync(
+        runtimePath,
+        JSON.stringify({ version: 1, pid: process.pid + 1000000, port: target.port }),
+      );
+      await scan();
+      writeFileSync(monotonic, String(3 * 60 * 60_000));
+      await scan();
+      expect(child.exitCode).toBeNull();
+      expect(status().failures["thread-1"]).toBe("T3 returned no command admission receipt");
+      expect(journal("thread-1").pending).toBe(originalPending);
+      expect(commands.filter((command) => command.threadId === "thread-1")).toHaveLength(1);
       // Port discovery restarts only healthy bridges; a failed journal stays quarantined.
       movedTarget = Bun.serve(targetOptions);
       writeFileSync(
@@ -1457,9 +1474,7 @@ test("automatic supervisor waits out a T3 restart and follows its new port", asy
     await stalled?.stop(true);
     f.close();
   }
-  expect(await errors).toContain(
-    "T3 backend unavailable; waiting within the existing grace budget",
-  );
+  expect(await errors).toContain("T3 backend unavailable; waiting for verified readiness");
 }, 30000);
 
 test("automatic scans repeat only after a T3 commit, a registry write, a reopen or the rescan interval", () => {
@@ -1817,7 +1832,5 @@ test("scan orderings reconcile verified closure and recovery while the T3 backen
     core.db.close();
     f.close();
   }
-  expect(await errors).toContain(
-    "T3 backend unavailable; waiting within the existing grace budget",
-  );
+  expect(await errors).toContain("T3 backend unavailable; waiting for verified readiness");
 });

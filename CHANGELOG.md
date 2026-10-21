@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Automatic T3 wake supervision waits through ordinary backend outages without exhausting a restart
+  budget. It resumes after verifying the returning backend, retaining quarantines and pending command
+  identities. Authentication, configuration and unsafe credential-state failures still stop supervision.
+
 - The `t3-v1-steer` wake target and support for T3 Code's older database are removed. Current T3 Code runs only its V2
   engine: it keeps its data in `statev2.sqlite` and no longer has the HTTP dispatch route or turn-start command those
   bridges sent, so a `t3-v1-steer` bridge failed its thread check and delivered nothing. A `wake-bridge`, `wake-auto-t3`
