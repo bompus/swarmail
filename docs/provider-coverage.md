@@ -315,9 +315,10 @@ All statements here are documented. None were tested.
 
 ## T3 Code
 
-- **Messaging (documented, checked 2026-10-16 against the T3 Code
-  documentation on `main`; the latest release is 0.1.0, and this page does not
-  separate what 0.1.0 ships from what only `main` documents).** `t3_thread_send` reaches any thread in the
+- **Messaging (source reviewed through nightly
+  `v0.1.2-nightly.20261021.3486`; latest stable release 0.1.1).** The nightly
+  capabilities below are not all verified in stable 0.1.1 or in a running
+  client. `t3_thread_send` reaches any thread in the
   environment with `auto` (start an idle thread, steer an active turn, or queue
   behind it), `queue`, `steer` or `restart`, and repeats safely with the same
   `clientRequestId`. The target's runtime and interaction modes may not be
@@ -333,6 +334,17 @@ All statements here are documented. None were tested.
   support OAuth, such as Claude Code and Codex in a terminal, can use these tools
   through an MCP sign-in that lasts 30 days. Read only is the default, and
   Supervised or above can message threads.
+- **Terminal commands (nightly source, not run).** `t3 thread start`, `send`,
+  `show` and `list` use a local MCP client. `send` uses queue mode, so it does
+  not replace the bridge's active steering. `start` and `send` support `--wait`;
+  a failed run exits 1 and a run needing a human answer exits 2.
+- **Pull request lookup (nightly source, not run).** The
+  `pullRequestsLinkedThreads` RPC returns linked thread IDs, project IDs,
+  titles and archive times, excluding dismissed links and deleted threads.
+  It can cover simple association lookups. It does not replace swarmail's
+  provider history, native session IDs, roster matching, branch discovery,
+  hidden links or chain reporting. swarmail's `pr-sessions` remains
+  intentionally GitHub-only.
 - **Not provided (documented).** No per-message read or acknowledgement receipt
   and no priority. The sender gets a message ID, a run ID and a delivery
   outcome. Search is bounded and has no exhaustive-result guarantee. The
@@ -341,7 +353,13 @@ All statements here are documented. None were tested.
 - **What swarmail does here.** Between T3 threads, the T3 tools are enough.
   swarmail mail to a T3 thread, from any sender, wakes it only through the
   opt-in T3 bridge. The optional lifecycle reader stops wakes to settled,
-  archived or deleted threads.
+  archived or deleted threads. Automatic inbox notices currently use ordinary
+  steering messages, which clear T3's snooze. T3 preserves snooze for queued
+  notifications, but rejects notification steering and promotion to steering.
+  Preserving snooze while retaining active steering needs a T3 admission
+  contract that supports both; the bridge must not label a steer as a queued
+  notification. The lifecycle read before sending also cannot make admission
+  atomic with a concurrent settle, archive or delete.
 - **Muse and Pi (documented from T3 Code source, not run).** T3 Code has
   native `muse` and `pi` providers. swarmail has no register hook, wake hook,
   session variable or bridge for either, and `wake-auto-t3` starts bridges only
