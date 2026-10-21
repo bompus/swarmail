@@ -269,8 +269,9 @@ A bridge that fails is quarantined with its reason in the supervisor state; heal
 the supervisor, settling or reactivating the thread, and a backend port change do not retry it. After resolving the
 cause, stop the supervisor and run `swarmail wake-auto-t3 <config.json> --retry-thread <thread-id>`; this clears only
 that thread's quarantine and leaves its journal and pending command intact. A malformed failure record, an invalid
-shared configuration or a credential failure stops the supervisor. If T3 stays unreachable for five minutes, or a
-different program holds its port, the supervisor stops too.
+shared configuration or a credential failure stops the supervisor. Ordinary T3 backend unavailability holds
+supervision in the same process until verified readiness returns; it does not exhaust a restart budget. A different
+program holding T3's port still stops the supervisor.
 
 ## Optional T3 reader primitives
 
@@ -290,9 +291,13 @@ the actual Linux listener, its executable and its open T3 database.
 The follower first checks an existing credential without a CLI call or state
 write. Only a clean, owned credential outside its renewal window can retry
 connection refusal, connection reset or its own request timeout. Listener
-absence and these transport failures share one absolute five-minute grace.
-Each retry rechecks identity; requests and identity subprocesses respect the
-remaining budget and cancellation. Verified readiness resets the grace.
+absence and these transport failures keep returning `undefined` without an outage
+expiry. Each retry rechecks identity. Every poll has its own five-minute operation
+budget; requests and identity subprocesses retain their shorter timeouts and
+respect cancellation. Verified readiness closes the outage. The automatic
+supervisor polls again after its existing two-second pause and reconnects healthy
+bridges when the backend URL changes. It retains quarantines and pending command
+identities throughout the wait and reconnect.
 
 Credential rejection, redirects, HTTP errors, malformed responses and identity
 mismatches remain fatal. Missing or due credentials and unfinished rotation

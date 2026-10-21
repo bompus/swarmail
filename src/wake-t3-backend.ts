@@ -8,9 +8,9 @@ import {
 import { credentialService, T3SessionTransportUnavailable } from "./wake-credentials.ts";
 import { BridgeError } from "./wake-target.ts";
 
-const unavailableGraceMs = 5 * 60_000;
+const backendCheckBudgetMs = 5 * 60_000;
 
-/** Poll with the consumer's existing cadence. Each outage has one absolute grace deadline. */
+/** Poll at the consumer's cadence until ready; only individual checks have a deadline. */
 export function followT3Backend(
   path: string,
   location: { baseDir: string; url?: string },
@@ -20,17 +20,17 @@ export function followT3Backend(
   let url: string | undefined;
   let published: string | undefined;
   let nextCheck = 0;
-  let deadline: number | undefined;
+  let unavailable = false;
   let transportOutage = false;
   return async () => {
     const started = performance.now();
-    const check: BackendCheck = { signal, deadline: deadline ?? started + unavailableGraceMs };
+    const check: BackendCheck = { signal, deadline: started + backendCheckBudgetMs };
     checkBackendOperation(check);
     try {
       const runtime = readT3Runtime(location.baseDir);
       const listener = runtime ? `${runtime.url} ${runtime.pid}` : location.url;
       const same = url !== undefined && listener === published;
-      if (deadline === undefined && same && started < nextCheck) {
+      if (!unavailable && same && started < nextCheck) {
         return { url: url!, moved: false, restarted: false };
       }
       const backend = await credential.backend(check);
@@ -52,7 +52,7 @@ export function followT3Backend(
       url = checked.url;
       published = listener;
       nextCheck = performance.now() + 60_000;
-      deadline = undefined; // Only verified readiness closes an outage.
+      unavailable = false; // Only verified readiness closes an outage.
       transportOutage = false;
       return { url, moved, restarted };
     } catch (error) {
@@ -67,11 +67,10 @@ export function followT3Backend(
       if (error instanceof T3SessionTransportUnavailable) {
         transportOutage = true;
       }
-      if (deadline === undefined) {
-        deadline = started + unavailableGraceMs;
-        console.warn("T3 backend unavailable; waiting within the existing grace budget");
+      if (!unavailable) {
+        unavailable = true;
+        console.warn("T3 backend unavailable; waiting for verified readiness");
       }
-      checkBackendOperation({ signal, deadline });
       return undefined;
     }
   };

@@ -4,6 +4,10 @@ if (process.env.AUTO_TEST_NOW_FILE) {
   const nowFile = process.env.AUTO_TEST_NOW_FILE;
   Date.now = () => Number(readFileSync(nowFile, "utf8"));
 }
+if (process.env.AUTO_TEST_MONOTONIC_FILE) {
+  const clockFile = process.env.AUTO_TEST_MONOTONIC_FILE;
+  performance.now = () => Number(readFileSync(clockFile, "utf8"));
+}
 const spawn = Bun.spawn.bind(Bun);
 const sleep = Bun.sleep.bind(Bun);
 const scanUrl = process.env.AUTO_TEST_SCAN_URL;

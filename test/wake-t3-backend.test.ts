@@ -256,7 +256,7 @@ linuxTest("requests respect remaining grace and own timeout classification", asy
 });
 
 linuxTest(
-  "all three-event orderings retain one outage deadline and never mutate ownership",
+  "all three-event orderings keep retrying across long outages without mutating ownership",
   async () => {
     const f = fixture();
     const before = f.snapshot();
@@ -269,7 +269,7 @@ linuxTest(
     );
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     cleanup.push(() => warn.mockRestore());
-    const events = ["refused", "reset", "ready", "deadline", "cancel", "renewal", "disabled"];
+    const events = ["refused", "reset", "ready", "long outage", "cancel", "renewal", "disabled"];
     const violations = [];
     const sequences = events.flatMap((a) => events.flatMap((b) => events.map((c) => [a, b, c])));
     for (const sequence of sequences) {
@@ -279,10 +279,10 @@ linuxTest(
       fetch.mockClear();
       const shutdown = new AbortController();
       const poll = followT3Backend(f.path, f, shutdown.signal);
-      let outageDeadline;
+      let inOutage = false;
       for (const event of sequence) {
-        if (event === "deadline") {
-          now = outageDeadline ?? now + 300000;
+        if (event === "long outage") {
+          now += 3 * 60 * 60_000;
         } else if (event === "cancel") {
           shutdown.abort();
         } else if (event === "renewal") {
@@ -297,26 +297,28 @@ linuxTest(
             event === "refused" ? "ConnectionRefused" : event === "reset" ? "ECONNRESET" : "ready";
         }
         // State changes outside an outage belong to the legacy renewal path.
-        if (outageDeadline === undefined && (event === "renewal" || event === "disabled")) {
+        if (!inOutage && (event === "renewal" || event === "disabled")) {
           break;
         }
-        if (event !== "deadline") {
+        if (event !== "long outage") {
           now += 1000;
         }
         const calls = fetch.mock.calls.length;
         try {
           const ready = await poll();
-          if (shutdown.signal.aborted || (outageDeadline !== undefined && now >= outageDeadline)) {
-            violations.push(`${sequence}: resumed after stop/deadline`);
+          if (shutdown.signal.aborted) {
+            violations.push(`${sequence}: resumed after stop`);
           }
           if (ready) {
-            outageDeadline = undefined;
-          } else if (outageDeadline === undefined) {
-            outageDeadline = now + 300000;
+            inOutage = false;
+          } else if (!inOutage) {
+            inOutage = true;
           }
         } catch (error) {
           if (!(error instanceof BridgeError)) {
             violations.push(`${sequence}: unsafe failure`);
+          } else if (!shutdown.signal.aborted && event !== "renewal" && event !== "disabled") {
+            violations.push(`${sequence}: unexpected fatal failure: ${error.message}`);
           }
           break; // The consumer stops after a fatal failure.
         }
@@ -463,7 +465,7 @@ linuxTest(
     });
     expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
     expect(renew).toHaveBeenCalledTimes(1);
-    expect(renew.mock.calls[0]![2]!.deadline).toBe(300000);
+    expect(renew.mock.calls[0]![2]!.deadline).toBe(301000);
     expect(f.cli).toEqual([]);
   },
 );
