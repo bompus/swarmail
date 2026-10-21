@@ -4,6 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- The provider comparison covers T3 Code 0.1.1 and the reviewed nightly's terminal commands,
+  pull-request lookup limits and automatic-notice snooze behavior.
+
 - Automatic T3 wake supervision waits through ordinary backend outages without exhausting a restart
   budget. It resumes after verifying the returning backend, retaining quarantines and pending command
   identities. Authentication, configuration and unsafe credential-state failures still stop supervision.
