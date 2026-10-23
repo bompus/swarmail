@@ -4,6 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- `swarmail wake-auto-t3` logs `received SIGTERM; stopping` (or `SIGINT`) when it receives the signal, so a
+  signalled stop no longer looks like a silent exit 0 in the journal.
+
 - The provider comparison covers T3 Code 0.1.1 and the reviewed nightly's terminal commands,
   pull-request lookup limits and automatic-notice snooze behavior.
 

@@ -1474,7 +1474,9 @@ test("automatic supervisor waits out a T3 restart and follows its new port", asy
     await stalled?.stop(true);
     f.close();
   }
-  expect(await errors).toContain("T3 backend unavailable; waiting for verified readiness");
+  const log = await errors;
+  expect(log).toContain("T3 backend unavailable; waiting for verified readiness");
+  expect(log.match(/swarmail wake-auto-t3: received SIGTERM; stopping/g)).toHaveLength(1);
 }, 30000);
 
 test("automatic scans repeat only after a T3 commit, a registry write, a reopen or the rescan interval", () => {
