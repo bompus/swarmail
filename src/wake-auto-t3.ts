@@ -632,9 +632,14 @@ export async function wakeAutoT3(args: string[]): Promise<number> {
     return 64;
   }
   const abort = new AbortController();
-  const stop = () => abort.abort();
-  process.once("SIGTERM", stop);
-  process.once("SIGINT", stop);
+  const stopOn = (signalName: string) => () => {
+    console.error(`swarmail wake-auto-t3: received ${signalName}; stopping`);
+    abort.abort();
+  };
+  const onTerm = stopOn("SIGTERM");
+  const onInt = stopOn("SIGINT");
+  process.once("SIGTERM", onTerm);
+  process.once("SIGINT", onInt);
   let lock: ReturnType<typeof openWakeState> | undefined;
   let failures = new Map<string, string>();
   let failuresLoaded = false;
@@ -686,7 +691,7 @@ export async function wakeAutoT3(args: string[]): Promise<number> {
         lock.close();
       }
     }
-    process.removeListener("SIGTERM", stop);
-    process.removeListener("SIGINT", stop);
+    process.removeListener("SIGTERM", onTerm);
+    process.removeListener("SIGINT", onInt);
   }
 }
