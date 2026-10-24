@@ -4,6 +4,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- `bun run check` checks formatting with `bun fmt --no-script --check` instead of oxfmt, and `bun run fmt` writes with
+  `bun fmt --no-script`. Both read the same `.oxfmtrc.json` and check the same files with no differences. Contributors
+  need Bun 1.4.4 or later.
+
 - `swarmail wake-auto-t3` logs `received SIGTERM; stopping` (or `SIGINT`) when it receives the signal, so a
   signalled stop no longer looks like a silent exit 0 in the journal.
 
