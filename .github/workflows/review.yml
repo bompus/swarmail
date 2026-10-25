@@ -1,0 +1,58 @@
+name: shadow-review
+# Shadow mode: the review step cannot fail the job. The reviewer code runs from the
+# host's configured checkout ($PR_REVIEWER_HOME), never from the pull request.
+# The trigger is pull_request_target so this file always comes from the default branch:
+# a pull request cannot edit the guard below. The pull request is checked out as data
+# only; nothing from it is executed on the runner. A change to this file takes effect
+# once it is on the default branch.
+on:
+  pull_request_target:
+    # labeled/unlabeled: an author:<family> label changes which reviewer runs.
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    name: shadow review
+    # Same-repository pull requests only, so a fork pull request never reaches the runner.
+    # Because the trigger is pull_request_target, a pull request cannot remove this check.
+    # Drafts are skipped per step, not here, so converting to draft still starts a job
+    # that takes the concurrency slot and cancels a review in progress.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (!contains(fromJSON('["labeled","unlabeled"]'), github.event.action) ||
+       startsWith(github.event.label.name, 'author:'))
+    # On the job, not the workflow, so a skipped run (an unrelated label) cancels nothing.
+    concurrency:
+      group: shadow-review-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: [self-hosted, private-reviewer]
+    timeout-minutes: 45
+    steps:
+      - if: github.event.pull_request.draft != true
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Review
+        if: github.event.pull_request.draft != true
+        continue-on-error: true
+        timeout-minutes: 40
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        # Run from the reviewer's own checkout, which the runner supplies: Bun reads
+        # .env and bunfig.toml from its working directory, and the pull request's
+        # checkout must not configure the reviewer. Fail loudly when it is unset rather
+        # than guessing a path, so a misconfigured runner is visible in the job log.
+        run: cd "${PR_REVIEWER_HOME:?PR_REVIEWER_HOME is not set on this runner}" && CHECKOUT="$GITHUB_WORKSPACE" bun src/review.ts
