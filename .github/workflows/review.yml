@@ -1,8 +1,12 @@
 name: shadow-review
 # Shadow mode: the review step cannot fail the job. The reviewer code runs from the
 # host's configured checkout ($PR_REVIEWER_HOME), never from the pull request.
+# The trigger is pull_request_target so this file always comes from the default branch:
+# a pull request cannot edit the guard below. The pull request is checked out as data
+# only; nothing from it is executed on the runner. A change to this file takes effect
+# once it is on the default branch.
 on:
-  pull_request:
+  pull_request_target:
     # labeled/unlabeled: an author:<family> label changes which reviewer runs.
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft, labeled, unlabeled]
 
@@ -13,9 +17,8 @@ permissions:
 jobs:
   review:
     name: shadow review
-    # Same-repository pull requests only. A pull request runs its own copy of this file,
-    # so this check is a second layer: the enforced guard is the repository setting that
-    # keeps fork pull requests from running workflows without maintainer approval.
+    # Same-repository pull requests only, so a fork pull request never reaches the runner.
+    # Because the trigger is pull_request_target, a pull request cannot remove this check.
     # Drafts are skipped per step, not here, so converting to draft still starts a job
     # that takes the concurrency slot and cancels a review in progress.
     if: >-
