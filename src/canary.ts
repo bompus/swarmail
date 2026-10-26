@@ -7,7 +7,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { call as mcpCall } from "./mail.ts";
-import { stateHome, wakeUrl } from "./paths.ts";
+import { authHeaders, stateHome, wakeUrl } from "./paths.ts";
 import { INBOX_NOTICE } from "./wake.ts";
 
 /** The wake session the receiver is tagged with, as a wake hook's host session id would be. */
@@ -122,6 +122,7 @@ export function httpWait(base: string, graceMs = 5000): Wait {
     const url = new URL("/wait", base); // As the wake hook builds it, so a trailing slash in the base does no harm.
     url.search = new URLSearchParams({ session, timeout: String(seconds) }).toString();
     const res = await fetch(url, {
+      headers: authHeaders(process.env, base),
       signal: AbortSignal.timeout(seconds * 1000 + graceMs),
     });
     if (res.status === 204) {

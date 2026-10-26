@@ -13,7 +13,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - `SWARMAIL_HOST` adds a second listener on one non-loopback address, such as a Tailscale IP, that answers only
   requests with `Authorization: Bearer <token>`, where the token is the first line of `SWARMAIL_TOKEN_FILE`.
   The loopback listener is unchanged. The `swarmail` command, the register hook and `swarmail-mcp` send the token
-  when `SWARMAIL_TOKEN_FILE` is set, so sessions on another machine can reach one server. Wake hooks do not send the token; see "Using it from another machine" in the README.
+  when `SWARMAIL_TOKEN_FILE` is set, so sessions on another machine can reach one server.
+
+- Wake hooks, the wake bridges and `swarmail canary` send the token to a non-loopback `SWARMAIL_WAKE_URL` or
+  bridge `swarmailUrl`, which a bridge accepts only when `SWARMAIL_TOKEN_FILE` names the token. The Claude Code
+  mod cannot send it.
 
 - `bun run check` checks formatting with `bun fmt --no-script --check` instead of oxfmt, and `bun run fmt` writes with
   `bun fmt --no-script`. Both read the same `.oxfmtrc.json` and check the same files with no differences. Contributors

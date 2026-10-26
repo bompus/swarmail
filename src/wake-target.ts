@@ -1,6 +1,7 @@
 // Native editor delivery, with explicit target protocols and immutable command receipts.
 import { readFileSync, statSync } from "node:fs";
 import { isAbsolute } from "node:path";
+import { bearerToken, isLoopbackUrl } from "./paths.ts";
 
 export interface WakeTarget {
   type: "t3-v2-queue" | "opencode-v2-queue";
@@ -66,6 +67,40 @@ export function localUrl(value: unknown): string {
   }
   if (url.hostname === "localhost") {
     url.hostname = "127.0.0.1";
+  }
+  return url.origin;
+}
+
+/**
+ * The origin of the Swarmail server a bridge polls: a loopback origin as `localUrl` allows, or another host's origin
+ * when SWARMAIL_TOKEN_FILE holds the token that server asks for.
+ */
+export function serverUrl(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new BridgeError("an explicit server URL is required");
+  }
+  const url = new URL(value);
+  if (isLoopbackUrl(value)) {
+    return localUrl(value);
+  }
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== "/"
+  ) {
+    throw new BridgeError("use an HTTP origin without credentials, path or query");
+  }
+  try {
+    if (!bearerToken()) {
+      throw new Error("unset");
+    }
+  } catch {
+    throw new BridgeError(
+      "a server on another machine needs SWARMAIL_TOKEN_FILE to name its token file",
+    );
   }
   return url.origin;
 }

@@ -12,7 +12,7 @@ import { ensureWakeEligible } from "./wake-lifecycle.ts";
 import { openHookDelivery } from "./hook-delivery.ts";
 import { updateHint } from "./updates.ts";
 import { SESSION_RE } from "./wake.ts";
-import { stateHome, wakeUrl } from "./paths.ts";
+import { authHeaders, stateHome, wakeUrl } from "./paths.ts";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -286,6 +286,7 @@ async function waitForMail(
         const res = await fetch(
           `${base}/wait?session=${sid}&timeout=${left}${delivery?.query() ?? retry}`,
           {
+            headers: authHeaders(env, base),
             signal: AbortSignal.any([request.signal, AbortSignal.timeout((left + 5) * 1000)]),
           },
         );
@@ -373,7 +374,11 @@ async function nativeContextHint(sid: string, env: NodeJS.ProcessEnv): Promise<s
   try {
     const url = new URL("/wait", wakeUrl(env));
     url.search = new URLSearchParams({ session: sid, timeout: "0" }).toString() + delivery.query();
-    const response = await fetch(url, { signal: AbortSignal.timeout(1500), redirect: "error" });
+    const response = await fetch(url, {
+      headers: authHeaders(env, url.href),
+      signal: AbortSignal.timeout(1500),
+      redirect: "error",
+    });
     return response.status === 200
       ? await delivery.receive(response, () => ensureWakeEligible(wakeUrl(env), sid))
       : "";

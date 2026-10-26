@@ -1,4 +1,5 @@
 // A failed eligibility check retains pending mail and its immutable retry.
+import { authHeaders } from "./paths.ts";
 import { BridgeError } from "./wake-target.ts";
 
 export async function ensureWakeEligible(
@@ -10,6 +11,7 @@ export async function ensureWakeEligible(
     const url = new URL("/wait/status", base);
     url.searchParams.set("session", session);
     const response = await fetch(url, {
+      headers: authHeaders(process.env, base),
       signal: signal
         ? AbortSignal.any([signal, AbortSignal.timeout(2000)])
         : AbortSignal.timeout(2000),

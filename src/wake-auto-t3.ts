@@ -9,10 +9,12 @@ import {
   TargetAuthenticationError,
   localUrl,
   rejectRemovedTargetType,
+  serverUrl,
 } from "./wake-target.ts";
 import type { WakeTarget } from "./wake-target.ts";
 import { primaryCheckout } from "./checkout.ts";
 import { swarmailUrl } from "./client.ts";
+import { authHeaders } from "./paths.ts";
 import { processIdentity } from "./proc.ts";
 import {
   openRegistry,
@@ -285,7 +287,7 @@ export function automaticT3Configuration(path: string) {
       "automatic T3 wake requires an explicit protocol and verified backend rotation",
     );
   }
-  config.swarmailUrl = localUrl(config.swarmailUrl);
+  config.swarmailUrl = serverUrl(config.swarmailUrl);
   if (config.target.url !== undefined) {
     config.target.url = localUrl(config.target.url); // Used only without T3's runtime file.
   }
@@ -470,6 +472,7 @@ function lifecycleReconciliation(swarmailUrl: string, signal: AbortSignal) {
     try {
       const response = await fetch(new URL("/lifecycle/reconcile", swarmailUrl), {
         method: "POST",
+        headers: authHeaders(process.env, swarmailUrl),
         redirect: "error",
         signal: AbortSignal.any([signal, AbortSignal.timeout(2000)]),
       });

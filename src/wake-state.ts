@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { authHeaders } from "./paths.ts";
 import { BridgeError } from "./wake-target.ts";
 
 export interface Pending {
@@ -166,6 +167,7 @@ export async function waitForOffer(
   let response: Response;
   try {
     response = await fetch(url, {
+      headers: authHeaders(process.env, config.swarmailUrl),
       signal: AbortSignal.any([signal, AbortSignal.timeout(40_000)]),
       redirect: "error",
     });
@@ -206,6 +208,7 @@ export async function peekUnreadMailboxes(
   url.search = new URLSearchParams({ session: config.target.id }).toString();
   try {
     const response = await fetch(url, {
+      headers: authHeaders(process.env, config.swarmailUrl),
       signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
       redirect: "error",
     });

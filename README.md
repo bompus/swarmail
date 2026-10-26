@@ -313,8 +313,9 @@ What does not carry over yet:
 - The server reads process state, branch and session titles from its own
   machine, so a remote session appears without a branch or title and its
   liveness checks do not see it.
-- Wake hooks and bridges do not send the token, so mail to a remote session
-  is read when that session checks its inbox.
+- The Claude Code mod that waits for mail cannot send the token, so a Claude
+  session on another machine uses the wake hook, not the mod. Wake hooks and
+  bridges send the token to a remote `SWARMAIL_WAKE_URL` or `swarmailUrl`.
 - `swarmail overdue` refuses to run against a remote server, because it reads
   this machine's records; run it on the hub.
 - A session belongs to the one server it registered with. If its hooks later
