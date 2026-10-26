@@ -414,6 +414,7 @@ export function pruneGoneProjects(
       );
       db.run("DELETE FROM file_reservations WHERE project_id = ?", [id]);
       db.run("DELETE FROM agents WHERE project_id = ?", [id]);
+      db.run("DELETE FROM project_aliases WHERE project_id = ?", [id]);
       db.run("DELETE FROM projects WHERE id = ?", [id]);
     }
   })();

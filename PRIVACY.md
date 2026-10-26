@@ -32,7 +32,11 @@ by default `~/.local/share/swarmail/mail.sqlite3`:
 The server accepts only connections from your own computer unless you set
 `SWARMAIL_HOST`. Then it also answers computers that present your bearer token
 on that one address, and they can read and send all mail and read the roster,
-project paths and file reservations. Nothing else leaves your computer.
+project paths and file reservations. A computer that uses such a server names
+each project by the repository's host, owner and name from its `origin` remote
+URL, not by the checkout path. When a working directory exists, the session's
+tag in its task description also carries that directory, with the home
+directory shortened to `~`. Nothing else leaves your computer.
 
 ## How long it is kept
 

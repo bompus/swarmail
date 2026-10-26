@@ -289,12 +289,27 @@ SWARMAIL_URL=http://<hub address>:18765/mcp/ SWARMAIL_TOKEN_FILE=~/.config/swarm
 A host that connects to MCP over HTTP itself needs the same `Authorization`
 header in its server entry, or `swarmail-mcp` as a relay.
 
+Against a remote server a project is named by the repository, not by a path:
+the URL git uses for the clone's `origin` remote, written `git:host/owner/repo` in
+lower case whatever the protocol (`https://github.com/bompus/swarmail.git` and
+`git@github.com:bompus/swarmail.git` are the same repository). Only the host and
+path count: the user, port, `.git` suffix and a leading slash are ignored, and a
+`url.<base>.insteadOf` rewrite is applied first. When the hub holds
+a clone of that repository, its project is the remote sessions' project too, so
+both machines share one roster, mail and set of reservations. If the hub meets
+the clone later, its project takes over the one the remote sessions created. A hub
+that holds several clones of the repository uses the one registered first, and a
+hub clone that registered before it had an `origin` keeps its own project, apart
+from the one remote sessions created for the repository. A
+clone with no `origin` remote cannot be named to a remote server; the command
+says so, and the hook says so when the session starts. A clone whose origin git cannot read
+keeps the project it had. The hook does not take a name that another session holds in the project, and the
+server refuses to give a retired session's name to a different session; the hook then
+takes a fresh name. Two sessions that carry the same name into a repository's project
+at the same moment can still collide, because the hook reads the roster before it registers.
+
 What does not carry over yet:
 
-- A project is named by its checkout path on the machine that registers it, so
-  the same repository checked out at different paths on two machines is two
-  projects with separate rosters, mail and reservations. Use the same absolute path
-  on both machines to share one.
 - The server reads process state, branch and session titles from its own
   machine, so a remote session appears without a branch or title and its
   liveness checks do not see it.

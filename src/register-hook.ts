@@ -9,8 +9,9 @@
 
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { primaryCheckout, worktreeRoot } from "./checkout.ts";
+import { projectFor, worktreeRoot } from "./checkout.ts";
 import { swarmailUrl } from "./client.ts";
+import { isLoopbackUrl } from "./paths.ts";
 import { hostProcess, sameHost } from "./proc.ts";
 import { nameIn, openRegistry, sameServer, serverRegister, type Session } from "./registry.ts";
 import { sessionTag, SESSION_ENV } from "./tag.ts";
@@ -240,11 +241,17 @@ function main(input: HookInput): string {
     return "";
   }
   const dir = targetDir({ ...input, cwd: session.cwd });
-  const project = dir && primaryCheckout(dir);
+  const project = dir && projectFor(dir, server);
   const t3 = t3ThreadId(sessionId);
   const tag = sessionTag({ ...session, t3 }, session.cwd);
   if (!project) {
-    return starting ? startNotice(tag) : "";
+    // A clone without an origin cannot be named to a remote server; the start says so once, not on every edit.
+    const bare = starting && dir && !isLoopbackUrl(server) && worktreeRoot(dir);
+    return starting
+      ? (bare
+          ? "Swarmail: this clone has no origin remote, which a remote server needs to name its repository, so this session is not registered. Add one and start the session again. "
+          : "") + startNotice(tag)
+      : "";
   }
   // Most edits after the first find the project registered under this tag and skip the lock.
   const known = registry.read(sessionId);
