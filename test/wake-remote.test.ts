@@ -137,7 +137,7 @@ test("without the token those calls are refused instead of reading the hub's mai
       () => null,
       (error: Error) => error,
     );
-    expect((await eligible)?.message).toContain("holding mail");
+    expect((await eligible)?.message).toContain("SWARMAIL_TOKEN_FILE");
   } finally {
     process.env.SWARMAIL_TOKEN_FILE = token;
   }
@@ -381,5 +381,34 @@ test("the hook reads its token file again for each poll, so a rotated token is u
     expect(seen).toEqual([`Bearer ${first}`, `Bearer ${second}`]);
   } finally {
     await fake.stop(true);
+  }
+});
+
+test("a server that rejects the token is an authentication failure, not a hold to retry", async () => {
+  const rejecting = Bun.serve({
+    hostname: REMOTE,
+    port: 0,
+    fetch: () => new Response("no", { status: 401 }),
+  });
+  const url = `http://${REMOTE}:${rejecting.port}`;
+  const failure = (run: () => Promise<unknown>) =>
+    run().then(
+      () => null,
+      (error: Error) => error,
+    );
+  try {
+    const config = { swarmailUrl: url, target: { id: "s-1" } };
+    const signal = new AbortController().signal;
+    expect(await failure(() => lifecycleReconciliation(url, signal)())).toBeInstanceOf(
+      TargetAuthenticationError,
+    );
+    expect(await failure(() => ensureWakeEligible(url, "s-1"))).toBeInstanceOf(
+      TargetAuthenticationError,
+    );
+    expect(await failure(() => waitForOffer(config, 0, signal))).toBeInstanceOf(
+      TargetAuthenticationError,
+    );
+  } finally {
+    await rejecting.stop(true);
   }
 });

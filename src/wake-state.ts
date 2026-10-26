@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { BridgeError, serverHeaders } from "./wake-target.ts";
+import { BridgeError, rejectedToken, serverHeaders } from "./wake-target.ts";
 
 export interface Pending {
   eventId: number;
@@ -177,6 +177,7 @@ export async function waitForOffer(
   if (response.status === 204) {
     return null;
   }
+  rejectedToken(response.status);
   if (!response.ok) {
     throw new BridgeError(`Swarmail HTTP ${response.status}`, response.status >= 500);
   }

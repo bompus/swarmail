@@ -88,6 +88,15 @@ export function serverHeaders(
   }
 }
 
+/** A server that answers 401 or 403 rejects the token, which no retry fixes and every thread shares. */
+export function rejectedToken(status: number): void {
+  if (status === 401 || status === 403) {
+    throw new TargetAuthenticationError(
+      `Swarmail refused the request (HTTP ${status}); SWARMAIL_TOKEN_FILE must hold this server's token`,
+    );
+  }
+}
+
 /**
  * The origin of the Swarmail server a bridge polls: a loopback origin as `localUrl` allows, or another host's origin
  * when SWARMAIL_TOKEN_FILE holds the token that server asks for.

@@ -9,6 +9,7 @@ import {
   TargetAuthenticationError,
   localUrl,
   rejectRemovedTargetType,
+  rejectedToken,
   serverHeaders,
   serverUrl,
 } from "./wake-target.ts";
@@ -485,6 +486,7 @@ export function lifecycleReconciliation(swarmailUrl: string, signal: AbortSignal
           reason = "unexpected response";
         }
       } else {
+        rejectedToken(response.status);
         reason = `HTTP ${response.status}`;
       }
     } catch (error) {

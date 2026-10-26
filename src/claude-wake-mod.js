@@ -211,6 +211,8 @@ export function register(on) {
     // A mod cannot send headers, so a server that asks for a token is left to the wake hooks.
     const wakeUrl = (await $.env.get("SWARMAIL_WAKE_URL")) || "http://127.0.0.1:18765";
     if (!isLoopback(wakeUrl)) {
+      generation++; // Ends a chain this session's earlier start began.
+      await $.env.set("SWARMAIL_WAKE_MOD", "0"); // An inherited "1" would stop the hooks too.
       return next(e);
     }
     busy = false;

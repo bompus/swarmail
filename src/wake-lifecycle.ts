@@ -1,5 +1,10 @@
 // A failed eligibility check retains pending mail and its immutable retry.
-import { BridgeError, serverHeaders } from "./wake-target.ts";
+import {
+  BridgeError,
+  TargetAuthenticationError,
+  rejectedToken,
+  serverHeaders,
+} from "./wake-target.ts";
 
 export async function ensureWakeEligible(
   base: string,
@@ -18,10 +23,14 @@ export async function ensureWakeEligible(
         : AbortSignal.timeout(2000),
       redirect: "error",
     });
+    rejectedToken(response.status);
     if (!response.ok || ((await response.json()) as { eligible?: unknown }).eligible !== true) {
       throw new Error("held");
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof TargetAuthenticationError) {
+      throw error;
+    }
     throw new BridgeError("receiver lifecycle unavailable or inactive; holding mail", true);
   }
 }
