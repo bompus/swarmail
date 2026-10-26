@@ -35,7 +35,9 @@ export function projectOf(db: Database, name: string): Project | null {
   if (aliased && holds(aliased)) {
     return aliased;
   }
-  db.run("DELETE FROM project_aliases WHERE alias = ?", [name]);
+  if (aliased) {
+    db.run("DELETE FROM project_aliases WHERE alias = ?", [name]);
+  }
   const waiting = db
     .query<Project, [string]>("SELECT * FROM projects WHERE human_key = ?")
     .get(name);
