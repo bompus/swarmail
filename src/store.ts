@@ -433,10 +433,10 @@ export class MailStore {
 
   unretire(who: Agent, now: number): void {
     this.requireLifecycle(who);
-    this.db.run(
-      "UPDATE agents SET retired_at = NULL, last_active_ts = ?, session_ended_ts = NULL WHERE id = ?",
-      [now, who.id],
-    );
+    this.db.run("UPDATE agents SET retired_at = NULL, last_active_ts = ? WHERE id = ?", [
+      now,
+      who.id,
+    ]);
   }
 
   uniqueName(projectId: number): string {

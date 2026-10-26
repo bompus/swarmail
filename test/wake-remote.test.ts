@@ -179,6 +179,17 @@ test("a wait opened before the end report does not count, a later one does, and 
   await closeSecond();
   await closeFirst();
   expect((await listed()).session_ended_at).toBeNull();
+  // A wait left open across the end report stays out of the roster even after a later call clears the report.
+  const closeThird = waitOpen();
+  await Bun.sleep(100);
+  await end();
+  await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
+  expect(await listed()).toMatchObject({ waiting_for_mail: false, session_ended_at: null });
+  await closeThird();
+  // Reviving the name for someone else's mail is not the session acting, so its end report stays.
+  await end();
+  await call("unretire_agent", { project_key: P, agent_name: "GreenCastle" });
+  expect((await listed()).session_ended_at).not.toBeNull();
   await end();
   // The agent acting again, here by reading its own inbox with nothing in it, clears the report.
   await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });

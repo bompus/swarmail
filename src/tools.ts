@@ -92,7 +92,12 @@ interface ToolBase {
   run: (
     s: MailStore,
     a: Args,
-    info: { databasePath: string; db: Database; waitingSessions?: () => Map<string, number> },
+    info: {
+      databasePath: string;
+      db: Database;
+      waitingSessions?: () => Map<string, number>;
+      endWaits?: (sessions: string[]) => void;
+    },
   ) => unknown;
 }
 
@@ -889,6 +894,8 @@ export const TOOLS: Tool[] = [
       }
       if (a.session_ended === true) {
         info.db.run("UPDATE agents SET session_ended_ts = ? WHERE id = ?", [now, who.id]);
+        // Waits still open from before the end are not presence, even once a later call clears the report.
+        info.endWaits?.([who.session_id, who.t3_thread].filter((id): id is string => !!id));
       }
       return { released: rows.length, released_at: iso(now) };
     },
@@ -925,6 +932,8 @@ export function createTools(
     mutationsEnabled?: boolean;
     /** The sessions with a wake wait open on this server, each with when that wait began (µs). */
     waitingSessions?: () => Map<string, number>;
+    /** Forgets the open waits of sessions that reported their end. */
+    endWaits?: (sessions: string[]) => void;
   },
 ): Record<string, (a: Args) => unknown> {
   const s = new MailStore(db, info.lifecycle, info.registry, info.mutationsEnabled);

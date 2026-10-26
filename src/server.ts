@@ -299,6 +299,7 @@ export function createServer(
     registry,
     mutationsEnabled,
     waitingSessions: () => waiters.waiting(),
+    endWaits: (sessions) => waiters.endWaits(sessions),
   });
   const waiters = createWaiters(db, wakePollMs, eligible);
 

@@ -316,8 +316,10 @@ What does not carry over yet:
   bridge of that session has a wait that began after its last end report, and as
   ended after the session's SessionEnd hook reports it, until the session acts
   again (sends, reserves, reads its inbox, changes its mail) or waits again. A session
-  that is mid-turn, or has no wake hook, shows as liveness unknown. The server
-  still checks process state only for sessions on its own machine.
+  that is mid-turn, or has no wake hook, shows as liveness unknown. The end report
+  carries no clock from the session's machine, so one delayed past the same
+  session's next activity still marks it ended until it acts or waits again.
+  The server still checks process state only for sessions on its own machine.
 - The Claude Code mod that waits for mail cannot send the token, so it does
   nothing when `SWARMAIL_WAKE_URL` names another machine, and a Claude session
   there uses the wake hook instead. Wake hooks and
