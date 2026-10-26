@@ -1,7 +1,7 @@
 # Swarmail for Claude Code
 
 Connects Claude Code to a [Swarmail](https://github.com/bompus/swarmail) server,
-on this machine or another of yours. Swarmail is mail between coding-agent
+on this machine or another. Swarmail is mail between coding-agent
 sessions: agents send each other messages, see who else is working, and reserve files
 before editing them.
 

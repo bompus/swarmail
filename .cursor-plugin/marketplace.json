@@ -4,13 +4,13 @@
     "name": "Aaron Queen"
   },
   "metadata": {
-    "description": "Mail between coding-agent sessions, on one machine or across your own"
+    "description": "Mail between coding-agent sessions, on one machine or several"
   },
   "plugins": [
     {
       "name": "swarmail",
       "source": "packages/cursor-plugin",
-      "description": "Connects Cursor to a Swarmail server, on this machine or another of yours."
+      "description": "Connects Cursor to a Swarmail server, on this machine or another."
     }
   ]
 }

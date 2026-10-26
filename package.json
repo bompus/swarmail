@@ -2,7 +2,7 @@
   "name": "swarmail",
   "version": "0.7.0",
   "private": true,
-  "description": "Mail, roster and file reservations for coding-agent sessions, on one machine or across your own, served over MCP.",
+  "description": "Mail, roster and file reservations for coding-agent sessions, on one machine or several, served over MCP.",
   "license": "MIT",
   "type": "module",
   "scripts": {
