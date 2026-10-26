@@ -6,7 +6,7 @@ import { httpWait } from "../src/canary.ts";
 import { createServer } from "../src/server.ts";
 import { ensureWakeEligible } from "../src/wake-lifecycle.ts";
 import { peekUnreadMailboxes, waitForOffer } from "../src/wake-state.ts";
-import { serverUrl } from "../src/wake-target.ts";
+import { TargetAuthenticationError, serverHeaders, serverUrl } from "../src/wake-target.ts";
 
 // A second loopback address stands in for a tailnet one; the token file stands in for the machine's own.
 delete process.env.SWARMAIL_WAKE_MOD;
@@ -102,6 +102,17 @@ test("the wake client calls send the token to a server on another machine", asyn
   await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
   await send();
   expect(await httpWait(hub)("s-1", 0)).toContain("Swarmail:");
+  // The canary authenticates its wait with the environment it was given, as it does its other calls.
+  const token = process.env.SWARMAIL_TOKEN_FILE;
+  const given = { ...process.env, SWARMAIL_TOKEN_FILE: token };
+  delete process.env.SWARMAIL_TOKEN_FILE;
+  try {
+    await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
+    await send();
+    expect(await httpWait(hub, 5000, given)("s-1", 0)).toContain("Swarmail:");
+  } finally {
+    process.env.SWARMAIL_TOKEN_FILE = token;
+  }
   const reconcile = await fetch(`${hub}/lifecycle/reconcile`, { method: "POST" });
   expect(reconcile.status).toBe(401);
 });
@@ -222,6 +233,19 @@ test("a bridge accepts a server on another machine only when it has the token to
   try {
     expect(() => serverUrl(hub)).toThrow("SWARMAIL_TOKEN_FILE");
     expect(serverUrl("http://127.0.0.1:18765")).toBe("http://127.0.0.1:18765");
+  } finally {
+    process.env.SWARMAIL_TOKEN_FILE = token;
+  }
+});
+
+test("an unreadable token file is an authentication failure shared by every thread", () => {
+  const bad = join(dir, "short-token-2");
+  writeFileSync(bad, "short\n");
+  const token = process.env.SWARMAIL_TOKEN_FILE;
+  process.env.SWARMAIL_TOKEN_FILE = bad;
+  try {
+    expect(() => serverHeaders(hub)).toThrow(TargetAuthenticationError);
+    expect(serverHeaders("http://127.0.0.1:18765")).toEqual({});
   } finally {
     process.env.SWARMAIL_TOKEN_FILE = token;
   }

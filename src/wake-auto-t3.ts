@@ -13,7 +13,7 @@ import {
   serverUrl,
 } from "./wake-target.ts";
 import type { WakeTarget } from "./wake-target.ts";
-import { primaryCheckout } from "./checkout.ts";
+import { projectFor } from "./checkout.ts";
 import { swarmailUrl } from "./client.ts";
 import { processIdentity } from "./proc.ts";
 import {
@@ -204,7 +204,7 @@ export function enrollT3Threads(
     ) {
       continue;
     }
-    const project = primaryCheckout(row.cwd);
+    const project = projectFor(row.cwd, url);
     if (!project) {
       continue;
     }

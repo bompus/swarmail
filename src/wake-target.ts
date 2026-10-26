@@ -79,7 +79,7 @@ export function serverHeaders(base: string): Record<string, string> {
   try {
     return authHeaders(process.env, base);
   } catch (error) {
-    throw new BridgeError(
+    throw new TargetAuthenticationError(
       `SWARMAIL_TOKEN_FILE: ${error instanceof Error ? error.message : "unreadable"}`,
     );
   }

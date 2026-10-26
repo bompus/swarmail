@@ -117,12 +117,12 @@ export async function roundTrip(
 }
 
 /** GET /wait as a wake hook does: the hint, or null on 204. A server that stops answering fails the run after the wait time plus `graceMs`. */
-export function httpWait(base: string, graceMs = 5000): Wait {
+export function httpWait(base: string, graceMs = 5000, env: NodeJS.ProcessEnv = process.env): Wait {
   return async (session, seconds) => {
     const url = new URL("/wait", base); // As the wake hook builds it, so a trailing slash in the base does no harm.
     url.search = new URLSearchParams({ session, timeout: String(seconds) }).toString();
     const res = await fetch(url, {
-      headers: authHeaders(process.env, base),
+      headers: authHeaders(env, base),
       signal: AbortSignal.timeout(seconds * 1000 + graceMs),
     });
     if (res.status === 204) {
@@ -149,7 +149,7 @@ export async function canary(env: NodeJS.ProcessEnv = process.env): Promise<numb
     dir,
     known,
     (name, args) => mcpCall(env, name, args),
-    httpWait(wakeUrl(env)),
+    httpWait(wakeUrl(env), undefined, env),
   );
   if (JSON.stringify(names) !== JSON.stringify(known)) {
     writeFileSync(namesPath, JSON.stringify(names) + "\n");
