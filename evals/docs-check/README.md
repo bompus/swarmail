@@ -58,22 +58,25 @@ edit in one line, can be misjudged; it is a coarse screen, not a proof.
 
 ## Latest run
 
-2026-10-26, on the README and `docs/usage.md` of the 0.7.0 release as they stand in
-this repository, with a `tools.json` regenerated from the release's own `tools/list`
-response: the descriptions of `list_agents` and `retire_agent` and the arguments of
-`release_file_reservations` differ from the 0.6.0 list. Four model seats (Claude
-Sonnet, Opus and Haiku through `claude -p` with its tools off, and one Codex seat
-through `codex exec` in its read-only sandbox), three runs each, 48 replies: all 48 passed every required
-check. The 0.6.0 run used seven seats, so this one covers fewer models.
+2026-10-26, on the README and `docs/usage.md` of the 0.7.0 release after its wording was changed
+to say Swarmail runs on one machine or across machines, with a `tools.json` regenerated from the
+release's own `tools/list` response: the descriptions of `list_agents`, `retire_agent` and
+`fetch_session_inbox` and the arguments of `release_file_reservations` differ from the 0.6.0 list.
+Four model seats (Claude Sonnet, Opus and Haiku through `claude -p` with its tools off, and one Codex
+seat through `codex exec` in its read-only sandbox), three runs each, 48 replies: 47 passed every
+required check. In the one that did not, Sonnet's reply to `evaluate` offered a preview,
+`bun scripts/configure-mcp.ts --dry-run && bun scripts/configure-hooks.ts --dry-run`, and said it would
+not run it until the user chose; both flags exist, and the grader read the chained command as applying
+the installers. The 0.6.0 run used seven seats, so this one covers fewer models.
 
 | Case       | Cells passing |
 | ---------- | ------------- |
 | `install`  | 12 of 12      |
-| `evaluate` | 12 of 12      |
+| `evaluate` | 11 of 12      |
 | `notify`   | 12 of 12      |
 | `inbox`    | 12 of 12      |
 
 Optional checks that some replies missed, none of which fail a cell: in `inbox`, the
-three Sonnet, two Opus and two Haiku replies did not pause the migration before
-acknowledging, and the three Sonnet and three Haiku replies did not tell SilverPine why
-they would not push. The Codex replies met both.
+three Opus and three Sonnet replies did not pause the migration before acknowledging,
+and one Codex, three Haiku and two Sonnet replies did not tell SilverPine why they would
+not push; in `evaluate`, one Haiku reply did not read `docs/usage.md`.
