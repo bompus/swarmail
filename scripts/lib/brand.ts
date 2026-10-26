@@ -26,7 +26,7 @@ export const STALE_SCOPE = new RegExp(
     String.raw`\blocalhost only\b`,
     String.raw`\bsingle[- ](?:machine|computer)\b(?!,? by default| or)`,
     String.raw`\btrusted local (?:service|server)\b`,
-    String.raw`\brunning on this machine\b`,
+    String.raw`\brunning on this machine\b(?!,? by default|,? or)`,
     String.raw`\bon (?:one|a single) (?:machine|computer)\b(?!,? by default| or)`,
     String.raw`\bon your machine\b`,
     String.raw`\b(?:never|nothing) leaves your (?:machine|computer)\b`,

@@ -64,6 +64,8 @@ test.each([
   "It runs on a single machine by default.",
   "Mail on a single machine or across machines.",
   "Mail on one machine or across machines.",
+  "Connects Codex to a Swarmail server running on this machine or another.",
+  "Connects to a server running on this machine, or on another.",
   "Mail on one machine\nor across machines.",
   "The database holds mail on your computer, where the server runs.",
 ])("accepts %j", (text) => {
