@@ -27,6 +27,14 @@ if (
   process.exit(1);
 }
 
+// The MCP registry rejects a longer description when the server is published.
+if (registry.description.length > 100) {
+  console.error(
+    `server.json description is ${registry.description.length} characters; the registry allows 100`,
+  );
+  process.exit(1);
+}
+
 // The Claude Code plugin ships its own copy of the relay, since a plugin can only run files inside
 // its folder.
 const relaySource = readFileSync(new URL("packages/mcp-relay/index.mjs", root), "utf8");
