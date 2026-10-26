@@ -264,7 +264,7 @@ export function whoRows(
     const state = states.find((st) => st.sessionId === sessionId);
     const t3 = tag?.t3 ?? (sessionId ? threadOf(sessionId) : null);
     const thread = t3 ? threads.get(t3) : null;
-    const waiting = !state?.host && agent.waiting_for_mail === true;
+    const waiting = !state && agent.waiting_for_mail === true;
     const roomOwner =
       !!room &&
       [agent.name, sessionId, t3].some(

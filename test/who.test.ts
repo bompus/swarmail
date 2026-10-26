@@ -524,6 +524,20 @@ test("who takes a session on another machine from the server: waiting means aliv
       }),
     );
     expect(rows({ waiting_for_mail: true })[0]).toMatchObject({ hostAlive: false, waiting: false });
+    // Local state without a host process (an automatic T3 registration) still decides ended and alive itself.
+    writeFileSync(
+      join(dir, "s.json"),
+      JSON.stringify({
+        name: "BlueLake",
+        sessionId: "s",
+        projects: ["git:github.com/acme/widget"],
+        ended: "2026-10-26T09:00:00.000Z",
+      }),
+    );
+    expect(rows({ waiting_for_mail: true })[0]).toMatchObject({
+      waiting: false,
+      ended: "2026-10-26T09:00:00.000Z",
+    });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
