@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { authHeaders, bearerToken } from "../src/paths.ts";
+import { authHeaders, bearerToken, homeDir } from "../src/paths.ts";
 import { call } from "../src/mail.ts";
 import { createServer, isRemoteAddress, main } from "../src/server.ts";
 
@@ -227,8 +227,7 @@ test("the server will not start on a loopback or wildcard address, or without a 
 });
 
 test("a hub with a remote listener keeps a project whose checkout it cannot find", async () => {
-  const home = process.env.HOME ?? "";
-  const gone = join(home, `swarmail-remote-test-${process.pid}`);
+  const gone = join(homeDir(), `swarmail-remote-test-${process.pid}`);
   const fresh = (name: string) => {
     const path = join(dir, name);
     // retireIdleDays 0 skips the sweep while the project is set up and aged.
