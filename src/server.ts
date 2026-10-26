@@ -1,11 +1,19 @@
 #!/usr/bin/env bun
 // Swarmail server: MCP over streamable HTTP (stateless JSON responses) on 127.0.0.1.
-//   bun server.ts                      serve (SWARMAIL_DB, SWARMAIL_PORT, SWARMAIL_SYNCHRONOUS, SWARMAIL_RETIRE_DAYS: 0 keeps idle agents and gone projects); GET /wait is the wake long poll (wake.ts)
-import { databasePath, DEFAULT_PORT, homeDir, serverRecordPath, within } from "./paths.ts";
+//   bun server.ts                      serve (SWARMAIL_DB, SWARMAIL_PORT, SWARMAIL_HOST with SWARMAIL_TOKEN_FILE, SWARMAIL_SYNCHRONOUS, SWARMAIL_RETIRE_DAYS: 0 keeps idle agents and gone projects); GET /wait is the wake long poll (wake.ts)
+import {
+  bearerToken,
+  databasePath,
+  DEFAULT_PORT,
+  homeDir,
+  serverRecordPath,
+  within,
+} from "./paths.ts";
 import type { Database } from "bun:sqlite";
 import { dirname } from "node:path";
+import { isIP } from "node:net";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { processIdentity } from "./proc.ts";
 import { nowUs, openDatabase } from "./db.ts";
 import { buildSource } from "./build.ts";
@@ -215,6 +223,32 @@ function reconcileAndNotify(lifecycle: Lifecycle | undefined, notify: () => void
   };
 }
 
+/**
+ * Whether `host` is one address the remote listener may bind: not loopback, "this host" or the wildcard, in any
+ * spelling. An IPv6 address is read through URL so 0:0:0:0:0:0:0:1 is ::1; IPv4-mapped forms are refused whole.
+ */
+export function isRemoteAddress(host: string): boolean {
+  if (isIP(host) === 4) {
+    return !/^(127|0)\./.test(host);
+  }
+  try {
+    const address = new URL(`http://[${host}]`).hostname;
+    return (
+      isIP(host) === 6 && !["[::]", "[::1]"].includes(address) && !address.startsWith("[::ffff:")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Whether an Authorization header carries the bearer token whose SHA-256 is `wanted`. */
+function bearerMatches(header: string | null, wanted: Buffer): boolean {
+  const given = header?.match(/^Bearer (.+)$/)?.[1];
+  return (
+    given !== undefined && timingSafeEqual(createHash("sha256").update(given).digest(), wanted)
+  );
+}
+
 export function createServer(
   databasePath: string,
   port: number,
@@ -224,12 +258,15 @@ export function createServer(
     registry,
     t3Lifecycle,
     mutationsEnabled = false,
+    remote,
   }: {
     wakePollMs?: number;
     retireIdleDays?: number;
     registry?: string;
     t3Lifecycle?: LifecycleConfig;
     mutationsEnabled?: boolean;
+    /** A second listener on `hostname` that answers only requests carrying `Authorization: Bearer <token>`. */
+    remote?: { hostname: string; token: string };
   } = {},
 ) {
   mkdirSync(dirname(databasePath), { recursive: true });
@@ -283,10 +320,9 @@ export function createServer(
     }
   };
 
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port,
-    async fetch(req, server) {
+  const wanted = remote && createHash("sha256").update(remote.token).digest();
+  const handler = (authenticate: boolean) =>
+    async function (req: Request, server: Bun.Server<undefined>): Promise<Response> {
       const url = new URL(req.url);
       const path = url.pathname;
       if (path === "/healthz") {
@@ -296,6 +332,12 @@ export function createServer(
       const origin = req.headers.get("origin");
       if (origin && !/^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin)) {
         return new Response("forbidden origin", { status: 403 });
+      }
+      if (authenticate && !bearerMatches(req.headers.get("authorization"), wanted!)) {
+        return new Response("unauthorized", {
+          status: 401,
+          headers: { "www-authenticate": "Bearer" },
+        });
       }
       if (path === "/versions") {
         return versionsResponse(req, url);
@@ -314,9 +356,13 @@ export function createServer(
         return new Response(null, { status: 405, headers: { allow: "POST" } });
       }
       return rpc(req, callTool);
-    },
-  });
-  return { server, db };
+    };
+
+  const server = Bun.serve({ hostname: "127.0.0.1", port, fetch: handler(false) });
+  const remoteServer = remote
+    ? Bun.serve({ hostname: remote.hostname, port: server.port, fetch: handler(true) })
+    : undefined;
+  return { server, remote: remoteServer, db };
 }
 
 /** Retires agents with no activity for `days`; returns how many. */
@@ -382,13 +428,25 @@ export function main(args: string[]): void {
     throw new Error("SWARMAIL_ENABLE_MUTATIONS must be 0 or 1");
   }
   const database = databasePath();
-  const { server } = createServer(database, Number(env("PORT") ?? DEFAULT_PORT), {
+  const host = env("HOST");
+  if (host !== undefined && !isRemoteAddress(host)) {
+    throw new Error("SWARMAIL_HOST must be one non-loopback address, such as a Tailscale IP");
+  }
+  const token = host === undefined ? null : bearerToken();
+  if (host !== undefined && token === null) {
+    throw new Error("SWARMAIL_HOST needs SWARMAIL_TOKEN_FILE, a file holding the bearer token");
+  }
+  const { server, remote } = createServer(database, Number(env("PORT") ?? DEFAULT_PORT), {
+    ...(host !== undefined ? { remote: { hostname: host, token: token! } } : {}),
     retireIdleDays: Number(env("RETIRE_DAYS") ?? 7),
     mutationsEnabled: enabled === "1",
     registry: registryDir(),
     ...(env("T3_LIFECYCLE") ? { t3Lifecycle: JSON.parse(env("T3_LIFECYCLE")!) } : {}),
   });
   console.log(`swarmail listening on ${server.url} (${database})`);
+  if (remote) {
+    console.log(`swarmail also listening on ${remote.url} for clients with the bearer token`);
+  }
   if (process.platform === "win32") {
     // Stopping the scheduled task leaves this process running, so scripts/enable-windows.ts stops it by this record.
     const record = serverRecordPath();

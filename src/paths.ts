@@ -2,6 +2,7 @@
 // themselves because they cannot import this module: claude-wake-mod.js runs inside Claude Code's plugin runtime, and
 // scripts/configure-hooks.ts writes a shell hook command. Windows keeps the same layout under the user's profile,
 // as Claude Code's own Windows install does with ~/.local/bin.
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -82,3 +83,34 @@ export const swarmailUrl = (env: NodeJS.ProcessEnv = process.env): string =>
 /** The base URL wake hooks long-poll for /wait. */
 export const wakeUrl = (env: NodeJS.ProcessEnv = process.env): string =>
   env.SWARMAIL_WAKE_URL || `http://127.0.0.1:${DEFAULT_PORT}`;
+
+/**
+ * The bearer token a remote server asks for: the first line of the file SWARMAIL_TOKEN_FILE names, or null when
+ * unset. A named file that cannot be read, or holds under 32 characters, throws instead of sending no token.
+ */
+export function bearerToken(env: NodeJS.ProcessEnv = process.env): string | null {
+  const file = env.SWARMAIL_TOKEN_FILE;
+  if (!file) {
+    return null;
+  }
+  const token = readFileSync(file, "utf8").split("\n")[0]!.trim();
+  if (token.length < 32) {
+    throw new Error(`${file} must start with a token of at least 32 characters`);
+  }
+  return token;
+}
+
+/**
+ * The Authorization header for a server at `url`. The local listener asks for no token, so a loopback URL gets none
+ * and an unreadable token file cannot break local clients.
+ */
+export const authHeaders = (
+  env: NodeJS.ProcessEnv = process.env,
+  url = swarmailUrl(env),
+): Record<string, string> => {
+  if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(new URL(url).hostname)) {
+    return {};
+  }
+  const token = bearerToken(env);
+  return token ? { authorization: `Bearer ${token}` } : {};
+};

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-import { swarmailUrl } from "./paths.ts";
+import { authHeaders, swarmailUrl } from "./paths.ts";
 
 export { swarmailUrl };
 
@@ -33,6 +33,10 @@ export function callTool(
       "content-type: application/json",
       "-H",
       "accept: application/json, text/event-stream",
+      ...Object.entries(authHeaders(process.env, url)).flatMap(([name, value]) => [
+        "-H",
+        `${name}: ${value}`,
+      ]),
       "--data-binary",
       "@-",
       url,
