@@ -13,7 +13,7 @@ import { openHookDelivery } from "./hook-delivery.ts";
 import { updateHint } from "./updates.ts";
 import { SESSION_RE } from "./wake.ts";
 import { authHeaders, stateHome, wakeUrl } from "./paths.ts";
-import { BridgeError, serverHeaders } from "./wake-target.ts";
+import { BridgeError, TargetAuthenticationError, serverHeaders } from "./wake-target.ts";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -160,9 +160,10 @@ async function receiveHint(
   base: string,
   sid: string,
   signal: AbortSignal,
+  env: NodeJS.ProcessEnv,
   delivery?: ReturnType<typeof openHookDelivery>,
 ): Promise<string> {
-  const guard = () => ensureWakeEligible(base, sid, signal);
+  const guard = () => ensureWakeEligible(base, sid, signal, env);
   if (delivery) {
     return delivery.receive(response, guard);
   }
@@ -305,13 +306,18 @@ async function waitForMail(
         // 200 carries the hint, and an HTTP error (409: a newer wait replaced this one) ends the hook too.
         // 204 ends one wait; the loop waits again until the hook's own time is up.
         if (res.status === 200) {
-          hint = await receiveHint(res, base, sid, request.signal, delivery);
+          hint = await receiveHint(res, base, sid, request.signal, env, delivery);
         }
         if (res.status !== 204) {
           break;
         }
-      } catch {
+      } catch (error) {
         if (request.signal.aborted) {
+          break;
+        }
+        if (error instanceof TargetAuthenticationError) {
+          // The token file went bad after the wait began; retrying cannot fix it.
+          console.error(`swarmail wake: ${error.message}`);
           break;
         }
         // A server restart or dropped connection: wait again with `retry`, so a hint sent but lost comes again.
@@ -384,7 +390,7 @@ async function nativeContextHint(sid: string, env: NodeJS.ProcessEnv): Promise<s
   const delivery = openHookDelivery(sid, env);
   try {
     const url = new URL("/wait", wakeUrl(env));
-    const headers = serverHeaders(url.href);
+    const headers = serverHeaders(url.href, env);
     url.search = new URLSearchParams({ session: sid, timeout: "0" }).toString() + delivery.query();
     const response = await fetch(url, {
       headers,
@@ -392,7 +398,9 @@ async function nativeContextHint(sid: string, env: NodeJS.ProcessEnv): Promise<s
       redirect: "error",
     });
     return response.status === 200
-      ? await delivery.receive(response, () => ensureWakeEligible(wakeUrl(env), sid))
+      ? await delivery.receive(response, () =>
+          ensureWakeEligible(wakeUrl(env), sid, undefined, env),
+        )
       : "";
   } finally {
     delivery.close();

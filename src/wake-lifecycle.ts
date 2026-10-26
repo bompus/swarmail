@@ -5,8 +5,9 @@ export async function ensureWakeEligible(
   base: string,
   session: string,
   signal?: AbortSignal,
+  env: NodeJS.ProcessEnv = process.env,
 ): Promise<void> {
-  const headers = serverHeaders(base);
+  const headers = serverHeaders(base, env);
   try {
     const url = new URL("/wait/status", base);
     url.searchParams.set("session", session);

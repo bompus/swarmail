@@ -465,7 +465,8 @@ function holdReason(error: unknown): string {
   return error instanceof SyntaxError ? "unexpected response" : "connection failed";
 }
 
-function lifecycleReconciliation(swarmailUrl: string, signal: AbortSignal) {
+/** Reconciles with the Swarmail server before each scan; an unreadable token file ends the supervisor. */
+export function lifecycleReconciliation(swarmailUrl: string, signal: AbortSignal) {
   let heldSince: number | undefined;
   return async () => {
     let reason: string | undefined;
@@ -487,6 +488,9 @@ function lifecycleReconciliation(swarmailUrl: string, signal: AbortSignal) {
         reason = `HTTP ${response.status}`;
       }
     } catch (error) {
+      if (error instanceof TargetAuthenticationError) {
+        throw error;
+      }
       // Unavailable or incompatible cores hold the scan without exposing response bodies.
       reason = error instanceof BridgeError ? error.message : holdReason(error);
     }

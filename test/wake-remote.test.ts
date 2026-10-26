@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { httpWait } from "../src/canary.ts";
 import { createServer } from "../src/server.ts";
+import { lifecycleReconciliation } from "../src/wake-auto-t3.ts";
+import { contextHook } from "../src/wake-hook.ts";
 import { ensureWakeEligible } from "../src/wake-lifecycle.ts";
 import { peekUnreadMailboxes, waitForOffer } from "../src/wake-state.ts";
 import { TargetAuthenticationError, serverHeaders, serverUrl } from "../src/wake-target.ts";
@@ -246,6 +248,83 @@ test("an unreadable token file is an authentication failure shared by every thre
   try {
     expect(() => serverHeaders(hub)).toThrow(TargetAuthenticationError);
     expect(serverHeaders("http://127.0.0.1:18765")).toEqual({});
+  } finally {
+    process.env.SWARMAIL_TOKEN_FILE = token;
+  }
+});
+
+test("the context hook authenticates with the environment it was given", async () => {
+  await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
+  await send();
+  const tokenFile = process.env.SWARMAIL_TOKEN_FILE!;
+  const given = {
+    ...process.env,
+    SWARMAIL_TOKEN_FILE: tokenFile,
+    SWARMAIL_WAKE_URL: hub,
+    XDG_STATE_HOME: join(dir, "state"),
+  };
+  delete process.env.SWARMAIL_TOKEN_FILE;
+  const log = console.log;
+  let printed = "";
+  console.log = (line: string) => {
+    printed += line;
+  };
+  try {
+    expect(await contextHook("devin", false, JSON.stringify({ session_id: "s-1" }), given)).toBe(0);
+  } finally {
+    console.log = log;
+    process.env.SWARMAIL_TOKEN_FILE = tokenFile;
+  }
+  expect(printed).toContain("Swarmail:");
+});
+
+test("a token file that goes bad while the hook waits is reported, not retried", async () => {
+  await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
+  mkdirSync(join(dir, "state/swarmail-register"), { recursive: true });
+  writeFileSync(
+    join(dir, "state/swarmail-register/s-1.json"),
+    JSON.stringify({ name: "GreenCastle", projects: [P] }),
+  );
+  const copy = join(dir, "token-copy");
+  writeFileSync(copy, `${TOKEN}\n`);
+  const run = Bun.spawn(
+    [process.execPath, join(import.meta.dir, "../src/cli.ts"), "hook", "wake", "claude", "20"],
+    {
+      stdin: new Blob([
+        JSON.stringify({
+          session_id: "s-1",
+          transcript_path: "/h/.claude/projects/w/s-1.jsonl",
+          hook_event_name: "Stop",
+        }),
+      ]),
+      env: {
+        ...process.env,
+        SWARMAIL_WAKE_URL: hub,
+        SWARMAIL_TOKEN_FILE: copy,
+        CLAUDE_PID: String(process.pid),
+      },
+      stderr: "pipe",
+    },
+  );
+  await Bun.sleep(1000);
+  rmSync(copy);
+  await send();
+  expect(await run.exited).toBe(0);
+  expect(await new Response(run.stderr).text()).toContain("SWARMAIL_TOKEN_FILE");
+});
+
+test("the supervisor's lifecycle reconciliation stops on an unreadable token file", async () => {
+  const bad = join(dir, "short-token-3");
+  writeFileSync(bad, "short\n");
+  const token = process.env.SWARMAIL_TOKEN_FILE;
+  process.env.SWARMAIL_TOKEN_FILE = bad;
+  try {
+    const reconcile = lifecycleReconciliation(hub, new AbortController().signal);
+    const stopped = await reconcile().then(
+      () => null,
+      (error: Error) => error,
+    );
+    expect(stopped).toBeInstanceOf(TargetAuthenticationError);
   } finally {
     process.env.SWARMAIL_TOKEN_FILE = token;
   }

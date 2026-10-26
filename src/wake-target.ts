@@ -75,9 +75,12 @@ export function localUrl(value: unknown): string {
  * The Authorization header for the Swarmail server at `base`, read before a request so an unreadable token file is
  * reported as itself and not retried as a dropped connection.
  */
-export function serverHeaders(base: string): Record<string, string> {
+export function serverHeaders(
+  base: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Record<string, string> {
   try {
-    return authHeaders(process.env, base);
+    return authHeaders(env, base);
   } catch (error) {
     throw new TargetAuthenticationError(
       `SWARMAIL_TOKEN_FILE: ${error instanceof Error ? error.message : "unreadable"}`,
