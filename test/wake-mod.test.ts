@@ -19,6 +19,8 @@ function session({
     eligible: true,
     statusCalls: 0,
     statusRead: async () => {},
+    // Holds a /wait request until a test releases it.
+    waitGate: undefined as Promise<void> | undefined,
     responses: [] as (Response | Error | (() => Response))[],
     fetched: [] as string[],
     submitted: [] as string[],
@@ -48,6 +50,7 @@ function session({
           await state.statusRead();
           return { status: 200, text: JSON.stringify({ eligible: state.eligible }), headers: {} };
         }
+        await state.waitGate;
         state.fetched.push(url);
         const queued = state.responses.shift() ?? { status: 204, text: "" };
         const next = typeof queued === "function" ? queued() : queued;
@@ -279,6 +282,20 @@ test("stands down for a server on another machine, whose token it cannot send", 
   const local = session({ home: { HOME: "/h", SWARMAIL_WAKE_URL: "http://127.0.0.1:18765" } });
   await local.start();
   expect(local.state.env).toEqual({ SWARMAIL_WAKE_MOD: "1" });
+});
+
+test("a wait already running when the mod stands down for a remote server starts no further step", async () => {
+  const s = session();
+  await s.start();
+  let release!: () => void;
+  s.state.waitGate = new Promise((resolve) => (release = resolve));
+  s.timers.shift()!.fn();
+  await Bun.sleep(0);
+  const remote = session({ home: { HOME: "/h", SWARMAIL_WAKE_URL: "http://100.64.0.5:18765" } });
+  await remote.start();
+  release();
+  await Bun.sleep(10);
+  expect(s.timers).toEqual([]);
 });
 
 test("held hints survive inactive lifecycle and deliver after reopen without early acknowledgment", async () => {

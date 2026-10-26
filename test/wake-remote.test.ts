@@ -388,7 +388,10 @@ test("a server that rejects the token is an authentication failure, not a hold t
   const rejecting = Bun.serve({
     hostname: REMOTE,
     port: 0,
-    fetch: () => new Response("no", { status: 401 }),
+    fetch: (req) =>
+      new URL(req.url).pathname === "/healthz"
+        ? new Response("ok")
+        : new Response("no", { status: 401 }),
   });
   const url = `http://${REMOTE}:${rejecting.port}`;
   const failure = (run: () => Promise<unknown>) =>
@@ -408,6 +411,25 @@ test("a server that rejects the token is an authentication failure, not a hold t
     expect(await failure(() => waitForOffer(config, 0, signal))).toBeInstanceOf(
       TargetAuthenticationError,
     );
+    expect(await failure(() => peekUnreadMailboxes(config, signal))).toBeInstanceOf(
+      TargetAuthenticationError,
+    );
+    const hook = Bun.spawn(
+      [process.execPath, join(import.meta.dir, "../src/cli.ts"), "hook", "wake", "claude", "5"],
+      {
+        stdin: new Blob([
+          JSON.stringify({
+            session_id: "s-1",
+            transcript_path: "/h/.claude/projects/w/s-1.jsonl",
+            hook_event_name: "Stop",
+          }),
+        ]),
+        env: { ...process.env, SWARMAIL_WAKE_URL: url, CLAUDE_PID: String(process.pid) },
+        stderr: "pipe",
+      },
+    );
+    expect(await hook.exited).toBe(0);
+    expect(await new Response(hook.stderr).text()).toContain("SWARMAIL_TOKEN_FILE");
   } finally {
     await rejecting.stop(true);
   }

@@ -4,7 +4,12 @@ import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { BridgeError, rejectedToken, serverHeaders } from "./wake-target.ts";
+import {
+  BridgeError,
+  TargetAuthenticationError,
+  rejectedToken,
+  serverHeaders,
+} from "./wake-target.ts";
 
 export interface Pending {
   eventId: number;
@@ -214,6 +219,7 @@ export async function peekUnreadMailboxes(
       signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
       redirect: "error",
     });
+    rejectedToken(response.status);
     if (!response.ok || !response.headers.get("content-type")?.startsWith("application/json")) {
       throw new Error("snapshot unavailable");
     }
@@ -246,7 +252,10 @@ export async function peekUnreadMailboxes(
     return result.mailboxes.map(
       ({ recipient, project }: { recipient: string; project: string }) => ({ recipient, project }),
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof TargetAuthenticationError) {
+      throw error;
+    }
     throw new BridgeError("Swarmail unread mailbox snapshot unavailable", true);
   }
 }

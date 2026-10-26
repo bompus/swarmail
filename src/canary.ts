@@ -123,6 +123,7 @@ export function httpWait(base: string, graceMs = 5000, env: NodeJS.ProcessEnv = 
     url.search = new URLSearchParams({ session, timeout: String(seconds) }).toString();
     const res = await fetch(url, {
       headers: authHeaders(env, base),
+      redirect: "error",
       signal: AbortSignal.timeout(seconds * 1000 + graceMs),
     });
     if (res.status === 204) {

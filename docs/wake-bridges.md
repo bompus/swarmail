@@ -53,7 +53,9 @@ The target `url` must be an HTTP loopback origin without a path, query, fragment
 or embedded credentials. `swarmailUrl` must be one too, or the origin of a
 Swarmail server on another machine (for example `http://hub:18765`); the bridge
 then sends the token from `SWARMAIL_TOKEN_FILE` and refuses to start without it.
-`swarmailUrl` defaults to `http://127.0.0.1:18765`.
+`swarmailUrl` defaults to `http://127.0.0.1:18765`. A server on another machine
+speaks plain HTTP, so the token crosses the network unencrypted: use a network
+that encrypts and authenticates every peer, such as Tailscale.
 
 For a native target, replace `url` and `authorizationFile` with absolute
 `socket` and `cwd` paths. The socket must belong to your user and be protected

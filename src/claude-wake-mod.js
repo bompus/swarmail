@@ -183,6 +183,7 @@ async function wait($) {
 // One step of the session's only chain of timers, so every API call goes through the `$` session.start gave it.
 /** @param {ModApi} $ */
 async function round($) {
+  const mine = generation;
   let delay;
   try {
     if (held && (await $.session.id()) !== held.sid) {
@@ -198,7 +199,10 @@ async function round($) {
   } catch {
     delay = ERROR_MS;
   }
-  schedule($, delay);
+  // A session.start during this round began another chain, or stood the mod down.
+  if (mine === generation) {
+    schedule($, delay);
+  }
 }
 
 /** @param {(event: string, handler: Handler) => void} on */
