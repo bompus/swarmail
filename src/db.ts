@@ -142,7 +142,17 @@ const MIGRATIONS: ((db: Database) => void)[] = [
       "ALTER TABLE messages ADD COLUMN notification_policy TEXT NOT NULL DEFAULT 'wake' CHECK(notification_policy IN ('wake', 'quiet'))",
     );
   },
+  // Repository names (git:host/owner/repo) that sessions on another machine file mail under, each pointing at the
+  // project for the checkout this machine holds.
+  (db) => {
+    db.run(`CREATE TABLE IF NOT EXISTS project_aliases (
+      alias TEXT PRIMARY KEY, project_id INTEGER NOT NULL REFERENCES projects(id)
+    )`);
+  },
 ];
+
+/** The schema version of a database this build has fully migrated. */
+export const SCHEMA_VERSION = MIGRATIONS.length;
 
 const IDENTITY = ["host", "session_id", "t3_thread", "build", "cwd"] as const;
 
@@ -177,17 +187,15 @@ function migrate(db: Database): void {
     const { user_version: done } = db
       .query<{ user_version: number }, []>("PRAGMA user_version")
       .get()!;
-    if (done > MIGRATIONS.length) {
-      throw new Error(
-        `Unsupported mailbox schema ${done}; this build supports ${MIGRATIONS.length}`,
-      );
+    if (done > SCHEMA_VERSION) {
+      throw new Error(`Unsupported mailbox schema ${done}; this build supports ${SCHEMA_VERSION}`);
     }
     db.exec(schema);
-    if (done < MIGRATIONS.length) {
+    if (done < SCHEMA_VERSION) {
       for (const step of MIGRATIONS.slice(done)) {
         step(db);
       }
-      db.run(`PRAGMA user_version = ${MIGRATIONS.length}`);
+      db.run(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     }
     syncIdentity(db);
     repairNoticeOwners(db);
@@ -210,11 +218,9 @@ export function openDatabase(
   // (SQLITE_BUSY_RECOVERY), instead of failing the start.
   db.run("PRAGMA busy_timeout = 5000");
   const version = db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version;
-  if (version > MIGRATIONS.length) {
+  if (version > SCHEMA_VERSION) {
     db.close();
-    throw new Error(
-      `Unsupported mailbox schema ${version}; this build supports ${MIGRATIONS.length}`,
-    );
+    throw new Error(`Unsupported mailbox schema ${version}; this build supports ${SCHEMA_VERSION}`);
   }
   db.run("PRAGMA journal_mode = WAL");
   db.run(`PRAGMA synchronous = ${synchronous.toUpperCase()}`);

@@ -289,12 +289,19 @@ SWARMAIL_URL=http://<hub address>:18765/mcp/ SWARMAIL_TOKEN_FILE=~/.config/swarm
 A host that connects to MCP over HTTP itself needs the same `Authorization`
 header in its server entry, or `swarmail-mcp` as a relay.
 
+Against a remote server a project is named by the repository, not by a path:
+the `origin` URL of the clone, written `git:host/owner/repo` whatever the
+protocol (`https://github.com/bompus/swarmail.git` and
+`git@github.com:bompus/swarmail.git` are the same repository). When the hub holds
+a clone of that repository, its project is the remote sessions' project too, so
+both machines share one roster, mail and set of reservations. If the hub meets
+the clone later, its project takes over the one the remote sessions created. A hub
+that holds several clones of the repository uses the one registered first. A
+clone with no `origin` remote cannot be named to a remote server, and the command
+and hooks say so.
+
 What does not carry over yet:
 
-- A project is named by its checkout path on the machine that registers it, so
-  the same repository checked out at different paths on two machines is two
-  projects with separate rosters, mail and reservations. Use the same absolute path
-  on both machines to share one.
 - The server reads process state, branch and session titles from its own
   machine, so a remote session appears without a branch or title and its
   liveness checks do not see it.

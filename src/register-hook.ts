@@ -9,7 +9,7 @@
 
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { primaryCheckout, worktreeRoot } from "./checkout.ts";
+import { projectFor, worktreeRoot } from "./checkout.ts";
 import { swarmailUrl } from "./client.ts";
 import { hostProcess, sameHost } from "./proc.ts";
 import { nameIn, openRegistry, sameServer, serverRegister, type Session } from "./registry.ts";
@@ -240,7 +240,7 @@ function main(input: HookInput): string {
     return "";
   }
   const dir = targetDir({ ...input, cwd: session.cwd });
-  const project = dir && primaryCheckout(dir);
+  const project = dir && projectFor(dir, server);
   const t3 = t3ThreadId(sessionId);
   const tag = sessionTag({ ...session, t3 }, session.cwd);
   if (!project) {

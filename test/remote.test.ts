@@ -281,3 +281,66 @@ test("the overdue command refuses to run against a remote server", async () => {
   expect(await proc.exited).toBe(2);
   expect(err).toContain("remote server");
 });
+
+test("a clone on another machine shares the project of the hub's clone, found by its origin remote", async () => {
+  const url = `http://${REMOTE}:${server.port}/mcp/`;
+  const origin = "git@github.com:bompus/shared.git";
+  const clone = (name: string) => {
+    const path = join(dir, name);
+    Bun.spawnSync(["git", "init", "-q", path]);
+    Bun.spawnSync(["git", "-C", path, "remote", "add", "origin", origin]);
+    return realpathSync.native(path);
+  };
+  const hub = clone("hub-clone");
+  const laptop = clone("laptop-clone");
+  const local = { SWARMAIL_URL: `http://127.0.0.1:${server.port}/mcp/` };
+  await call(local, "register_agent", {
+    project_key: hub,
+    name: "BlueLake",
+    program: "codex",
+    model: "m",
+  });
+  await call({ SWARMAIL_URL: url, SWARMAIL_TOKEN_FILE: tokenFile }, "register_agent", {
+    project_key: "git:github.com/bompus/shared",
+    name: "RedPine",
+    program: "claude",
+    model: "m",
+  });
+  const sent = Bun.spawn(
+    [
+      "bun",
+      join(import.meta.dir, "../src/cli.ts"),
+      "send",
+      "BlueLake",
+      "hello",
+      "from afar",
+      "--as",
+      "RedPine",
+    ],
+    {
+      cwd: laptop,
+      env: { ...process.env, SWARMAIL_URL: url, SWARMAIL_TOKEN_FILE: tokenFile },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  const output =
+    (await new Response(sent.stdout).text()) + (await new Response(sent.stderr).text());
+  expect(await sent.exited, output).toBe(0);
+  const inbox = await call(local, "fetch_inbox", { project_key: hub, agent_name: "BlueLake" });
+  expect(inbox.map((m: { subject: string }) => m.subject)).toEqual(["hello"]);
+  // A clone with no origin cannot be named to a remote server, and the command says so.
+  const bare = join(dir, "bare-clone");
+  Bun.spawnSync(["git", "init", "-q", bare]);
+  const refused = Bun.spawn(
+    ["bun", join(import.meta.dir, "../src/cli.ts"), "inbox", "--as", "RedPine"],
+    {
+      cwd: bare,
+      env: { ...process.env, SWARMAIL_URL: url, SWARMAIL_TOKEN_FILE: tokenFile },
+      stdout: "pipe",
+      stderr: "pipe",
+    },
+  );
+  expect(await refused.exited).not.toBe(0);
+  expect(await new Response(refused.stderr).text()).toContain("origin remote");
+});

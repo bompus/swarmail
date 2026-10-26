@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { openDatabase } from "../src/db.ts";
+import { openDatabase, SCHEMA_VERSION } from "../src/db.ts";
 import type { Args } from "../src/store.ts";
 import { createTools } from "../src/tools.ts";
 import { createWaiters } from "../src/wake.ts";
@@ -216,7 +216,7 @@ test("schema-six migration preserves mail and makes existing deliveries wake by 
   const db = openDatabase(path);
   try {
     expect(db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(
-      7,
+      SCHEMA_VERSION,
     );
     expect(db.query("SELECT id,body_md,notification_policy FROM messages").all()).toEqual([
       { id: sent.id, body_md: "retained evidence", notification_policy: "wake" },

@@ -5,6 +5,7 @@ import type { Database } from "bun:sqlite";
 import { existsSync, realpathSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { primaryCheckout, worktreeRoot } from "./checkout.ts";
+import { projectOfRepository, claimRepositoryProject } from "./repository-projects.ts";
 import { overlaps } from "./glob.ts";
 import { locations } from "./location.ts";
 import { identity, leadingTag, parseTag, sameSessionRow, tagOf, type Identity } from "./tag.ts";
@@ -312,7 +313,8 @@ export class MailStore {
    * worktree path stays reachable by that path.
    */
   private lookup(given: string): { k: string; p: Project | null } {
-    const exact = this.q.projectByKey.get(given, slugify(given));
+    const exact =
+      this.q.projectByKey.get(given, slugify(given)) ?? projectOfRepository(this.db, given);
     const k = exact ? given : this.projectKey(given);
     return { k, p: exact ?? (k === given ? null : this.q.projectByKey.get(k, slugify(k))) };
   }
@@ -331,7 +333,9 @@ export class MailStore {
 
   ensureProject(key: unknown): Project {
     const { k, p } = this.lookup(str(key, "human_key"));
-    return p ?? this.q.insertProject.get(slugify(k), k, nowUs())!;
+    return (
+      p ?? claimRepositoryProject(this.db, k) ?? this.q.insertProject.get(slugify(k), k, nowUs())!
+    );
   }
 
   private lifecycleAllows(who: Agent): boolean {

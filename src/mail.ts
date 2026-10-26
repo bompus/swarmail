@@ -6,10 +6,10 @@
 //   swarmail search <words...> [--limit N] [--cursor CURSOR] [--json | --json-page]  project mail matching every word, best match first
 //   swarmail thread <id> [--limit N] [--json]                   a thread's messages, oldest first; needs no sender name
 // The sender is --as, else SWARMAIL_AGENT, else the name the register hook recorded for the agent host above this shell.
-import { authHeaders, swarmailUrl } from "./paths.ts";
+import { authHeaders, isLoopbackUrl, swarmailUrl } from "./paths.ts";
 import { compileResourceNotice } from "./resource-notice.ts";
 import { pageLimit } from "./store.ts";
-import { primaryCheckout } from "./checkout.ts";
+import { projectFor } from "./checkout.ts";
 import { selfNames, selfSession } from "./registry.ts";
 import { PING_SUBJECT, PONG_SUBJECT } from "./wake.ts";
 import type { Location } from "./location.ts";
@@ -143,11 +143,15 @@ function parse(args: string[]) {
   return { opts, rest };
 }
 
-/** The primary checkout of the repository around `cwd`: the project key mail is filed under. */
+/** The project key mail is filed under for the repository around `cwd` (see projectFor). */
 function projectOf(cwd: string): string {
-  const project = primaryCheckout(cwd);
+  const project = projectFor(cwd);
   if (!project) {
-    throw new Error(`${cwd} is not inside a git repository`);
+    throw new Error(
+      isLoopbackUrl(swarmailUrl(process.env))
+        ? `${cwd} is not inside a git repository`
+        : `${cwd} is not inside a git clone with an origin remote, which a remote server needs to name the repository`,
+    );
   }
   return project;
 }

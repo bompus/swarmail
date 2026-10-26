@@ -17,7 +17,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
 import { buildSource } from "./build.ts";
 import { iso } from "./db.ts";
-import { primaryCheckout } from "./checkout.ts";
+import { projectFor } from "./checkout.ts";
 import { location, locationLabel, type Location } from "./location.ts";
 import { callTool } from "./client.ts";
 import { hostAlive } from "./proc.ts";
@@ -121,8 +121,12 @@ export function unreadQueues(dbPath: string, project: string): Map<string, Queue
   }
 }
 
-/** The primary checkout for a path, or for a bare name the one project key with that basename. */
-export function resolveProject(target: string, keys: string[], checkout = primaryCheckout): string {
+/** The project key for a path (see projectFor), or for a bare name the one project key with that basename. */
+export function resolveProject(
+  target: string,
+  keys: string[],
+  checkout: (dir: string) => string | null = projectFor,
+): string {
   const project = checkout(target);
   if (project) {
     return project;
@@ -229,8 +233,8 @@ export function whoRows(
     threads,
     room,
     queues = new Map(),
-    checkout = primaryCheckout,
     server = swarmailUrl(),
+    checkout = (dir) => projectFor(dir, server),
   }: {
     project: string;
     roster: RosterAgent[];
@@ -332,9 +336,9 @@ export function main(args: string[]): void {
   const dbPath = databasePath();
   // Unread counts come from this machine's database, which is not the remote server's, and neither are its project names.
   const remote = !isLoopbackUrl(swarmailUrl());
-  if (remote && !/[\\/]/.test(target) && !primaryCheckout(target)) {
+  if (remote && !/[\\/]/.test(target) && !projectFor(target)) {
     throw new Error(
-      `${target} is a project name; a remote server needs a path inside the checkout`,
+      `${target} is a project name; a remote server needs a path inside a clone with an origin remote`,
     );
   }
   const project = resolveProject(target, remote ? [] : projectKeys(dbPath));

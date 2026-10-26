@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { testScratch } from "./fixtures/test-scratch.ts";
-import { openDatabase } from "../src/db.ts";
+import { openDatabase, SCHEMA_VERSION } from "../src/db.ts";
 import type { Args } from "../src/store.ts";
 import { createTools } from "../src/tools.ts";
 import { createWaiters } from "../src/wake.ts";
@@ -424,7 +424,7 @@ test("reads and new mail written by a rolled-back binary do not retain a stale n
     const next = f.db.query<{ id: number }, []>("SELECT max(id) AS id FROM messages").get()!;
     expect(
       f.db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version,
-    ).toBe(7);
+    ).toBe(SCHEMA_VERSION);
     f.db.close();
     f = fixture(path);
     const offer = await f.wait(first.id);

@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openDatabase } from "../src/db.ts";
+import { openDatabase, SCHEMA_VERSION } from "../src/db.ts";
 
 test("opening waits for another process that holds the database instead of failing", async () => {
   const dir = mkdtempSync(join(tmpdir(), "swarmail-db-"));
@@ -58,7 +58,7 @@ test("identity columns are backfilled from each tag, and every open repairs rows
 
     let db = openDatabase(path);
     expect(db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(
-      7,
+      SCHEMA_VERSION,
     );
     expect(
       db.query("SELECT host, session_id, t3_thread, build, cwd FROM agents ORDER BY id").all(),
@@ -94,7 +94,7 @@ test("identity columns are backfilled from each tag, and every open repairs rows
     db.close();
     db = openDatabase(path);
     expect(db.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version).toBe(
-      7,
+      SCHEMA_VERSION,
     );
     expect(
       db.query<{ worktree: string | null }, []>("SELECT worktree FROM agents WHERE id = 1").get()!
@@ -132,6 +132,7 @@ test("migrating a released database preserves messages without inventing sender 
       ALTER TABLE messages DROP COLUMN notification_policy;
       ALTER TABLE messages DROP COLUMN revision;
       DROP TABLE message_mutations;
+      DROP TABLE project_aliases;
       PRAGMA user_version = 1;
       INSERT INTO wake_cursors(session, announced, offered) VALUES('previous-session',10,12);
       INSERT INTO projects VALUES (1,'repo','/r',1);
@@ -161,14 +162,14 @@ test("unsupported newer mailbox schema is refused without creating tables", () =
   const path = join(dir, "mail.sqlite");
   try {
     const db = new Database(path, { create: true });
-    db.run("PRAGMA user_version=8");
+    db.run(`PRAGMA user_version=${SCHEMA_VERSION + 1}`);
     db.close();
-    expect(() => openDatabase(path)).toThrow("Unsupported mailbox schema 8");
+    expect(() => openDatabase(path)).toThrow(`Unsupported mailbox schema ${SCHEMA_VERSION + 1}`);
     const inspect = new Database(path, { readonly: true });
     expect(inspect.query("SELECT name FROM sqlite_master").all()).toEqual([]);
     expect(
       inspect.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version,
-    ).toBe(8);
+    ).toBe(SCHEMA_VERSION + 1);
     inspect.close();
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -181,7 +182,7 @@ test("opening refuses a schema upgrade committed after its initial version read"
   const writer = openDatabase(path);
   let reader;
   try {
-    writer.exec("BEGIN IMMEDIATE; PRAGMA user_version=8");
+    writer.exec(`BEGIN IMMEDIATE; PRAGMA user_version=${SCHEMA_VERSION + 1}`);
     reader = Bun.spawn(
       [
         process.execPath,
@@ -210,7 +211,7 @@ test("opening refuses a schema upgrade committed after its initial version read"
     );
     const output = reader.stdout.getReader();
     const first = new TextDecoder().decode((await output.read()).value);
-    expect(first).toContain("observed 7");
+    expect(first).toContain(`observed ${SCHEMA_VERSION}`);
     writer.run("COMMIT");
     let result = first;
     for (;;) {
@@ -221,11 +222,11 @@ test("opening refuses a schema upgrade committed after its initial version read"
       result += new TextDecoder().decode(chunk.value);
     }
     expect(await reader.exited).toBe(0);
-    expect(result).toContain("Unsupported mailbox schema 8");
+    expect(result).toContain(`Unsupported mailbox schema ${SCHEMA_VERSION + 1}`);
     expect(result).not.toContain("accepted");
     expect(
       writer.query<{ user_version: number }, []>("PRAGMA user_version").get()!.user_version,
-    ).toBe(8);
+    ).toBe(SCHEMA_VERSION + 1);
   } finally {
     if (writer.inTransaction) {
       writer.run("ROLLBACK");
@@ -252,7 +253,7 @@ test("version-five upgrade retains mail, retry results and uncertain cursors", (
       ALTER TABLE messages DROP COLUMN notification_policy;
       ALTER TABLE messages DROP COLUMN revision;
       ALTER TABLE message_recipients DROP COLUMN withdrawn_ts;
-      DROP TABLE message_mutations; PRAGMA user_version=5;`);
+      DROP TABLE message_mutations; DROP TABLE project_aliases; PRAGMA user_version=5;`);
     const cursors = db.query("SELECT * FROM wake_cursors").all();
     const keys = db.query("SELECT * FROM idempotency_keys").all();
     db.close();
