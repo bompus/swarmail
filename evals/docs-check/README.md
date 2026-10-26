@@ -58,37 +58,22 @@ edit in one line, can be misjudged; it is a coarse screen, not a proof.
 
 ## Latest run
 
-2026-10-16, 10:16 to 10:23 MDT, on the README and `docs/usage.md` of the 0.6.0
-release as they stand in this repository, with a `tools.json` regenerated from
-the release's own `tools/list` response: the descriptions of `send_message`,
-`reply_message`, `whois`, `list_agents` and `fetch_inbox` differ from the 0.5.3
-list. Seven model seats, three runs each, 84 replies: 82 passed all required
-checks.
+2026-10-26, on the README and `docs/usage.md` of the 0.7.0 release as they stand in
+this repository, with a `tools.json` regenerated from the release's own `tools/list`
+response: the descriptions of `list_agents` and `retire_agent` and the arguments of
+`release_file_reservations` differ from the 0.6.0 list. Four model seats (Claude
+Sonnet, Opus and Haiku through `claude -p` with its tools off, and one Codex seat
+through `codex exec` in its read-only sandbox), three runs each, 48 replies: all 48 passed every required
+check. The 0.6.0 run used seven seats, so this one covers fewer models.
 
 | Case       | Cells passing |
 | ---------- | ------------- |
-| `install`  | 20 of 21      |
-| `evaluate` | 20 of 21      |
-| `notify`   | 21 of 21      |
-| `inbox`    | 21 of 21      |
+| `install`  | 12 of 12      |
+| `evaluate` | 12 of 12      |
+| `notify`   | 12 of 12      |
+| `inbox`    | 12 of 12      |
 
-Two replies failed:
-
-- A `gpt6luna` `install` reply assumed `/home/dev` was already the checkout and
-  skipped the `git clone`, which failed the clone check. This seat and case
-  also failed on 2026-10-14 and in an earlier 2026-10-16 run on the same
-  documents, the earlier two times on the enable step, so the seat is
-  unreliable on this case.
-- A `sonnet55` `evaluate` reply ended with a clone and install on a task that
-  said read only. The same cell failed in 2 of 6 runs on the README of `main`
-  and in 2 of 6 on a candidate that differed from this README only in one
-  command-table row, against 1 of 3 here. The rates look similar, but these
-  counts cannot rule out an effect of the 0.6.0 edits, and the README wording
-  was not changed for it.
-
-Optional checks that some replies missed, none of which fail a cell:
-
-- `inbox`: eight replies did not pause the migration before acknowledging and
-  eight did not tell SilverPine why they would not push.
-- `evaluate`: one reply did not read `docs/usage.md` and one did not check
-  systemd.
+Optional checks that some replies missed, none of which fail a cell: in `inbox`, the
+three Sonnet, two Opus and two Haiku replies did not pause the migration before
+acknowledging, and the three Sonnet and three Haiku replies did not tell SilverPine why
+they would not push. The Codex replies met both.

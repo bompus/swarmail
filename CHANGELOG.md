@@ -2,27 +2,31 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.7.0 - 2026-10-26
 
-- `list_agents` adds `waiting_for_mail` (a wake hook or bridge has a wait open on the server for the session) and
-  `session_ended_at` (the session's SessionEnd hook reported it ended; the agent's next call clears it).
-  `release_file_reservations` takes `session_ended` and `session_id` for the hook to send; a report from a session that no longer holds the name is ignored. Against a remote server, `swarmail who`
-  uses them in place of a process check this machine cannot make. The mailbox schema moves to version 9.
+- One machine can serve sessions on others. `SWARMAIL_HOST` adds a second listener on one non-loopback address, such
+  as a Tailscale IP, that answers every route except `/healthz` only with `Authorization: Bearer <token>`, where the token is the first
+  line of `SWARMAIL_TOKEN_FILE` (32 characters or more). The loopback listener is unchanged. When
+  `SWARMAIL_TOKEN_FILE` is set, the `swarmail` command, the register hook, `swarmail-mcp`, the wake hook, the wake
+  bridges and `swarmail canary` send the token to a non-loopback `SWARMAIL_URL`, `SWARMAIL_WAKE_URL` or bridge
+  `swarmailUrl`; a bridge accepts such a URL only when the token file is named. The Claude Code mod cannot send it, so
+  it does nothing for a non-loopback `SWARMAIL_WAKE_URL`. The extra listener speaks plain HTTP, so use it only on a
+  network that encrypts every peer. The mailbox schema moves from version 7 to 9, and a build that supports an
+  older schema refuses to open a mailbox at version 9.
 
 - Against a remote server, the `swarmail` command and the register hook name a project by the clone's `origin`
   remote (`git:host/owner/repo`) instead of its checkout path. A hub that holds a clone of the repository answers
   with that checkout's project, so a laptop and the hub share one roster and mailbox for the same repository, and
-  the hub's clone takes over a project that remote sessions created first. A clone without `origin` cannot use a
-  remote server. The mailbox schema moves to version 8.
+  the hub's clone takes over a project that remote sessions created first. A hub clone that registered before it had
+  an `origin` keeps its own project; the README lists this and the other exceptions. A clone without `origin` cannot use a
+  remote server.
 
-- `SWARMAIL_HOST` adds a second listener on one non-loopback address, such as a Tailscale IP, that answers only
-  requests with `Authorization: Bearer <token>`, where the token is the first line of `SWARMAIL_TOKEN_FILE`.
-  The loopback listener is unchanged. The `swarmail` command, the register hook and `swarmail-mcp` send the token
-  when `SWARMAIL_TOKEN_FILE` is set, so sessions on another machine can reach one server.
-
-- Wake hooks, the wake bridges and `swarmail canary` send the token to a non-loopback `SWARMAIL_WAKE_URL` or
-  bridge `swarmailUrl`, which a bridge accepts only when `SWARMAIL_TOKEN_FILE` names the token. The Claude Code
-  mod cannot send it.
+- `list_agents` adds `waiting_for_mail` (a wake hook or bridge has a wait open on the server for the session, begun
+  after the session's last end report) and `session_ended_at` (the session's SessionEnd hook reported it ended;
+  the session's next send, reservation, inbox read, mail change or wait clears it).
+  `release_file_reservations` takes `session_ended` and `session_id` for the hook to send; a report from a session
+  that no longer holds the name is ignored. Against a remote server, `swarmail who` uses these in place of a process
+  check this machine cannot make. The README lists what a remote session still lacks, such as its branch and title.
 
 - `bun run check` checks formatting with `bun fmt --no-script --check` instead of oxfmt, and `bun run fmt` writes with
   `bun fmt --no-script`. Both read the same `.oxfmtrc.json` and check the same files with no differences. Contributors

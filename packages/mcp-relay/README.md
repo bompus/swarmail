@@ -15,6 +15,10 @@ npx -y swarmail-mcp
 
 It forwards each JSON-RPC message to `SWARMAIL_URL`
 (default `http://127.0.0.1:18765/mcp/`). Node 18 or newer, no dependencies.
+For a server on another machine, set `SWARMAIL_URL` to its address and
+`SWARMAIL_TOKEN_FILE` to a file whose first line is the token that server
+requires; the relay sends it as a bearer token and never reads the file for a
+`localhost`, `127.0.0.1` or `[::1]` URL.
 Hosts that support MCP over HTTP can skip the relay and use that URL directly,
 which is what `scripts/configure-mcp.ts` sets up.
 
