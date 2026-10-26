@@ -1177,3 +1177,47 @@ test("a session already registered with a remote server is left alone by a hook 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a session that never got a name from a remote server registers with the local one instead", async () => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-server-")));
+  const local = fakeMail((name) => (name === "list_agents" ? [] : { name: "RedPine" }));
+  const remote = "http://100.64.0.1:18765/mcp/";
+  try {
+    const repo = join(dir, "repo");
+    Bun.spawnSync(["git", "init", "-q", repo]);
+    const state = join(dir, "state/swarmail-register");
+    mkdirSync(state, { recursive: true });
+    const record = { name: null, projects: [], server: remote };
+    writeFileSync(join(state, "move-1.json"), JSON.stringify(record));
+    const run = async (event: string) => {
+      const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
+        stdin: new Blob([
+          JSON.stringify({
+            session_id: "move-1",
+            cwd: repo,
+            hook_event_name: event,
+            transcript_path: join(dir, ".claude/projects/-repo/move-1.jsonl"),
+            tool_input: { file_path: join(repo, "a.txt") },
+          }),
+        ]),
+        env: {
+          ...process.env,
+          SWARMAIL_URL: local.url,
+          XDG_STATE_HOME: join(dir, "state"),
+          HOME: dir,
+        },
+      });
+      await proc.exited;
+      return (await new Response(proc.stdout).text()).trim();
+    };
+    expect(await run("PreToolUse")).not.toContain("start a new session");
+    expect(local.calls.length).toBeGreaterThan(0);
+    expect(JSON.parse(readFileSync(join(state, "move-1.json"), "utf8"))).toMatchObject({
+      name: "RedPine",
+      server: local.url,
+    });
+  } finally {
+    await local.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

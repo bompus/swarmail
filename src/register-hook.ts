@@ -189,11 +189,11 @@ function main(input: HookInput): string {
     return "";
   }
   const registry = openRegistry();
-  // Names belong to one server. A session already registered with another one is left alone: registering here would
+  // Names belong to one server. A session already registered with another one is left alone (one that never got a name may still retry): registering here would
   // reuse its name, which another session may hold, and the commands that read its state would act under it.
   const server = swarmailUrl();
   const earlier = registry.read(sessionId);
-  if (earlier && !sameServer(earlier.server, server)) {
+  if (earlier?.name && !sameServer(earlier.server, server)) {
     const event = eventName(input.hook_event_name);
     return event === "SessionStart" || event === "UserPromptSubmit"
       ? `Swarmail: this session registered with ${earlier.server ?? "the local server"}, not ${server}; start a new session to use it.`

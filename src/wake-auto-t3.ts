@@ -18,6 +18,7 @@ import {
   openRegistry,
   REGISTRATION_DAYS,
   registryDir,
+  sameServer,
   serverRegister,
   type RegisterState,
 } from "./registry.ts";
@@ -179,6 +180,10 @@ export function enrollT3Threads(
       continue;
     }
     const known = states.read(session) ?? { name: null, projects: [] };
+    // A name registered with another server may belong to a different session here.
+    if (known.name && !sameServer(known.server, url)) {
+      continue;
+    }
     const context = {
       host: row.provider_name,
       program: row.provider_name,
@@ -206,7 +211,7 @@ export function enrollT3Threads(
       project,
       tag,
       register: serverRegister(context, tag, url),
-      extra: { wakeThread: row.thread_id },
+      extra: { wakeThread: row.thread_id, server: url },
     });
   }
 }
