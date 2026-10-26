@@ -4,7 +4,7 @@ import { ensureWakeEligible } from "./wake-lifecycle.ts";
 import { readFileSync } from "node:fs";
 import {
   BridgeError,
-  localUrl,
+  serverUrl,
   openCodeAdapter,
   rejectRemovedTargetType,
   t3V2Adapter,
@@ -49,7 +49,7 @@ function readConfig(path: string): BridgeConfig {
   if (!target || typeof target.id !== "string" || !SESSION_RE.test(target.id)) {
     throw new BridgeError("config requires a target session/thread id");
   }
-  const swarmailUrl = localUrl(input.swarmailUrl ?? "http://127.0.0.1:18765");
+  const swarmailUrl = serverUrl(input.swarmailUrl ?? "http://127.0.0.1:18765");
   rejectRemovedTargetType(target.type);
   const adapter = adapterFor(target.type);
   if (!adapter) {

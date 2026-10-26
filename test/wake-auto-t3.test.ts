@@ -228,6 +228,56 @@ test("enrollment and selection read only running, active Codex and Cursor thread
   }
 });
 
+test("automatic enrollment registers with a server on another machine under the repository's key", async () => {
+  const f = fixture();
+  const repo = join(f.root, "repo");
+  Bun.spawnSync(["git", "init", "-q", repo]);
+  Bun.spawnSync([
+    "git",
+    "-C",
+    repo,
+    "remote",
+    "add",
+    "origin",
+    "https://github.com/acme/widget.git",
+  ]);
+  f.db.query("INSERT INTO projection_projects VALUES ('project-1',?)").run(repo);
+  const token = join(f.root, "token");
+  writeFileSync(token, `${"t".repeat(40)}\n`);
+  const calls: any[] = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.2",
+    port: 0,
+    async fetch(req) {
+      const message = (await req.json()) as any;
+      calls.push({ auth: req.headers.get("authorization"), ...message.params });
+      const value = message.params.name === "list_agents" ? [] : { name: "BlueLake" };
+      return Response.json({
+        jsonrpc: "2.0",
+        id: 1,
+        result: { content: [{ type: "text", text: JSON.stringify(value) }] },
+      });
+    },
+  });
+  try {
+    const source = join(import.meta.dir, "../src/wake-auto-t3.ts");
+    const code = `import {enrollT3Threads} from ${JSON.stringify(source)}; enrollT3Threads(${JSON.stringify(f.registry)},${JSON.stringify(join(f.root, ".t3"))},"2026-09-29T00:00:00Z",${JSON.stringify(`http://127.0.0.2:${server.port}/mcp/`)});`;
+    const child = Bun.spawn([process.execPath, "-e", code], {
+      env: { ...process.env, SWARMAIL_TOKEN_FILE: token },
+      stdout: "pipe",
+      stderr: "pipe",
+    });
+    expect(await child.exited, await new Response(child.stderr).text()).toBe(0);
+    const registered = calls.filter((x) => x.name === "register_agent");
+    expect(registered).toHaveLength(1);
+    expect(registered[0].arguments.project_key).toBe("git:github.com/acme/widget");
+    expect(registered[0].auth).toBe(`Bearer ${"t".repeat(40)}`);
+  } finally {
+    await server.stop(true);
+    f.close();
+  }
+});
+
 test("thread selection survives registration, end, resume, archive and provider replacement orderings", () => {
   const f = fixture();
   try {

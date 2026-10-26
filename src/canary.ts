@@ -7,7 +7,7 @@
 import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { call as mcpCall } from "./mail.ts";
-import { stateHome, wakeUrl } from "./paths.ts";
+import { authHeaders, stateHome, wakeUrl } from "./paths.ts";
 import { INBOX_NOTICE } from "./wake.ts";
 
 /** The wake session the receiver is tagged with, as a wake hook's host session id would be. */
@@ -117,11 +117,13 @@ export async function roundTrip(
 }
 
 /** GET /wait as a wake hook does: the hint, or null on 204. A server that stops answering fails the run after the wait time plus `graceMs`. */
-export function httpWait(base: string, graceMs = 5000): Wait {
+export function httpWait(base: string, graceMs = 5000, env: NodeJS.ProcessEnv = process.env): Wait {
   return async (session, seconds) => {
     const url = new URL("/wait", base); // As the wake hook builds it, so a trailing slash in the base does no harm.
     url.search = new URLSearchParams({ session, timeout: String(seconds) }).toString();
     const res = await fetch(url, {
+      headers: authHeaders(env, base),
+      redirect: "error",
       signal: AbortSignal.timeout(seconds * 1000 + graceMs),
     });
     if (res.status === 204) {
@@ -148,7 +150,7 @@ export async function canary(env: NodeJS.ProcessEnv = process.env): Promise<numb
     dir,
     known,
     (name, args) => mcpCall(env, name, args),
-    httpWait(wakeUrl(env)),
+    httpWait(wakeUrl(env), undefined, env),
   );
   if (JSON.stringify(names) !== JSON.stringify(known)) {
     writeFileSync(namesPath, JSON.stringify(names) + "\n");

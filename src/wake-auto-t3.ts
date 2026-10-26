@@ -9,9 +9,12 @@ import {
   TargetAuthenticationError,
   localUrl,
   rejectRemovedTargetType,
+  rejectedToken,
+  serverHeaders,
+  serverUrl,
 } from "./wake-target.ts";
 import type { WakeTarget } from "./wake-target.ts";
-import { primaryCheckout } from "./checkout.ts";
+import { projectFor } from "./checkout.ts";
 import { swarmailUrl } from "./client.ts";
 import { processIdentity } from "./proc.ts";
 import {
@@ -202,7 +205,7 @@ export function enrollT3Threads(
     ) {
       continue;
     }
-    const project = primaryCheckout(row.cwd);
+    const project = projectFor(row.cwd, url);
     if (!project) {
       continue;
     }
@@ -285,7 +288,7 @@ export function automaticT3Configuration(path: string) {
       "automatic T3 wake requires an explicit protocol and verified backend rotation",
     );
   }
-  config.swarmailUrl = localUrl(config.swarmailUrl);
+  config.swarmailUrl = serverUrl(config.swarmailUrl);
   if (config.target.url !== undefined) {
     config.target.url = localUrl(config.target.url); // Used only without T3's runtime file.
   }
@@ -463,13 +466,16 @@ function holdReason(error: unknown): string {
   return error instanceof SyntaxError ? "unexpected response" : "connection failed";
 }
 
-function lifecycleReconciliation(swarmailUrl: string, signal: AbortSignal) {
+/** Reconciles with the Swarmail server before each scan; an unreadable token file ends the supervisor. */
+export function lifecycleReconciliation(swarmailUrl: string, signal: AbortSignal) {
   let heldSince: number | undefined;
   return async () => {
     let reason: string | undefined;
     try {
+      const sent = serverHeaders(swarmailUrl);
       const response = await fetch(new URL("/lifecycle/reconcile", swarmailUrl), {
         method: "POST",
+        headers: sent,
         redirect: "error",
         signal: AbortSignal.any([signal, AbortSignal.timeout(2000)]),
       });
@@ -481,11 +487,15 @@ function lifecycleReconciliation(swarmailUrl: string, signal: AbortSignal) {
           reason = "unexpected response";
         }
       } else {
+        rejectedToken(response.status, sent, swarmailUrl);
         reason = `HTTP ${response.status}`;
       }
     } catch (error) {
+      if (error instanceof TargetAuthenticationError) {
+        throw error;
+      }
       // Unavailable or incompatible cores hold the scan without exposing response bodies.
-      reason = holdReason(error);
+      reason = error instanceof BridgeError ? error.message : holdReason(error);
     }
     if (reason === undefined) {
       if (heldSince !== undefined && !signal.aborted) {

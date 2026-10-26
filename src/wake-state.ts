@@ -4,7 +4,12 @@ import { createHash } from "node:crypto";
 import { chmodSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { BridgeError } from "./wake-target.ts";
+import {
+  BridgeError,
+  TargetAuthenticationError,
+  rejectedToken,
+  serverHeaders,
+} from "./wake-target.ts";
 
 export interface Pending {
   eventId: number;
@@ -163,9 +168,11 @@ export async function waitForOffer(
     retry: "1",
     timeout: "30",
   }).toString();
+  const headers = serverHeaders(config.swarmailUrl);
   let response: Response;
   try {
     response = await fetch(url, {
+      headers,
       signal: AbortSignal.any([signal, AbortSignal.timeout(40_000)]),
       redirect: "error",
     });
@@ -175,6 +182,7 @@ export async function waitForOffer(
   if (response.status === 204) {
     return null;
   }
+  rejectedToken(response.status, headers, config.swarmailUrl);
   if (!response.ok) {
     throw new BridgeError(`Swarmail HTTP ${response.status}`, response.status >= 500);
   }
@@ -204,11 +212,14 @@ export async function peekUnreadMailboxes(
 ): Promise<{ recipient: string; project: string }[]> {
   const url = new URL("/wait/peek", config.swarmailUrl);
   url.search = new URLSearchParams({ session: config.target.id }).toString();
+  const headers = serverHeaders(config.swarmailUrl);
   try {
     const response = await fetch(url, {
+      headers,
       signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
       redirect: "error",
     });
+    rejectedToken(response.status, headers, config.swarmailUrl);
     if (!response.ok || !response.headers.get("content-type")?.startsWith("application/json")) {
       throw new Error("snapshot unavailable");
     }
@@ -241,7 +252,10 @@ export async function peekUnreadMailboxes(
     return result.mailboxes.map(
       ({ recipient, project }: { recipient: string; project: string }) => ({ recipient, project }),
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof TargetAuthenticationError) {
+      throw error;
+    }
     throw new BridgeError("Swarmail unread mailbox snapshot unavailable", true);
   }
 }
