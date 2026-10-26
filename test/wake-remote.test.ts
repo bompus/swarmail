@@ -247,6 +247,9 @@ test("reading an inbox clears the end report of the agent it read for, by thread
     t3_thread: "thread-a",
   });
   expect(await ended()).toEqual({ AmberCliff: false, TealDune: true });
+  // A wait on the shared native ID is refused as ambiguous, so it is no sign that either session is back.
+  expect(await createWaiters(db).wait("native-9", 200)).toBeNull();
+  expect(await ended()).toEqual({ AmberCliff: false, TealDune: true });
 });
 
 test("without the token those calls are refused instead of reading the hub's mail", async () => {

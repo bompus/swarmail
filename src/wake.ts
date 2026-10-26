@@ -242,6 +242,13 @@ export function createWaiters(
         if (!started) {
           cursor.begin(session, retry, after);
           started = true;
+          // A session that waits again after an end report is back, and the report stays cleared when the wait
+          // closes. Only a wait the server honors counts: one cancelled or refused as ambiguous never started.
+          db.run(
+            "UPDATE agents SET session_ended_ts = NULL WHERE session_id = ?1 OR t3_thread = ?1",
+            [session],
+          );
+          waitingSince.set(session, nowUs());
         }
         const hint = pending.immediate(session);
         if (hint) {
@@ -251,16 +258,7 @@ export function createWaiters(
       const timer = setInterval(check, pollMs);
       const timeout = setTimeout(stop, timeoutMs);
       signal?.addEventListener("abort", stop);
-      // A session that waits again after an end report is back; the report stays cleared when the wait closes.
-      // A wait that is already cancelled never started, so it is no sign the session is back.
-      if (!signal?.aborted) {
-        db.run(
-          "UPDATE agents SET session_ended_ts = NULL WHERE session_id = ?1 OR t3_thread = ?1",
-          [session],
-        );
-      }
       waiting.set(session, done);
-      waitingSince.set(session, nowUs());
       checks.set(session, check);
       if (signal?.aborted) {
         stop();
