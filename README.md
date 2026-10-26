@@ -305,7 +305,8 @@ clone with no `origin` remote cannot be named to a remote server; the command
 says so, and the hook says so when the session starts. A clone whose origin git cannot read
 keeps the project it had. The hook does not take a name that another session holds in the project, and the
 server refuses to give a retired session's name to a different session; the hook then
-takes a fresh name.
+takes a fresh name. Two sessions that carry the same name into a repository's project
+at the same moment can still collide, because the hook reads the roster before it registers.
 
 What does not carry over yet:
 
