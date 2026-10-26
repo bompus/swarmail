@@ -329,3 +329,57 @@ test("the supervisor's lifecycle reconciliation stops on an unreadable token fil
     process.env.SWARMAIL_TOKEN_FILE = token;
   }
 });
+
+test("the hook reads its token file again for each poll, so a rotated token is used", async () => {
+  mkdirSync(join(dir, "state/swarmail-register"), { recursive: true });
+  writeFileSync(
+    join(dir, "state/swarmail-register/s-1.json"),
+    JSON.stringify({ name: "GreenCastle", projects: [P] }),
+  );
+  const file = join(dir, "rotating-token");
+  const first = "a".repeat(40);
+  const second = "b".repeat(40);
+  writeFileSync(file, `${first}\n`);
+  const seen: (string | null)[] = [];
+  const fake = Bun.serve({
+    hostname: REMOTE,
+    port: 0,
+    fetch(req) {
+      const path = new URL(req.url).pathname;
+      if (path === "/wait") {
+        seen.push(req.headers.get("authorization"));
+        if (seen.length === 1) {
+          writeFileSync(file, `${second}\n`);
+          return new Response(null, { status: 204 });
+        }
+        return new Response("Swarmail: rotated");
+      }
+      return Response.json({ eligible: true });
+    },
+  });
+  try {
+    const run = Bun.spawn(
+      [process.execPath, join(import.meta.dir, "../src/cli.ts"), "hook", "wake", "claude", "20"],
+      {
+        stdin: new Blob([
+          JSON.stringify({
+            session_id: "s-1",
+            transcript_path: "/h/.claude/projects/w/s-1.jsonl",
+            hook_event_name: "Stop",
+          }),
+        ]),
+        env: {
+          ...process.env,
+          SWARMAIL_WAKE_URL: `http://${REMOTE}:${fake.port}`,
+          SWARMAIL_TOKEN_FILE: file,
+          CLAUDE_PID: String(process.pid),
+        },
+        stderr: "pipe",
+      },
+    );
+    expect(await run.exited).toBe(2);
+    expect(seen).toEqual([`Bearer ${first}`, `Bearer ${second}`]);
+  } finally {
+    await fake.stop(true);
+  }
+});

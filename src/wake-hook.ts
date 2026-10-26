@@ -228,9 +228,8 @@ async function waitForMail(
     return 0;
   }
   const quiet = () => quietWake(host);
-  let auth: Record<string, string>;
   try {
-    auth = authHeaders(env, wakeUrl(env));
+    authHeaders(env, wakeUrl(env));
   } catch (error) {
     // Retrying cannot fix an unreadable token file, and a silent hook would wait for days.
     console.error(
@@ -298,7 +297,7 @@ async function waitForMail(
         const res = await fetch(
           `${base}/wait?session=${sid}&timeout=${left}${delivery?.query() ?? retry}`,
           {
-            headers: auth,
+            headers: serverHeaders(base, env), // Read per attempt, so a rotated token file is picked up.
             signal: AbortSignal.any([request.signal, AbortSignal.timeout((left + 5) * 1000)]),
           },
         );

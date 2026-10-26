@@ -2,7 +2,8 @@
 // for mail to the agents registered under this session and hands Claude the one-line hint, with no hook process
 // waiting beside the session. The hooks installer copies it into a plugin directory listed in
 // env.CLAUDE_CODE_PLUGIN_DIRS in ~/.claude/settings.json. It sets SWARMAIL_WAKE_MOD=1 for the session, and the
-// settings wake hooks (`swarmail hook wake claude`) stand down when they see it.
+// settings wake hooks (`swarmail hook wake claude`) stand down when they see it. It does nothing when
+// SWARMAIL_WAKE_URL names another machine, which asks for a token the mod cannot send; the hooks wait there.
 //   idle: $.prompt.submit starts a turn with the hint.
 //   mid-turn: the hint goes with the next main-loop tool result, as the PostToolUse hook's did; when the turn ends
 //     first, it starts the next turn instead.
@@ -86,6 +87,17 @@ function delivered() {
   }
   acked = held.eventId;
   held = null;
+}
+
+/** Whether `url` names the local listener, as `isLoopbackUrl` in paths.ts decides (the mod loads no other module).
+ * @param {string} url
+ */
+function isLoopback(url) {
+  try {
+    return /^(localhost|127\.0\.0\.1|\[::1\])$/.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -194,6 +206,11 @@ export function register(on) {
   on("session.start", async ($, e, next) => {
     // `claude -p` answers one prompt and exits, so it gets no wake, as with the hook. The SDK (T3) is `sdk-ts`.
     if ((await $.env.get("CLAUDE_CODE_ENTRYPOINT")) === "sdk-cli") {
+      return next(e);
+    }
+    // A mod cannot send headers, so a server that asks for a token is left to the wake hooks.
+    const wakeUrl = (await $.env.get("SWARMAIL_WAKE_URL")) || "http://127.0.0.1:18765";
+    if (!isLoopback(wakeUrl)) {
       return next(e);
     }
     busy = false;

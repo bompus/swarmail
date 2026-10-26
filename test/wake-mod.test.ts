@@ -270,6 +270,16 @@ test("does nothing in `claude -p`, which exits after one prompt", async () => {
   expect(s.state.env).toEqual({});
 });
 
+test("stands down for a server on another machine, whose token it cannot send", async () => {
+  const s = session({ home: { HOME: "/h", SWARMAIL_WAKE_URL: "http://100.64.0.5:18765" } });
+  await s.start();
+  expect(s.timers).toEqual([]);
+  expect(s.state.env).toEqual({});
+  const local = session({ home: { HOME: "/h", SWARMAIL_WAKE_URL: "http://127.0.0.1:18765" } });
+  await local.start();
+  expect(local.state.env).toEqual({ SWARMAIL_WAKE_MOD: "1" });
+});
+
 test("held hints survive inactive lifecycle and deliver after reopen without early acknowledgment", async () => {
   const s = session();
   await s.start();
