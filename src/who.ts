@@ -336,9 +336,11 @@ export function main(args: string[]): void {
   const dbPath = databasePath();
   // Unread counts come from this machine's database, which is not the remote server's, and neither are its project names.
   const remote = !isLoopbackUrl(swarmailUrl());
-  if (remote && !/[\\/]/.test(target) && !projectFor(target)) {
+  if (remote && !projectFor(target)) {
     throw new Error(
-      `${target} is a project name; a remote server needs a path inside a clone with an origin remote`,
+      /[\\/]/.test(target)
+        ? `${target} is not inside a git clone with an origin remote, which a remote server needs to name the repository`
+        : `${target} is a project name; a remote server needs a path inside a clone with an origin remote`,
     );
   }
   const project = resolveProject(target, remote ? [] : projectKeys(dbPath));

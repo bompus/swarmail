@@ -343,4 +343,12 @@ test("a clone on another machine shares the project of the hub's clone, found by
   );
   expect(await refused.exited).not.toBe(0);
   expect(await new Response(refused.stderr).text()).toContain("origin remote");
+  const who = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "who"], {
+    cwd: bare,
+    env: { ...process.env, SWARMAIL_URL: url, SWARMAIL_TOKEN_FILE: tokenFile },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  expect(await who.exited).not.toBe(0);
+  expect(await new Response(who.stderr).text()).toContain("origin remote");
 });
