@@ -69,7 +69,7 @@ const socialPreview = `<!doctype html><html><head><style>${BASE_CSS}
     ${THEME_CSS.dark}
     .wrap{position:absolute;inset:0;padding:96px 96px;display:flex;flex-direction:column;justify-content:center}
     h1{font-size:110px;font-weight:900;letter-spacing:-.02em;line-height:1;margin-top:28px}
-    .tag{font-size:38px;margin-top:22px;max-width:1000px;line-height:1.2}
+    .tag{font-size:38px;margin-top:22px;max-width:1000px;line-height:1.2;text-wrap:balance}
     .chips{display:flex;gap:12px;margin-top:36px;flex-wrap:wrap}
     .chip{font-size:22px;font-weight:700;padding:9px 18px;border-radius:999px;border:1px solid}
     .facts{position:absolute;left:96px;right:96px;bottom:48px;display:flex;justify-content:space-between;font-size:22px}

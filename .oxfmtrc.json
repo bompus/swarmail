@@ -1,6 +1,11 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "printWidth": 100,
-  "ignorePatterns": ["bun.lock", "evals/docs-check/cases/", "evals/docs-check/tools.json"],
+  "ignorePatterns": [
+    "bun.lock",
+    "evals/docs-check/cases/",
+    "evals/docs-check/tools.json",
+    "docs/assets/source.json"
+  ],
   "sortPackageJson": true
 }
