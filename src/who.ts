@@ -318,12 +318,17 @@ export function main(args: string[]): void {
   const all = args.includes("--all");
   const target = args.find((arg) => !arg.startsWith("--")) ?? process.cwd();
   const dbPath = databasePath();
-  const project = resolveProject(target, projectKeys(dbPath));
+  // Unread counts come from this machine's database, which is not the remote server's, and neither are its project names.
+  const remote = !isLoopbackUrl(swarmailUrl());
+  if (remote && !/[\\/]/.test(target) && !primaryCheckout(target)) {
+    throw new Error(
+      `${target} is a project name; a remote server needs a path inside the checkout`,
+    );
+  }
+  const project = resolveProject(target, remote ? [] : projectKeys(dbPath));
   const roster = callTool("list_agents", { project_key: project, limit: 1000 }) as RosterAgent[];
   const home = homeDir();
   const now = Date.now();
-  // Unread counts come from this machine's database, which is not the remote server's.
-  const remote = !isLoopbackUrl(swarmailUrl());
   const rows = whoRows({
     project,
     roster,

@@ -294,7 +294,10 @@ What does not carry over yet:
 - Wake hooks and bridges do not send the token, so mail to a remote session
   is read when that session checks its inbox.
 - `swarmail who` shows no unread counts for a remote server, because it counts
-  them in this machine's database.
+  them in this machine's database, and it takes a path inside the checkout, not
+  a project name, because it cannot list the server's projects.
+- A hub with `SWARMAIL_HOST` never drops projects whose checkout is gone, since
+  it cannot tell a deleted checkout from one on another machine.
 - The git guard checks this machine's database, so file reservations held on the
   hub do not block a commit or push made on another machine.
 - A hub started with `SWARMAIL_T3_LIFECYCLE` checks T3 threads against its own

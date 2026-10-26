@@ -47,6 +47,9 @@ test("the remote listener refuses a request without the token and answers one wi
   expect((await list(url, `Bearer ${TOKEN}x`)).status).toBe(401);
   const ok = await list(url, `Bearer ${TOKEN}`);
   expect(ok.status).toBe(200);
+  expect((await list(url, `bearer ${TOKEN}`)).status).toBe(200);
+  expect((await list(url, `BEARER ${TOKEN}`)).status).toBe(200);
+  expect((await list(url, `Bearer ${TOKEN.toUpperCase()}`)).status).toBe(401);
   const wait = await fetch(`${url}/wait?session=sid&timeout=0`);
   expect(wait.status).toBe(401);
 });
@@ -221,4 +224,50 @@ test("the server will not start on a loopback or wildcard address, or without a 
   const noToken = { SWARMAIL_HOST: "100.64.0.1" };
   delete process.env.SWARMAIL_TOKEN_FILE;
   expect(() => start(noToken)).toThrow("needs SWARMAIL_TOKEN_FILE");
+});
+
+test("a hub with a remote listener keeps a project whose checkout it cannot find", async () => {
+  const home = process.env.HOME ?? "";
+  const gone = join(home, `swarmail-remote-test-${process.pid}`);
+  const fresh = (name: string) => {
+    const path = join(dir, name);
+    // retireIdleDays 0 skips the sweep while the project is set up and aged.
+    const setup = createServer(path, 0, { retireIdleDays: 0 });
+    return { setup, path };
+  };
+  const survives = async (name: string, remoteOption?: { hostname: string; token: string }) => {
+    const { setup, path } = fresh(name);
+    const tools = (...a: [string, object]) =>
+      fetch(`http://127.0.0.1:${setup.server.port}/mcp/`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: a[0], arguments: a[1] },
+        }),
+      });
+    await tools("register_agent", {
+      project_key: gone,
+      program: "claude",
+      model: "m",
+      name: "GoneOwl",
+    });
+    setup.db.run("UPDATE agents SET last_active_ts = last_active_ts - ?", [2 * 86_400_000_000]);
+    await setup.server.stop(true);
+    setup.db.close();
+    const second = createServer(path, 0, { retireIdleDays: 7, remote: remoteOption });
+    try {
+      return (
+        second.db.query<{ n: number }, []>("SELECT count(*) AS n FROM projects").get()!.n === 1
+      );
+    } finally {
+      await second.server.stop(true);
+      await second.remote?.stop(true);
+      second.db.close();
+    }
+  };
+  expect(await survives("local.sqlite3")).toBe(false);
+  expect(await survives("hub.sqlite3", { hostname: REMOTE, token: TOKEN })).toBe(true);
 });

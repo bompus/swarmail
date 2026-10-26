@@ -243,7 +243,7 @@ export function isRemoteAddress(host: string): boolean {
 
 /** Whether an Authorization header carries the bearer token whose SHA-256 is `wanted`. */
 function bearerMatches(header: string | null, wanted: Buffer): boolean {
-  const given = header?.match(/^Bearer (.+)$/)?.[1];
+  const given = header?.match(/^bearer (.+)$/i)?.[1]; // the scheme is case-insensitive, the token is not
   return (
     given !== undefined && timingSafeEqual(createHash("sha256").update(given).digest(), wanted)
   );
@@ -281,7 +281,10 @@ export function createServer(
   const sweep = () => {
     if (retireIdleDays > 0) {
       retireIdleAgents(db, retireIdleDays);
-      pruneGoneProjects(db);
+      // A remote session's checkout is a path on another machine, which this one cannot tell from a deleted one.
+      if (!remote) {
+        pruneGoneProjects(db);
+      }
     }
     pruneIdempotencyKeys(db, 7);
     if (registry) {
