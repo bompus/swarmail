@@ -10,7 +10,6 @@ import {
   openSync,
   readdirSync,
   readFileSync,
-  rmSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -35,7 +34,7 @@ export interface RegisterState {
   host?: HostProcess | null;
   /** When the host reported the session ended (SessionEnd); its next prompt or edit clears it. */
   ended?: string;
-  /** The server URL it registered with; the hook starts over when the URL changes, as names belong to one server. */
+  /** The server URL it registered with. Names belong to one server, so another URL never uses them. */
   server?: string;
   /** The T3 thread whose automatic bridge (wake-auto-t3.ts) owns this session's wake; set when its registration settles. */
   wakeThread?: string;
@@ -308,8 +307,6 @@ export interface Registry<S extends RegisterState = RegisterState> {
    * name stays registered: a resumed session keeps its session id, and with it its name.
    */
   end(sessionId: string, release?: (project: string, name: string) => unknown, now?: Date): void;
-  /** Drops the session's state, so its next edit registers afresh. */
-  forget(sessionId: string): void;
   /** Deletes registrations whose session ended more than `days` ago; returns how many. */
   prune(days?: number, now?: number): number;
 }
@@ -414,10 +411,6 @@ export function openRegistry<S extends RegisterState = RegisterState>(
       return result;
     },
 
-    forget(sessionId) {
-      locked(sessionId, (file) => rmSync(file, { force: true }));
-    },
-
     resume(sessionId, since) {
       let pending: RegisterState["pending"];
       locked(sessionId, (file) => {
@@ -477,6 +470,13 @@ function hostProvider(host: { name?: string } | null): string | undefined {
  * Names owned by this session, as registered in `project` when given; a shared host process alone
  * never identifies one of its sessions.
  */
+/**
+ * Whether state recorded against `recorded` belongs to the server at `current`. The local server is one server
+ * whatever its port, and state from before the URL was recorded belongs to it.
+ */
+export const sameServer = (recorded: string | undefined, current: string): boolean =>
+  recorded === undefined || isLoopbackUrl(recorded) ? isLoopbackUrl(current) : recorded === current;
+
 export function selfNames(
   env: NodeJS.ProcessEnv = process.env,
   host = hostProcess(),
@@ -507,6 +507,7 @@ export function selfNames(
       (state) =>
         state.host?.pid === host.pid &&
         state.host.start === host.start &&
+        sameServer(state.server, swarmailUrl(env)) &&
         (!explicit || state.sessionId === env[explicit[1]]),
     );
   if (!explicit && states.length > 1) {

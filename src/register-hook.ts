@@ -12,7 +12,7 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { primaryCheckout, worktreeRoot } from "./checkout.ts";
 import { swarmailUrl } from "./client.ts";
 import { hostProcess, sameHost } from "./proc.ts";
-import { nameIn, openRegistry, serverRegister, type Session } from "./registry.ts";
+import { nameIn, openRegistry, sameServer, serverRegister, type Session } from "./registry.ts";
 import { sessionTag, SESSION_ENV } from "./tag.ts";
 import { t3ThreadId } from "./t3-state.ts";
 import { updateHint } from "./updates.ts";
@@ -189,12 +189,15 @@ function main(input: HookInput): string {
     return "";
   }
   const registry = openRegistry();
-  // Names belong to one server. State recorded against another server would skip registering here, or reuse a name
-  // that another session holds on this server. State from before the server was recorded is kept.
+  // Names belong to one server. A session already registered with another one is left alone: registering here would
+  // reuse its name, which another session may hold, and the commands that read its state would act under it.
   const server = swarmailUrl();
   const earlier = registry.read(sessionId);
-  if (earlier?.server !== undefined && earlier.server !== server) {
-    registry.forget(sessionId);
+  if (earlier && !sameServer(earlier.server, server)) {
+    const event = eventName(input.hook_event_name);
+    return event === "SessionStart" || event === "UserPromptSubmit"
+      ? `Swarmail: this session registered with ${earlier.server ?? "the local server"}, not ${server}; start a new session to use it.`
+      : "";
   }
   const settle = (project: string, tag: string, worktree?: string): string => {
     const register = serverRegister(session, tag, undefined, worktree);

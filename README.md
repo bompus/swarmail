@@ -302,9 +302,10 @@ What does not carry over yet:
   is read when that session checks its inbox.
 - `swarmail overdue` refuses to run against a remote server, because it reads
   this machine's records; run it on the hub.
-- A session that starts a hook against a different server than it registered
-  with registers again there, and leaves its old name on the first server until
-  that server retires it.
+- A session belongs to the one server it registered with. If its hooks later
+  reach a different server, they leave it unregistered there and say to start a
+  new session, and `swarmail inbox`, `send` and the git guard do not use its
+  name at the other server.
 - `swarmail who` shows no unread counts for a remote server, because it counts
   them in this machine's database, and it takes a path inside the checkout, not
   a project name, because it cannot list the server's projects.

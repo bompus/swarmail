@@ -1135,38 +1135,44 @@ test("SessionEnd records the end and releases reservations in each project, keep
   }
 });
 
-test("a session whose hook now talks to a different server registers there afresh", async () => {
+test("a session already registered with a remote server is left alone by a hook that reaches the local one", async () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-server-")));
-  const first = fakeMail((name) => (name === "list_agents" ? [] : { name: "BlueLake" }));
-  const second = fakeMail((name) => (name === "list_agents" ? [] : { name: "RedPine" }));
+  const local = fakeMail((name) => (name === "list_agents" ? [] : { name: "RedPine" }));
+  const remote = "http://100.64.0.1:18765/mcp/";
   try {
     const repo = join(dir, "repo");
     Bun.spawnSync(["git", "init", "-q", repo]);
-    const input = JSON.stringify({
-      session_id: "move-1",
-      cwd: repo,
-      tool_input: { file_path: join(repo, "a.txt") },
-    });
-    const script = join(import.meta.dir, "../src/cli.ts");
-    const runAgainst = async (mail: { url: string }) =>
-      await Bun.spawn(["bun", script, "register"], {
-        stdin: new Blob([input]),
-        env: { ...process.env, SWARMAIL_URL: mail.url, XDG_STATE_HOME: join(dir, "state") },
-      }).exited;
-    await runAgainst(first);
-    await runAgainst(first);
-    expect(first.calls.filter((call) => call.name === "register_agent")).toHaveLength(1);
-    await runAgainst(second);
-    const registered = second.calls.filter((call) => call.name === "register_agent");
-    expect(registered).toHaveLength(1);
-    // The first server's name belongs to the first server.
-    expect(registered[0]!.arguments.name).toBeUndefined();
-    expect(
-      JSON.parse(readFileSync(join(dir, "state/swarmail-register/move-1.json"), "utf8")).name,
-    ).toBe("RedPine");
+    const state = join(dir, "state/swarmail-register");
+    mkdirSync(state, { recursive: true });
+    const record = { name: "BlueLake", projects: [repo], server: remote };
+    writeFileSync(join(state, "move-1.json"), JSON.stringify(record));
+    const run = async (event: string) => {
+      const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
+        stdin: new Blob([
+          JSON.stringify({
+            session_id: "move-1",
+            cwd: repo,
+            hook_event_name: event,
+            tool_input: { file_path: join(repo, "a.txt") },
+          }),
+        ]),
+        env: {
+          ...process.env,
+          SWARMAIL_URL: local.url,
+          XDG_STATE_HOME: join(dir, "state"),
+          HOME: dir,
+        },
+      });
+      await proc.exited;
+      return (await new Response(proc.stdout).text()).trim();
+    };
+    // The local server hears nothing: no registration, and no reuse of the remote server's name.
+    expect(await run("PreToolUse")).not.toContain("start a new session");
+    expect(await run("UserPromptSubmit")).toContain("start a new session");
+    expect(local.calls).toHaveLength(0);
+    expect(JSON.parse(readFileSync(join(state, "move-1.json"), "utf8"))).toEqual(record);
   } finally {
-    await first.stop();
-    await second.stop();
+    await local.stop();
     rmSync(dir, { recursive: true, force: true });
   }
 });
