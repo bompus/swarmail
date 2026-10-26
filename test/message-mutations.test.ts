@@ -272,6 +272,12 @@ test("a sender that changes or withdraws its mail is no longer reported as ended
     act();
     expect(ended().ts).toBeNull();
   }
+  // A retry answered from the stored result counts as the sender being back too.
+  for (const retry of [() => f.change(m.id), () => f.withdraw(m.id)]) {
+    f.db.run("UPDATE agents SET session_ended_ts = 1 WHERE name = 'BlueLake'");
+    expect(retry()).toMatchObject({ idempotent_replay: true });
+    expect(ended().ts).toBeNull();
+  }
 });
 
 test("lost-response replay survives restart, disabling and retirement without audit duplication", () => {

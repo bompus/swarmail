@@ -140,7 +140,7 @@ function importance(db: Database, m: Row, actor: Agent, a: Args) {
 export function mutateMessage(store: MailStore, options: Options, p: Project, a: Args, kind: Kind) {
   str(a.idempotency_key, "idempotency_key");
   const actor = store.agent(p, a.sender_name, "sender_name");
-  return store.idempotent(kind, actor.id, a, () => {
+  const result = store.idempotent(kind, actor.id, a, () => {
     if (!options.enabled) {
       throw new ToolError(
         "MUTATIONS_DISABLED",
@@ -167,10 +167,11 @@ export function mutateMessage(store: MailStore, options: Options, p: Project, a:
     if (m.sender_id !== actor.id) {
       throw new ToolError("FORBIDDEN", "only the original sender can mutate this message");
     }
-    // A sender that mutates its mail is back, whatever its host last reported.
-    options.db.run("UPDATE agents SET session_ended_ts = NULL WHERE id = ?", [actor.id]);
     return kind === "withdraw_message"
       ? withdraw(options.db, m, actor, a)
       : importance(options.db, m, actor, a);
   });
+  // A sender that mutates its mail is back, whatever its host last reported, also when the answer is a replay.
+  options.db.run("UPDATE agents SET session_ended_ts = NULL WHERE id = ?", [actor.id]);
+  return result;
 }
