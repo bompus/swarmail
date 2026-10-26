@@ -89,7 +89,16 @@ interface ToolBase {
   destructive?: true;
   /** Can give a waiting session unread mail: a new message, or a newly tagged or unretired recipient. */
   wakes?: true;
-  run: (s: MailStore, a: Args, info: { databasePath: string }) => unknown;
+  run: (
+    s: MailStore,
+    a: Args,
+    info: {
+      databasePath: string;
+      db: Database;
+      waitingSessions?: () => Map<string, number>;
+      endWaits?: (sessions: string[]) => void;
+    },
+  ) => unknown;
 }
 
 // A declared output contract always has a transaction-time check.
@@ -303,6 +312,10 @@ export const TOOLS: Tool[] = [
       "program, model, task and session details, including t3_thread for a T3 link. Use it to find who to message; whois returns " +
       "one agent. active_within_days filters recent activity, not whether a session is running. " +
       "Metadata and activity do not prove current session or model liveness. " +
+      "waiting_for_mail is true while a wake hook or bridge has a wait open on this server that began after the agent's last end report. " +
+      "false does not prove that no wait is open: a wait opened before the end report, or refused because its session ID names several registrations, shows false. " +
+      "session_ended_at is when the host's SessionEnd hook reported the end, or null if none is recorded or the agent has acted since. " +
+      "Neither proves a session is running or ended; confirm with the owning host before retiring another agent. " +
       "limit caps this single result; there is no continuation cursor, so a full result may omit " +
       "agents.",
     properties: {
@@ -312,8 +325,9 @@ export const TOOLS: Tool[] = [
     },
     required: ["project_key"],
     readOnly: true,
-    run: (s, a) => {
+    run: (s, a, info) => {
       const p = s.project(a.project_key);
+      const waiting = info.waitingSessions?.() ?? new Map<string, number>();
       const since =
         a.active_within_days === undefined
           ? 0
@@ -332,6 +346,13 @@ export const TOOLS: Tool[] = [
         location: labels[i],
         inception_ts: iso(r.inception_ts),
         last_active_ts: iso(r.last_active_ts),
+        // Whether a wake hook or bridge is waiting on this server for the session's mail right now, and when its host
+        // reported the session ended: a roster read from another machine cannot see either on its own.
+        // A wait opened before the session's end was reported belongs to the ended session.
+        waiting_for_mail: [r.session_id, r.t3_thread].some(
+          (id) => id && (waiting.get(id) ?? 0) > (r.session_ended_ts ?? 0),
+        ),
+        session_ended_at: iso(r.session_ended_ts),
       }));
     },
   },
@@ -594,7 +615,18 @@ export const TOOLS: Tool[] = [
       mark_read: prop("boolean", "Default true. False previews without marking receipts read."),
     },
     required: ["host", "session_id"],
-    run: (s, a) => s.sessionInbox(a),
+    run: (s, a, info) => {
+      const rows = s.sessionInbox(a);
+      // Reading its own inbox, even an empty one, shows the session is back after a SessionEnd.
+      // The agents sessionInbox reads for: the thread's when given, else the host's session.
+      info.db.run(
+        `UPDATE agents SET session_ended_ts = NULL
+         WHERE (?3 IS NOT NULL AND t3_thread IS NOT NULL AND t3_thread = ?3)
+            OR ((?3 IS NULL OR t3_thread IS NULL) AND host = ?1 AND session_id = ?2)`,
+        [a.host, a.session_id, a.t3_thread ?? null],
+      );
+      return rows;
+    },
   },
   {
     name: "mark_message_read",
@@ -833,16 +865,41 @@ export const TOOLS: Tool[] = [
       agent_name: AGENT,
       paths: RESERVATION_PATHS,
       file_reservation_ids: RESERVATION_IDS,
+      session_ended: prop(
+        "boolean",
+        "Set only by the host's SessionEnd hook; agents must not set it. list_agents shows session_ended_at until the agent next sends, reserves, reads its inbox, changes or withdraws mail, or waits again.",
+      ),
+      session_id: prop(
+        "string",
+        "With session_ended: the ending session's ID. A report from a session that no longer holds this name is ignored; without it the report skips that check.",
+      ),
     },
     required: ["project_key", "agent_name"],
     destructive: true,
-    run: (s, a) => {
-      const p = s.project(a.project_key),
-        who = s.acting(p, a.agent_name),
+    run: (s, a, info) => {
+      const p = s.project(a.project_key);
+      // A report from a session that no longer holds the name changes nothing, not even the agent's activity.
+      // A registration with no recorded session ID cannot be checked, so its release goes ahead without an end marker.
+      const holder =
+        a.session_ended === true && a.session_id !== undefined ? s.agent(p, a.agent_name) : null;
+      const unverified = holder?.session_id === null;
+      if (holder && !unverified && a.session_id !== holder.session_id) {
+        return {
+          released: 0,
+          released_at: null,
+          ignored: "the name now belongs to another session",
+        };
+      }
+      const who = s.acting(p, a.agent_name),
         now = nowUs();
       const rows = s.ownActive(p, who, a);
       for (const r of rows) {
         s.release(r.id, now);
+      }
+      if (a.session_ended === true && !unverified) {
+        info.db.run("UPDATE agents SET session_ended_ts = ? WHERE id = ?", [now, who.id]);
+        // Waits still open from before the end are not presence, even once a later call clears the report.
+        info.endWaits?.([who.session_id, who.t3_thread].filter((id): id is string => !!id));
       }
       return { released: rows.length, released_at: iso(now) };
     },
@@ -877,6 +934,10 @@ export function createTools(
     lifecycle?: Lifecycle;
     registry?: string;
     mutationsEnabled?: boolean;
+    /** The sessions with a wake wait open on this server, each with when that wait began (µs). */
+    waitingSessions?: () => Map<string, number>;
+    /** Forgets the open waits of sessions that reported their end. */
+    endWaits?: (sessions: string[]) => void;
   },
 ): Record<string, (a: Args) => unknown> {
   const s = new MailStore(db, info.lifecycle, info.registry, info.mutationsEnabled);
@@ -885,7 +946,7 @@ export function createTools(
       t.name,
       (a: Args) =>
         s.atomic(() => {
-          const value = t.run(s, a, info);
+          const value = t.run(s, a, { ...info, db });
           const validate = t.validateResult;
           if (validate) {
             if (!validate(value)) {

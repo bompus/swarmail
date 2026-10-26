@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { httpWait } from "../src/canary.ts";
 import { createServer } from "../src/server.ts";
 import { lifecycleReconciliation } from "../src/wake-auto-t3.ts";
+import { createWaiters } from "../src/wake.ts";
 import { contextHook } from "../src/wake-hook.ts";
 import { ensureWakeEligible } from "../src/wake-lifecycle.ts";
 import { peekUnreadMailboxes, waitForOffer } from "../src/wake-state.ts";
@@ -117,6 +118,231 @@ test("the wake client calls send the token to a server on another machine", asyn
   }
   const reconcile = await fetch(`${hub}/lifecycle/reconcile`, { method: "POST" });
   expect(reconcile.status).toBe(401);
+});
+
+const listed = async () =>
+  (await call("list_agents", { project_key: P })).find((row: any) => row.name === "GreenCastle");
+
+test("the roster says whether a session is waiting for mail and whether its host reported it ended", async () => {
+  expect(await listed()).toMatchObject({ waiting_for_mail: false, session_ended_at: null });
+  const open = new AbortController();
+  const waiting = fetch(`${hub}/wait?session=s-1&timeout=5`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+    signal: open.signal,
+  }).catch(() => null);
+  await Bun.sleep(100);
+  expect(await listed()).toMatchObject({ waiting_for_mail: true });
+  open.abort();
+  await waiting;
+  await Bun.sleep(50);
+  expect(await listed()).toMatchObject({ waiting_for_mail: false });
+  await call("release_file_reservations", {
+    project_key: P,
+    agent_name: "GreenCastle",
+    session_ended: true,
+  });
+  expect((await listed()).session_ended_at).toMatch(/^\d{4}-\d\d-\d\dT/);
+  // Any later call as the agent shows the session is back.
+  await call("release_file_reservations", { project_key: P, agent_name: "GreenCastle" });
+  expect((await listed()).session_ended_at).toBeNull();
+});
+
+test("a wait opened before the end report does not count, a later one does, and a stale report is ignored", async () => {
+  const waitOpen = () => {
+    const open = new AbortController();
+    const request = fetch(`${hub}/wait?session=s-1&timeout=5`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+      signal: open.signal,
+    }).catch(() => null);
+    return async () => {
+      open.abort();
+      await request;
+      await Bun.sleep(50);
+    };
+  };
+  const end = (extra: Record<string, unknown> = {}) =>
+    call("release_file_reservations", {
+      project_key: P,
+      agent_name: "GreenCastle",
+      session_ended: true,
+      ...extra,
+    });
+  const closeFirst = waitOpen();
+  await Bun.sleep(100);
+  await end();
+  expect(await listed()).toMatchObject({ waiting_for_mail: false });
+  expect((await listed()).session_ended_at).not.toBeNull();
+  const closeSecond = waitOpen();
+  await Bun.sleep(100);
+  expect(await listed()).toMatchObject({ waiting_for_mail: true });
+  // Waiting again supersedes the end report for good, not only while the wait stays open.
+  expect((await listed()).session_ended_at).toBeNull();
+  await closeSecond();
+  await closeFirst();
+  expect((await listed()).session_ended_at).toBeNull();
+  // A wait left open across the end report stays out of the roster even after a later call clears the report.
+  const closeThird = waitOpen();
+  await Bun.sleep(100);
+  await end();
+  await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
+  expect(await listed()).toMatchObject({ waiting_for_mail: false, session_ended_at: null });
+  await closeThird();
+  // Reviving the name for someone else's mail is not the session acting, so its end report stays.
+  await end();
+  await call("unretire_agent", { project_key: P, agent_name: "GreenCastle" });
+  expect((await listed()).session_ended_at).not.toBeNull();
+  await end();
+  // The agent acting again, here by reading its own inbox with nothing in it, clears the report.
+  await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
+  expect((await listed()).session_ended_at).toBeNull();
+  // An end reported by a session that no longer holds the name is not this session's end, and leaves the agent's
+  // own end report and activity as they were.
+  await end({ session_id: "s-1" });
+  const before = await listed();
+  expect(before.session_ended_at).not.toBeNull();
+  await end({ session_id: "an-earlier-session" });
+  expect(await listed()).toEqual(before);
+  await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
+});
+
+test("a wait that was cancelled before it started leaves the end report alone", async () => {
+  await call("release_file_reservations", {
+    project_key: P,
+    agent_name: "GreenCastle",
+    session_ended: true,
+  });
+  expect(await createWaiters(db).wait("s-1", 1000, AbortSignal.abort())).toBeNull();
+  expect((await listed()).session_ended_at).not.toBeNull();
+  await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
+});
+
+test("reading an inbox clears the end report of the agent it read for, by thread when one is given", async () => {
+  for (const [name, thread] of [
+    ["AmberCliff", "thread-a"],
+    ["TealDune", "thread-b"],
+  ]) {
+    await call("register_agent", {
+      project_key: P,
+      program: "claude-code",
+      model: "m",
+      name,
+      task_description: `[t3:${thread} claude:native-9] work`,
+    });
+    await call("release_file_reservations", {
+      project_key: P,
+      agent_name: name,
+      session_ended: true,
+    });
+  }
+  const ended = async () =>
+    Object.fromEntries(
+      (await call("list_agents", { project_key: P }))
+        .filter((row: any) => ["AmberCliff", "TealDune"].includes(row.name))
+        .map((row: any) => [row.name, row.session_ended_at !== null]),
+    );
+  expect(await ended()).toEqual({ AmberCliff: true, TealDune: true });
+  await call("fetch_session_inbox", {
+    host: "claude",
+    session_id: "native-9",
+    t3_thread: "thread-a",
+  });
+  expect(await ended()).toEqual({ AmberCliff: false, TealDune: true });
+  // A wait on the shared native ID is refused as ambiguous, so it is no sign that either session is back.
+  expect(await createWaiters(db).wait("native-9", 200)).toBeNull();
+  expect(await ended()).toEqual({ AmberCliff: false, TealDune: true });
+});
+
+test("a session end from a registration with no recorded session ID still releases its files, without an end marker", async () => {
+  await call("register_agent", {
+    project_key: P,
+    program: "claude-code",
+    model: "m",
+    name: "OldOak",
+    task_description: "Claude Code session legacy-1 Room C90",
+  });
+  await call("file_reservation_paths", {
+    project_key: P,
+    agent_name: "OldOak",
+    paths: ["legacy/**"],
+    ttl_seconds: 60,
+  });
+  const end = await call("release_file_reservations", {
+    project_key: P,
+    agent_name: "OldOak",
+    session_ended: true,
+    session_id: "legacy-1",
+  });
+  expect(end).toMatchObject({ released: 1 });
+  const row = (await call("list_agents", { project_key: P })).find((r: any) => r.name === "OldOak");
+  expect(row.session_ended_at).toBeNull();
+});
+
+test("a session ID that comes to name two registrations after a wait began is no longer shown as waiting", async () => {
+  const names = ["IvoryPine", "RoseWillow"];
+  const register = (name: string, thread: string) =>
+    call("register_agent", {
+      project_key: P,
+      program: "claude-code",
+      model: "m",
+      name,
+      task_description: `[t3:${thread} claude:native-12] work`,
+    });
+  const waiting = async () =>
+    Object.fromEntries(
+      (await call("list_agents", { project_key: P }))
+        .filter((row: any) => names.includes(row.name))
+        .map((row: any) => [row.name, row.waiting_for_mail]),
+    );
+  await register(names[0]!, "thread-x");
+  const open = new AbortController();
+  const request = fetch(`${hub}/wait?session=native-12&timeout=5`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+    signal: open.signal,
+  }).catch(() => null);
+  await Bun.sleep(100);
+  expect(await waiting()).toEqual({ IvoryPine: true });
+  await register(names[1]!, "thread-y");
+  await Bun.sleep(100);
+  expect(await waiting()).toEqual({ IvoryPine: false, RoseWillow: false });
+  open.abort();
+  await request;
+});
+
+test("a wait opened before the end report stays out of presence even when it only becomes eligible afterwards", async () => {
+  const find = async () =>
+    (await call("list_agents", { project_key: P })).find((r: any) => r.name === "PaleBirch");
+  await call("register_agent", {
+    project_key: P,
+    program: "claude-code",
+    model: "m",
+    name: "PaleBirch",
+    task_description: "[claude:native-15] work",
+  });
+  await call("retire_agent", { project_key: P, agent_name: "PaleBirch" });
+  const open = new AbortController();
+  const request = fetch(`${hub}/wait?session=native-15&timeout=5`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+    signal: open.signal,
+  }).catch(() => null);
+  await Bun.sleep(100);
+  // Reporting the end revives the name, so the earlier wait can now pass the eligibility check.
+  await call("release_file_reservations", {
+    project_key: P,
+    agent_name: "PaleBirch",
+    session_ended: true,
+  });
+  await call("register_agent", {
+    project_key: P,
+    program: "claude-code",
+    model: "m",
+    name: "GrayHeron",
+    task_description: "[claude:native-16] work",
+  });
+  await Bun.sleep(100);
+  expect(await find()).toMatchObject({ waiting_for_mail: false });
+  expect((await find()).session_ended_at).not.toBeNull();
+  open.abort();
+  await request;
 });
 
 test("without the token those calls are refused instead of reading the hub's mail", async () => {

@@ -310,9 +310,25 @@ at the same moment can still collide, because the hook reads the roster before i
 
 What does not carry over yet:
 
-- The server reads process state, branch and session titles from its own
-  machine, so a remote session appears without a branch or title and its
-  liveness checks do not see it.
+- The server reads branch and session titles from its own machine, so a remote
+  session appears without a branch or title. `swarmail who` shows a remote
+  session as alive ("waiting for mail on the server") only while a wake hook or
+  bridge of that session has a wait that began after its last end report, and as
+  ended after the session's SessionEnd hook reports it, until the session acts
+  again (sends, reserves, reads its inbox, changes its mail) or waits again. A session
+  that is mid-turn, or has no wake hook, shows as liveness unknown. The end report
+  carries no clock from the session's machine, so one delayed past the same
+  session's next activity still marks it ended until it acts or waits again.
+  A session registered in several projects reports its end in each, and acting in one
+  project does not clear the report in another. Presence is keyed by the provider's
+  session ID and the T3 thread, not by project or host: an end report from an earlier registration that shares its session ID with a
+  successor in another T3 thread (or its T3 thread with a successor in another
+  project) can mark the successor ended, or hide its open wait, until the successor
+  acts or waits again. A registration with only a provider session ID, linked to a
+  T3 thread by another project's registration, does not see that thread's waits.
+  Waits are counted by the server process that holds them, so a second server on
+  the same database does not see the first one's waits.
+  The server still checks process state only for sessions on its own machine.
 - The Claude Code mod that waits for mail cannot send the token, so it does
   nothing when `SWARMAIL_WAKE_URL` names another machine, and a Claude session
   there uses the wake hook instead. Wake hooks and

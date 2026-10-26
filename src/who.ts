@@ -39,6 +39,10 @@ export interface RosterAgent {
   task_description?: string;
   location?: Location | null;
   last_active_ts?: string;
+  /** A wake wait for the session is open on the server, which sees sessions on other machines too. */
+  waiting_for_mail?: boolean;
+  /** When the session's host reported it ended, as the server recorded it. */
+  session_ended_at?: string | null;
 }
 
 interface LiveRoom {
@@ -65,6 +69,8 @@ export interface WhoRow {
   build: string | null;
   lastActive: string | null;
   hostAlive: boolean | null;
+  /** True when the server holds an open wake wait for a session whose host process this machine cannot see. */
+  waiting: boolean;
   /** When the session's host reported it ended (register-hook SessionEnd), else null. */
   ended: string | null;
   roomOwner: boolean;
@@ -258,6 +264,7 @@ export function whoRows(
     const state = states.find((st) => st.sessionId === sessionId);
     const t3 = tag?.t3 ?? (sessionId ? threadOf(sessionId) : null);
     const thread = t3 ? threads.get(t3) : null;
+    const waiting = !state && agent.waiting_for_mail === true;
     const roomOwner =
       !!room &&
       [agent.name, sessionId, t3].some(
@@ -277,8 +284,10 @@ export function whoRows(
       cwd: thread?.cwd ?? tag?.cwd ?? null,
       build: tag?.build ?? null,
       lastActive: agent.last_active_ts ?? null,
-      hostAlive: state?.host ? alive(state.host) : null,
-      ended: state?.ended ?? null,
+      // A session on another machine has no registration here; the server's open wait stands in for its process.
+      hostAlive: state?.host ? alive(state.host) : waiting ? true : null,
+      waiting,
+      ended: state ? (state.ended ?? null) : waiting ? null : (agent.session_ended_at ?? null),
       roomOwner,
       task: withoutTag(agent.task_description),
       sameSessionAs: [],
@@ -314,6 +323,7 @@ export function whoRows(
       build: null,
       lastActive: null,
       hostAlive: null,
+      waiting: false,
       ended: null,
       roomOwner: false,
       task: "not in visible roster; registration and delivery unknown",
@@ -380,7 +390,9 @@ export function main(args: string[]): void {
       [
         row.ended && `session ended ${ago(row.ended, now)}`,
         row.status && `${row.status}, seen ${ago(row.seen, now)}`,
-        row.hostAlive !== null && `host process ${row.hostAlive ? "alive" : "gone"}`,
+        row.waiting
+          ? "waiting for mail on the server"
+          : row.hostAlive !== null && `host process ${row.hostAlive ? "alive" : "gone"}`,
       ]
         .filter(Boolean)
         .join(", ") || "liveness unknown";

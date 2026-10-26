@@ -211,7 +211,9 @@ test("schema-six migration preserves mail and makes existing deliveries wake by 
   const path = join(scratch, "schema-six.sqlite");
   const f = fixture(path);
   const sent = f.send();
-  f.db.exec("ALTER TABLE messages DROP COLUMN notification_policy; PRAGMA user_version=6");
+  f.db.exec(
+    "ALTER TABLE messages DROP COLUMN notification_policy; ALTER TABLE agents DROP COLUMN session_ended_ts; PRAGMA user_version=6",
+  );
   f.db.close();
   const db = openDatabase(path);
   try {

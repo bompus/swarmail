@@ -208,6 +208,11 @@ export function createWaiters(
 ) {
   const { cursor, pending } = pendingMail(db, eligible);
   const waiting = new Map<string, (value: null | false) => void>();
+  const waitingSince = new Map<string, number>();
+  // Open waits whose session ID the last check found to name no single registration: not presence.
+  const refused = new Set<string>();
+  // Open waits that were still open when their session reported its end: they are never presence.
+  const endedWaits = new Set<string>();
   const checks = new Map<string, () => void>();
   let scheduled = false;
 
@@ -228,6 +233,9 @@ export function createWaiters(
         signal?.removeEventListener("abort", stop);
         if (waiting.get(session) === done) {
           waiting.delete(session);
+          waitingSince.delete(session);
+          refused.delete(session);
+          endedWaits.delete(session);
           checks.delete(session);
         }
         resolve(value);
@@ -235,11 +243,22 @@ export function createWaiters(
       const stop = () => done(null);
       const check = () => {
         if (!eligible(session)) {
+          refused.add(session);
           return;
         }
+        refused.delete(session);
         if (!started) {
           cursor.begin(session, retry, after);
           started = true;
+          // A session that waits again after an end report is back, and the report stays cleared when the wait
+          // closes. Only a wait the server honors counts: one cancelled or refused as ambiguous never started.
+          if (!endedWaits.has(session)) {
+            db.run(
+              "UPDATE agents SET session_ended_ts = NULL WHERE session_id = ?1 OR t3_thread = ?1",
+              [session],
+            );
+            waitingSince.set(session, nowUs());
+          }
         }
         const hint = pending.immediate(session);
         if (hint) {
@@ -273,5 +292,19 @@ export function createWaiters(
     }, 0);
   }
 
-  return { wait, notify, peek: mailboxSnapshot(db) };
+  return {
+    wait,
+    notify,
+    peek: mailboxSnapshot(db),
+    waiting: () => new Map([...waitingSince].filter(([session]) => !refused.has(session))),
+    /** Stops counting these sessions' open waits as presence: the session they belonged to has ended. */
+    endWaits: (sessions: string[]) => {
+      for (const session of sessions) {
+        waitingSince.delete(session);
+        if (waiting.has(session)) {
+          endedWaits.add(session);
+        }
+      }
+    },
+  };
 }
