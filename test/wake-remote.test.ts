@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { httpWait } from "../src/canary.ts";
 import { createServer } from "../src/server.ts";
 import { lifecycleReconciliation } from "../src/wake-auto-t3.ts";
+import { createWaiters } from "../src/wake.ts";
 import { contextHook } from "../src/wake-hook.ts";
 import { ensureWakeEligible } from "../src/wake-lifecycle.ts";
 import { peekUnreadMailboxes, waitForOffer } from "../src/wake-state.ts";
@@ -201,6 +202,17 @@ test("a wait opened before the end report does not count, a later one does, and 
   expect(before.session_ended_at).not.toBeNull();
   await end({ session_id: "an-earlier-session" });
   expect(await listed()).toEqual(before);
+  await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
+});
+
+test("a wait that was cancelled before it started leaves the end report alone", async () => {
+  await call("release_file_reservations", {
+    project_key: P,
+    agent_name: "GreenCastle",
+    session_ended: true,
+  });
+  expect(await createWaiters(db).wait("s-1", 1000, AbortSignal.abort())).toBeNull();
+  expect((await listed()).session_ended_at).not.toBeNull();
   await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
 });
 
