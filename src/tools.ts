@@ -312,6 +312,9 @@ export const TOOLS: Tool[] = [
       "program, model, task and session details, including t3_thread for a T3 link. Use it to find who to message; whois returns " +
       "one agent. active_within_days filters recent activity, not whether a session is running. " +
       "Metadata and activity do not prove current session or model liveness. " +
+      "waiting_for_mail is true while a wake hook or bridge has a wait open on this server; " +
+      "session_ended_at is when the host's SessionEnd hook reported the end. " +
+      "Neither proves a session is running or ended; confirm with the owning host before retiring another agent. " +
       "limit caps this single result; there is no continuation cursor, so a full result may omit " +
       "agents.",
     properties: {
@@ -863,11 +866,11 @@ export const TOOLS: Tool[] = [
       file_reservation_ids: RESERVATION_IDS,
       session_ended: prop(
         "boolean",
-        "Sent by the host's SessionEnd hook, so list_agents shows the session ended until you act again.",
+        "Set only by the host's SessionEnd hook; agents must not set it. list_agents shows session_ended_at until the agent next sends, reserves, reads its inbox, changes or withdraws mail, or waits again.",
       ),
       session_id: prop(
         "string",
-        "With session_ended: the ending session's ID. A report from a session that no longer holds this name is ignored.",
+        "With session_ended: the ending session's ID. A report from a session that no longer holds this name is ignored; without it the report skips that check.",
       ),
     },
     required: ["project_key", "agent_name"],

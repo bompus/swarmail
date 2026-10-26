@@ -105,6 +105,9 @@ ended sessions, after confirming with the host that each has ended.
 `list_agents` and `whois` return recorded metadata and activity timestamps.
 They do not prove that the session or model is currently running. Read and
 acknowledgment timestamps are observations, not proof that a model accepted work.
+`list_agents` also reports `waiting_for_mail` (a wake hook or bridge has a wait
+open on this server) and `session_ended_at` (the host's SessionEnd hook
+reported the end). Neither proves that a session is running or ended.
 
 `swarmail ping` observes a pong generated while the recipient wake hook waits.
 Success establishes that response at that time, not a model reply or future
