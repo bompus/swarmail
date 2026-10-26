@@ -36,10 +36,10 @@ function offered(result: WaitResult) {
 }
 
 const scratch = testScratch();
-const cleanups: (() => void)[] = [];
-afterEach(() => {
+const cleanups: (() => void | Promise<void>)[] = [];
+afterEach(async () => {
   for (const close of cleanups.splice(0).reverse()) {
-    close();
+    await close();
   }
 });
 let serial = 0;

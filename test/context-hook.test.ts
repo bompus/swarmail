@@ -6,10 +6,10 @@ import { createServer } from "../src/server.ts";
 import { sessionUpdates } from "../src/updates.ts";
 import type { Args, Row } from "../src/store.ts";
 
-const cleanups: (() => void)[] = [];
-afterEach(() => {
+const cleanups: (() => void | Promise<void>)[] = [];
+afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) {
-    cleanup();
+    await cleanup();
   }
 });
 function fixture(host: string, key: string) {

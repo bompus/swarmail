@@ -87,8 +87,7 @@ export async function deliveryLoop(
       }
       console.error(`${label}: ${error.message}; retry in ${backoff / 1000}s`);
       await pause(backoff, signal);
-      // The next retry reads it; the rule misses the loop's path back from this catch.
-      // oxlint-disable-next-line no-useless-assignment
+      // oxlint-disable-next-line no-useless-assignment -- the next retry reads it; the rule misses the loop's path back from this catch
       backoff = Math.min(backoff * 2, 30_000);
     }
   }
