@@ -609,10 +609,13 @@ export const TOOLS: Tool[] = [
     run: (s, a, info) => {
       const rows = s.sessionInbox(a);
       // Reading its own inbox, even an empty one, shows the session is back after a SessionEnd.
-      info.db.run("UPDATE agents SET session_ended_ts = NULL WHERE host = ? AND session_id = ?", [
-        a.host,
-        a.session_id,
-      ]);
+      // The agents sessionInbox reads for: the thread's when given, else the host's session.
+      info.db.run(
+        `UPDATE agents SET session_ended_ts = NULL
+         WHERE (?3 IS NOT NULL AND t3_thread IS NOT NULL AND t3_thread = ?3)
+            OR ((?3 IS NULL OR t3_thread IS NULL) AND host = ?1 AND session_id = ?2)`,
+        [a.host, a.session_id, a.t3_thread ?? null],
+      );
       return rows;
     },
   },
@@ -865,17 +868,26 @@ export const TOOLS: Tool[] = [
     required: ["project_key", "agent_name"],
     destructive: true,
     run: (s, a, info) => {
-      const p = s.project(a.project_key),
-        who = s.acting(p, a.agent_name),
+      const p = s.project(a.project_key);
+      // A report from a session that no longer holds the name changes nothing, not even the agent's activity.
+      if (
+        a.session_ended === true &&
+        a.session_id !== undefined &&
+        a.session_id !== s.agent(p, a.agent_name).session_id
+      ) {
+        return {
+          released: 0,
+          released_at: null,
+          ignored: "the name now belongs to another session",
+        };
+      }
+      const who = s.acting(p, a.agent_name),
         now = nowUs();
       const rows = s.ownActive(p, who, a);
       for (const r of rows) {
         s.release(r.id, now);
       }
-      if (
-        a.session_ended === true &&
-        (a.session_id === undefined || a.session_id === who.session_id)
-      ) {
+      if (a.session_ended === true) {
         info.db.run("UPDATE agents SET session_ended_ts = ? WHERE id = ?", [now, who.id]);
       }
       return { released: rows.length, released_at: iso(now) };

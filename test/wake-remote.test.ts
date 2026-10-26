@@ -174,17 +174,56 @@ test("a wait opened before the end report does not count, a later one does, and 
   const closeSecond = waitOpen();
   await Bun.sleep(100);
   expect(await listed()).toMatchObject({ waiting_for_mail: true });
+  // Waiting again supersedes the end report for good, not only while the wait stays open.
+  expect((await listed()).session_ended_at).toBeNull();
   await closeSecond();
   await closeFirst();
+  expect((await listed()).session_ended_at).toBeNull();
+  await end();
   // The agent acting again, here by reading its own inbox with nothing in it, clears the report.
   await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
   expect((await listed()).session_ended_at).toBeNull();
-  // An end reported by a session that no longer holds the name is not this session's end.
-  await end({ session_id: "an-earlier-session" });
-  expect((await listed()).session_ended_at).toBeNull();
+  // An end reported by a session that no longer holds the name is not this session's end, and leaves the agent's
+  // own end report and activity as they were.
   await end({ session_id: "s-1" });
-  expect((await listed()).session_ended_at).not.toBeNull();
+  const before = await listed();
+  expect(before.session_ended_at).not.toBeNull();
+  await end({ session_id: "an-earlier-session" });
+  expect(await listed()).toEqual(before);
   await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
+});
+
+test("reading an inbox clears the end report of the agent it read for, by thread when one is given", async () => {
+  for (const [name, thread] of [
+    ["AmberCliff", "thread-a"],
+    ["TealDune", "thread-b"],
+  ]) {
+    await call("register_agent", {
+      project_key: P,
+      program: "claude-code",
+      model: "m",
+      name,
+      task_description: `[t3:${thread} claude:native-9] work`,
+    });
+    await call("release_file_reservations", {
+      project_key: P,
+      agent_name: name,
+      session_ended: true,
+    });
+  }
+  const ended = async () =>
+    Object.fromEntries(
+      (await call("list_agents", { project_key: P }))
+        .filter((row: any) => ["AmberCliff", "TealDune"].includes(row.name))
+        .map((row: any) => [row.name, row.session_ended_at !== null]),
+    );
+  expect(await ended()).toEqual({ AmberCliff: true, TealDune: true });
+  await call("fetch_session_inbox", {
+    host: "claude",
+    session_id: "native-9",
+    t3_thread: "thread-a",
+  });
+  expect(await ended()).toEqual({ AmberCliff: false, TealDune: true });
 });
 
 test("without the token those calls are refused instead of reading the hub's mail", async () => {

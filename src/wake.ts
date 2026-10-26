@@ -251,6 +251,10 @@ export function createWaiters(
       const timer = setInterval(check, pollMs);
       const timeout = setTimeout(stop, timeoutMs);
       signal?.addEventListener("abort", stop);
+      // A session that waits again after an end report is back; the report stays cleared when the wait closes.
+      db.run("UPDATE agents SET session_ended_ts = NULL WHERE session_id = ?1 OR t3_thread = ?1", [
+        session,
+      ]);
       waiting.set(session, done);
       waitingSince.set(session, nowUs());
       checks.set(session, check);
