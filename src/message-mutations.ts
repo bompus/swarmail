@@ -167,6 +167,8 @@ export function mutateMessage(store: MailStore, options: Options, p: Project, a:
     if (m.sender_id !== actor.id) {
       throw new ToolError("FORBIDDEN", "only the original sender can mutate this message");
     }
+    // A sender that mutates its mail is back, whatever its host last reported.
+    options.db.run("UPDATE agents SET session_ended_ts = NULL WHERE id = ?", [actor.id]);
     return kind === "withdraw_message"
       ? withdraw(options.db, m, actor, a)
       : importance(options.db, m, actor, a);

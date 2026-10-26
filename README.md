@@ -313,8 +313,9 @@ What does not carry over yet:
 - The server reads branch and session titles from its own machine, so a remote
   session appears without a branch or title. `swarmail who` shows a remote
   session as alive ("waiting for mail on the server") only while a wake hook or
-  bridge of that session has a wait open on the server, and as ended after the
-  session's SessionEnd hook reports it, until the session acts again. A session
+  bridge of that session has a wait that began after its last end report, and as
+  ended after the session's SessionEnd hook reports it, until the session acts
+  again (sends, reserves, reads its inbox, changes its mail) or waits again. A session
   that is mid-turn, or has no wake hook, shows as liveness unknown. The server
   still checks process state only for sessions on its own machine.
 - The Claude Code mod that waits for mail cannot send the token, so it does

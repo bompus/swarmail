@@ -92,7 +92,7 @@ interface ToolBase {
   run: (
     s: MailStore,
     a: Args,
-    info: { databasePath: string; db: Database; waitingSessions?: () => Iterable<string> },
+    info: { databasePath: string; db: Database; waitingSessions?: () => Map<string, number> },
   ) => unknown;
 }
 
@@ -318,7 +318,7 @@ export const TOOLS: Tool[] = [
     readOnly: true,
     run: (s, a, info) => {
       const p = s.project(a.project_key);
-      const waiting = new Set(info.waitingSessions?.());
+      const waiting = info.waitingSessions?.() ?? new Map<string, number>();
       const since =
         a.active_within_days === undefined
           ? 0
@@ -339,7 +339,10 @@ export const TOOLS: Tool[] = [
         last_active_ts: iso(r.last_active_ts),
         // Whether a wake hook or bridge is waiting on this server for the session's mail right now, and when its host
         // reported the session ended: a roster read from another machine cannot see either on its own.
-        waiting_for_mail: [r.session_id, r.t3_thread].some((id) => id && waiting.has(id)),
+        // A wait opened before the session's end was reported belongs to the ended session.
+        waiting_for_mail: [r.session_id, r.t3_thread].some(
+          (id) => id && (waiting.get(id) ?? 0) > (r.session_ended_ts ?? 0),
+        ),
         session_ended_at: iso(r.session_ended_ts),
       }));
     },
@@ -603,7 +606,15 @@ export const TOOLS: Tool[] = [
       mark_read: prop("boolean", "Default true. False previews without marking receipts read."),
     },
     required: ["host", "session_id"],
-    run: (s, a) => s.sessionInbox(a),
+    run: (s, a, info) => {
+      const rows = s.sessionInbox(a);
+      // Reading its own inbox, even an empty one, shows the session is back after a SessionEnd.
+      info.db.run("UPDATE agents SET session_ended_ts = NULL WHERE host = ? AND session_id = ?", [
+        a.host,
+        a.session_id,
+      ]);
+      return rows;
+    },
   },
   {
     name: "mark_message_read",
@@ -846,6 +857,10 @@ export const TOOLS: Tool[] = [
         "boolean",
         "Sent by the host's SessionEnd hook, so list_agents shows the session ended until you act again.",
       ),
+      session_id: prop(
+        "string",
+        "With session_ended: the ending session's ID. A report from a session that no longer holds this name is ignored.",
+      ),
     },
     required: ["project_key", "agent_name"],
     destructive: true,
@@ -857,7 +872,10 @@ export const TOOLS: Tool[] = [
       for (const r of rows) {
         s.release(r.id, now);
       }
-      if (a.session_ended === true) {
+      if (
+        a.session_ended === true &&
+        (a.session_id === undefined || a.session_id === who.session_id)
+      ) {
         info.db.run("UPDATE agents SET session_ended_ts = ? WHERE id = ?", [now, who.id]);
       }
       return { released: rows.length, released_at: iso(now) };
@@ -893,8 +911,8 @@ export function createTools(
     lifecycle?: Lifecycle;
     registry?: string;
     mutationsEnabled?: boolean;
-    /** The sessions with a wake wait open on this server. */
-    waitingSessions?: () => Iterable<string>;
+    /** The sessions with a wake wait open on this server, each with when that wait began (µs). */
+    waitingSessions?: () => Map<string, number>;
   },
 ): Record<string, (a: Args) => unknown> {
   const s = new MailStore(db, info.lifecycle, info.registry, info.mutationsEnabled);

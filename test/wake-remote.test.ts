@@ -146,6 +146,47 @@ test("the roster says whether a session is waiting for mail and whether its host
   expect((await listed()).session_ended_at).toBeNull();
 });
 
+test("a wait opened before the end report does not count, a later one does, and a stale report is ignored", async () => {
+  const waitOpen = () => {
+    const open = new AbortController();
+    const request = fetch(`${hub}/wait?session=s-1&timeout=5`, {
+      headers: { authorization: `Bearer ${TOKEN}` },
+      signal: open.signal,
+    }).catch(() => null);
+    return async () => {
+      open.abort();
+      await request;
+      await Bun.sleep(50);
+    };
+  };
+  const end = (extra: Record<string, unknown> = {}) =>
+    call("release_file_reservations", {
+      project_key: P,
+      agent_name: "GreenCastle",
+      session_ended: true,
+      ...extra,
+    });
+  const closeFirst = waitOpen();
+  await Bun.sleep(100);
+  await end();
+  expect(await listed()).toMatchObject({ waiting_for_mail: false });
+  expect((await listed()).session_ended_at).not.toBeNull();
+  const closeSecond = waitOpen();
+  await Bun.sleep(100);
+  expect(await listed()).toMatchObject({ waiting_for_mail: true });
+  await closeSecond();
+  await closeFirst();
+  // The agent acting again, here by reading its own inbox with nothing in it, clears the report.
+  await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
+  expect((await listed()).session_ended_at).toBeNull();
+  // An end reported by a session that no longer holds the name is not this session's end.
+  await end({ session_id: "an-earlier-session" });
+  expect((await listed()).session_ended_at).toBeNull();
+  await end({ session_id: "s-1" });
+  expect((await listed()).session_ended_at).not.toBeNull();
+  await call("fetch_session_inbox", { host: "claude", session_id: "s-1", limit: 1000 });
+});
+
 test("without the token those calls are refused instead of reading the hub's mail", async () => {
   const token = process.env.SWARMAIL_TOKEN_FILE;
   delete process.env.SWARMAIL_TOKEN_FILE;

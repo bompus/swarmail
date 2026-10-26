@@ -6,7 +6,7 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 - `list_agents` adds `waiting_for_mail` (a wake hook or bridge has a wait open on the server for the session) and
   `session_ended_at` (the session's SessionEnd hook reported it ended; the agent's next call clears it).
-  `release_file_reservations` takes `session_ended` for the hook to send. Against a remote server, `swarmail who`
+  `release_file_reservations` takes `session_ended` and `session_id` for the hook to send; a report from a session that no longer holds the name is ignored. Against a remote server, `swarmail who`
   uses them in place of a process check this machine cannot make. The mailbox schema moves to version 9.
 
 - Against a remote server, the `swarmail` command and the register hook name a project by the clone's `origin`

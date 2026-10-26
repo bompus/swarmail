@@ -208,6 +208,7 @@ export function createWaiters(
 ) {
   const { cursor, pending } = pendingMail(db, eligible);
   const waiting = new Map<string, (value: null | false) => void>();
+  const waitingSince = new Map<string, number>();
   const checks = new Map<string, () => void>();
   let scheduled = false;
 
@@ -228,6 +229,7 @@ export function createWaiters(
         signal?.removeEventListener("abort", stop);
         if (waiting.get(session) === done) {
           waiting.delete(session);
+          waitingSince.delete(session);
           checks.delete(session);
         }
         resolve(value);
@@ -250,6 +252,7 @@ export function createWaiters(
       const timeout = setTimeout(stop, timeoutMs);
       signal?.addEventListener("abort", stop);
       waiting.set(session, done);
+      waitingSince.set(session, nowUs());
       checks.set(session, check);
       if (signal?.aborted) {
         stop();
@@ -273,5 +276,5 @@ export function createWaiters(
     }, 0);
   }
 
-  return { wait, notify, peek: mailboxSnapshot(db), waiting: () => [...waiting.keys()] };
+  return { wait, notify, peek: mailboxSnapshot(db), waiting: () => new Map(waitingSince) };
 }

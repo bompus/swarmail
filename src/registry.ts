@@ -453,6 +453,7 @@ export function openRegistry<S extends RegisterState = RegisterState>(
           project_key: project,
           agent_name: name,
           session_ended: true,
+          session_id: sessionId,
         }),
       now = new Date(),
     ) {

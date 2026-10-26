@@ -1332,7 +1332,12 @@ test("SessionEnd tells the server the session ended, for a roster read from anot
     expect(calls).toEqual([
       {
         name: "release_file_reservations",
-        arguments: { project_key: "/a", agent_name: "TanOwl", session_ended: true },
+        arguments: {
+          project_key: "/a",
+          agent_name: "TanOwl",
+          session_ended: true,
+          session_id: "s1",
+        },
       },
     ]);
   } finally {
