@@ -107,7 +107,13 @@ export function guard(
     return 0;
   }
   const url = swarmailUrl(env);
-  const remote = !isLoopbackUrl(url);
+  let remote: boolean;
+  try {
+    remote = !isLoopbackUrl(url);
+  } catch {
+    console.error(`swarmail guard: ${url} is not a URL; this check was skipped.`);
+    return 0;
+  }
   // Sessions register under the primary checkout, whichever worktree they commit from; on a remote server the
   // project is the repository's name.
   const project = projectFor(cwd, url);

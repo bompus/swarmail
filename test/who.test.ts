@@ -554,6 +554,10 @@ test("a scan's tag takes a hook's branch, title and checkout even when the build
   );
   expect(parseTag(withDetailsOf(scan, unlinked))).toMatchObject({ t3: "t", branch: "feat/x" });
 
+  // T3 may report another directory than the one the hook was launched in.
+  const moved = sessionTag({ host: "claude", sessionId: "s", t3: "t" }, "/h/other", "/h");
+  expect(parseTag(withDetailsOf(moved, hook))).toMatchObject({ branch: "feat/x", cwd: "~/other" });
+
   // A launch path that looks like a detail is not one.
   const odd = sessionTag({ host: "claude", sessionId: "s", t3: "t" }, "/h/a branch:evil", "/h");
   expect(withDetailsOf(odd, odd)).toBe(odd);

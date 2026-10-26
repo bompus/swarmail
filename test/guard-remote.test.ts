@@ -113,6 +113,14 @@ test("the holder, a shared reservation and a warning-only guard let the commit t
   git("reset", "-q");
 });
 
+test("a hub address that is not a URL skips the check instead of failing the commit", async () => {
+  stage("src/a.ts");
+  const run = await guardRun({}, "hub.example.invalid");
+  expect(run.code).toBe(0);
+  expect(run.out).toContain("is not a URL");
+  git("reset", "-q");
+});
+
 test("a repository the hub has never seen has no reservations and prints nothing", async () => {
   git("remote", "set-url", "origin", "https://github.com/acme/unknown.git");
   stage("src/a.ts");
