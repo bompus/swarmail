@@ -130,7 +130,7 @@ test("removing a project removes the names that pointed at it", () => {
     tools.ensure_project({ human_key: "git:github.com/bompus/swarmail" });
     expect(db.query("SELECT count(*) AS n FROM project_aliases").get()).toEqual({ n: 1 });
     rmSync(hub, { recursive: true });
-    expect(pruneGoneProjects(db, { home: dir })).toBe(1);
+    expect(pruneGoneProjects(db, { home: realpathSync.native(dir) })).toBe(1);
     expect(db.query("SELECT count(*) AS n FROM project_aliases").get()).toEqual({ n: 0 });
   } finally {
     db.close();
