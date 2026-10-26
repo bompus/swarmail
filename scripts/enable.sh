@@ -35,4 +35,4 @@ if loginctl enable-linger "$USER" 2>/dev/null; then
 else
   echo "Could not enable linger; run: sudo loginctl enable-linger \"\$USER\"" >&2
 fi
-echo 'swarmail enabled on http://127.0.0.1:18765 (localhost only, no auth).'
+echo 'swarmail enabled on http://127.0.0.1:18765 (this address needs no token; the README says how to serve other machines).'

@@ -12,7 +12,7 @@
     "lint": "oxlint --deny-warnings .",
     "fmt": "bun fmt --no-script",
     "check:published": "bun scripts/check-published.ts",
-    "check": "bun scripts/check-release.ts && bun fmt --no-script --check && oxlint --deny-warnings . && bun run typecheck && bun run check:shell",
+    "check": "bun scripts/check-release.ts && bun scripts/check-public.ts && bun fmt --no-script --check && oxlint --deny-warnings . && bun run typecheck && bun run check:shell",
     "check:shell": "bun scripts/check-shell.ts"
   },
   "devDependencies": {

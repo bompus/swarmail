@@ -59,7 +59,8 @@ an older result with the version it was measured on.
   states the old fact: descriptions, plugin listings, banners and their alt
   text, the social preview, the GitHub repository description and the server
   instructions agents read. `bun run check` and `bun run check:published`
-  catch the wording in `scripts/lib/brand.ts`; add a phrase there when a
+  catch the wording listed in `scripts/lib/brand.ts` (`scripts/check-public.ts`
+  reads the files it names); add a phrase there when a
   change makes a new one stale.
 - The README, including every sentence that names a version, a count or a
   tested host, and its feature comparison.

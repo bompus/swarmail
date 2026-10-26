@@ -592,7 +592,7 @@ export const TOOLS: Tool[] = [
       "stop when fewer than limit messages return (default 20, capped at 1000), repeating only after a full page. " +
       "With mark_read:false or unread_only:false, this is a bounded preview, not a drain. " +
       "The CLI swarmail inbox --session discovers identity and drains without mailbox arguments. " +
-      "Swarmail is a trusted local service; session identity selects inboxes and is not authentication.",
+      "Session identity selects inboxes and is not authentication: whoever can reach the server can read any mailbox.",
     properties: {
       host: prop(
         "string",

@@ -1,7 +1,7 @@
 // Run after publishing, never in CI: asks GitHub, npm and the MCP registry which version each shows as latest and exits 1
 // unless all three show the version in package.json. A release that exists only on GitHub is incomplete, so this is what
 // CONTRIBUTING.md "Releasing" step 4 requires before a release is called done.
-//   bun scripts/check-published.ts [--version X.Y.Z] [--github URL] [--npm BASE_URL] [--registry URL]
+//   bun scripts/check-published.ts [--version X.Y.Z] [--github URL] [--npm BASE_URL] [--registry URL] [--repository URL]
 import { readFileSync } from "node:fs";
 import { STALE_SCOPE } from "./lib/brand.ts";
 
@@ -19,6 +19,7 @@ const server = read("server.json");
 const version: string = flags.get("--version") ?? core.version;
 const repo = new URL(server.repository.url).pathname.replace(/^\/|\.git$/g, "");
 const githubUrl = flags.get("--github") ?? `https://api.github.com/repos/${repo}/releases/latest`;
+const repositoryUrl = flags.get("--repository") ?? `https://api.github.com/repos/${repo}`;
 const npmUrl = `${flags.get("--npm") ?? "https://registry.npmjs.org"}/${relay.name}/latest`;
 const registryUrl =
   flags.get("--registry") ??
@@ -70,7 +71,7 @@ for (const [name, url, shown] of channels) {
 
 // The repository description is set by hand on GitHub, so nothing in the tree keeps it current.
 try {
-  const { description } = await get(`https://api.github.com/repos/${repo}`);
+  const { description } = await get(repositoryUrl);
   if (typeof description === "string" && STALE_SCOPE.test(description)) {
     problems.push(`GitHub repository description still reads "${description}"`);
   }

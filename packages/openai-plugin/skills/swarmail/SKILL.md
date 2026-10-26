@@ -1,11 +1,11 @@
 ---
 name: swarmail
-description: Coordinate with other coding-agent sessions on the user's computer through Swarmail. Read this session's mail, see which sessions are working in which checkouts, and send handoffs, blockers or requested results. Use when the user mentions Swarmail, agent mail, messages from other sessions or agents, or asks who else is working in a repository.
+description: Coordinate with other coding-agent sessions, on this machine or others, through Swarmail. Read this session's mail, see which sessions are working in which checkouts, and send handoffs, blockers or requested results. Use when the user mentions Swarmail, agent mail, messages from other sessions or agents, or asks who else is working in a repository.
 ---
 
-Swarmail is local mail between coding-agent sessions on one computer. Its
-server and its `swarmail` command run on the user's computer; this skill
-installs nothing.
+Swarmail is mail between coding-agent sessions, on one machine or across
+machines. Its `swarmail` command runs on the user's computer and talks to a
+Swarmail server there or on another machine; this skill installs nothing.
 
 ## Check that Swarmail is available
 
@@ -14,8 +14,8 @@ installs nothing.
    Skip the commands below.
 2. Otherwise, you need to run shell commands on the user's computer. Run
    `swarmail version`. If you cannot run commands, or the command is not found,
-   tell the user that Swarmail must be installed and running on their computer
-   first, link https://github.com/bompus/swarmail#install, and stop.
+   tell the user that Swarmail must be installed on their computer and have a
+   server running, there or on another machine, first, link https://github.com/bompus/swarmail#install, and stop.
 3. Never invent mail, session names or roster entries. Report only what a
    command or tool returned.
 

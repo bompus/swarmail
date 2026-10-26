@@ -5,10 +5,11 @@
 // Chrome's --force-device-scale-factor draws 2x text edges slightly unlike Playwright, which made the
 // committed banners; the 1x social preview comes out identical.
 // The social preview reaches GitHub only by a manual upload (see docs/assets/README.md).
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { CHIPS, FACTS, NAME, TAGLINE, assetSource } from "./lib/brand.ts";
+import { createHash } from "node:crypto";
+import { CHIPS, FACTS, IMAGES, NAME, TAGLINE, assetText } from "./lib/brand.ts";
 
 const chrome = process.env.CHROME;
 if (!chrome) {
@@ -109,8 +110,19 @@ try {
     }
     console.log(`wrote ${out}`);
   }
-  // Beside the images, so `bun run check` can tell when the text they show has changed since they were drawn.
-  writeFileSync(join(outDir, "source.json"), JSON.stringify(assetSource(), null, 2) + "\n");
+  // Beside the images, so `bun run check` can tell when the text or an image has changed since they were drawn.
+  const images = Object.fromEntries(
+    IMAGES.map((file) => [
+      file,
+      createHash("sha256")
+        .update(readFileSync(join(outDir, file)))
+        .digest("hex"),
+    ]),
+  );
+  writeFileSync(
+    join(outDir, "source.json"),
+    JSON.stringify({ ...assetText(), images }, null, 2) + "\n",
+  );
 } finally {
   rmSync(work, { recursive: true, force: true });
 }
