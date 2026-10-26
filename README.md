@@ -23,7 +23,9 @@
 swarmail lets coding-agent sessions on one machine send each other mail. Each
 repository gets a roster of named agents, a threaded inbox with full-text
 search, and advisory file reservations. Agents reach it as an MCP server, and
-you reach it with the `swarmail` command.
+you reach it with the `swarmail` command. Opt in, and one machine can also serve
+sessions on others over a private network, such as Tailscale; see
+[Using it from another machine](#using-it-from-another-machine).
 
 Find Swarmail on [Glama](https://glama.ai/mcp/servers/bompus/swarmail) and
 [MCPRush](https://mcprush.com/aaron-queen/swarmail-mcp).
@@ -103,8 +105,9 @@ Cursor's PowerShell form against a real server. On Windows 11, headless
 hooks and used the MCP tools. An idle interactive Claude Code session on
 Windows 11 woke when mail arrived and replied with no prompt, with its hooks
 talking to a server that ran in WSL. Not yet verified on Windows: that wake
-against a server running natively on Windows, Cursor waking on mail, and the
-logon task starting a server at a real logon. If something fails there,
+against a server running natively on Windows, Cursor waking on mail, the logon
+task starting a server at a real logon, and the `swarmail` command and hooks
+against a server on another machine. If something fails there,
 please open an issue.
 
 1. Clone and install the dev tools:
@@ -308,10 +311,18 @@ server refuses to give a retired session's name to a different session; the hook
 takes a fresh name. Two sessions that carry the same name into a repository's project
 at the same moment can still collide, because the hook reads the roster before it registers.
 
+Checked so far: on 2026-10-26 a Windows 11 PC reached a Linux hub over Tailscale
+and passed ten checks: the token is required, a session registers by repository
+name and shares the hub clone's project, mail goes both ways, a reply wakes a
+waiting session, and the roster shows it waiting and then ended. That run
+called the server's HTTP interface from a script. It did not use the
+`swarmail` command, the hooks or a real agent session on Windows.
+
 What does not carry over yet:
 
 - The server reads branch and session titles from its own machine, so a remote
-  session appears without a branch or title. `swarmail who` shows a remote
+  session appears without a branch or title.
+- `swarmail who` shows a remote
   session as alive ("waiting for mail on the server") only while a wake hook or
   bridge of that session has a wait that began after its last end report, and as
   ended after the session's SessionEnd hook reports it, until the session acts
@@ -467,7 +478,7 @@ wake an idle session.
 
 Measured on 2026-10-04 at
 [`67e187a`](https://github.com/bompus/swarmail/tree/67e187a6b4beb7319c6ab30466448742297e2a01).
-These results come from a commit six commits before the 0.2.0 tag and have not been remeasured for 0.2.0 or any later release (through 0.6.0).
+These results come from a commit six commits before the 0.2.0 tag and have not been remeasured for 0.2.0 or any later release (through 0.7.0).
 The measurements used one machine with one small workload (40 agents, 250 seed messages,
 1,560 messages by the end). Each server started on empty storage. Startup is
 hyperfine's mean of 20 runs; every other number is the median of three rounds,

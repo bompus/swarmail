@@ -19,7 +19,7 @@ const outDir = resolve(process.argv[2] ?? "docs/assets");
 const NAME = "swarmail";
 const TAGLINE = "Local mail between coding-agent sessions on one machine";
 const CHIPS = ["MCP server", "Threaded inbox and search", "File reservations", "Wake on mail"];
-const FACTS = "One Bun binary · SQLite · localhost only · MIT";
+const FACTS = "One Bun binary · SQLite · localhost by default · MIT";
 
 const BASE_CSS = `
   *{box-sizing:border-box;margin:0;padding:0}

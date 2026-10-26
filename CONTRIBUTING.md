@@ -152,7 +152,7 @@ fails until every folder in `packages/` is named in this section.
   portal takes it. The upload also asked for a terms of service URL, which the
   package lacks, and for listing text that names no other AI assistant or
   platform, which `plugin.json` does not yet meet. Swarmail cannot take the
-  remote-server route, because it is local only.
+  remote-server route, because it is software you run yourself, not a hosted server.
   It does not follow this repository: when the skill, icon or listing text in
   `plugin.json` changes, raise its `version` and upload a new ZIP. Releases need
   no change otherwise. Its privacy policy link points at `PRIVACY.md`.
