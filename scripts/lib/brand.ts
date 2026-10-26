@@ -1,7 +1,7 @@
 // What the banners, the social preview and every public description say Swarmail is. One definition, so the renderer
 // and `bun run check` (scripts/check-release.ts) cannot disagree about it.
 export const NAME = "swarmail";
-export const TAGLINE = "Mail between coding-agent sessions, on one machine or several";
+export const TAGLINE = "Mail between coding-agent sessions, on one machine or across machines";
 export const CHIPS = [
   "MCP server",
   "Threaded inbox and search",
@@ -13,7 +13,7 @@ export const FACTS = "One Bun binary · SQLite · localhost by default · MIT";
 /**
  * Wording from when Swarmail served one machine only. `bun run check` rejects it in the public files below, and
  * `bun run check:published` in the repository's GitHub description. "On one machine by default" and "on one machine
- * or several" are true and pass.
+ * or across machines" are true and pass.
  */
 export const STALE_SCOPE =
   /\blocal mail\b|running on this machine|\bon one machine\b(?! (?:or|by default))/i;

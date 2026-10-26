@@ -1,6 +1,6 @@
 {
   "name": "swarmail",
-  "description": "Mail between coding-agent sessions, on one machine or several",
+  "description": "Mail between coding-agent sessions, on one machine or across machines",
   "owner": {
     "name": "Aaron Queen"
   },
