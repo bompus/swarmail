@@ -442,3 +442,16 @@ test("who asks git about a thread directory once however many threads share it",
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a roster from a remote server reports unread mail as unknown, not zero", () => {
+  const roster = [{ name: "TanOwl", task_description: "" }];
+  const rows = (queues: Map<string, { unread: number; oldest: string | null }> | null) =>
+    whoRows(
+      { project: "/r", roster, stateDir: "/nonexistent", threads: new Map(), room: null, queues },
+      () => null,
+      () => true,
+    );
+  expect(rows(null)[0]!.unread).toBeNull();
+  expect(rows(new Map())[0]!.unread).toBe(0);
+  expect(rows(new Map([["TanOwl", { unread: 2, oldest: null }]]))[0]!.unread).toBe(2);
+});

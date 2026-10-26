@@ -293,6 +293,13 @@ What does not carry over yet:
   liveness checks do not see it.
 - Wake hooks and bridges do not send the token, so mail to a remote session
   is read when that session checks its inbox.
+- `swarmail who` shows no unread counts for a remote server, because it counts
+  them in this machine's database.
+- The git guard checks this machine's database, so file reservations held on the
+  hub do not block a commit or push made on another machine.
+- A hub started with `SWARMAIL_T3_LIFECYCLE` checks T3 threads against its own
+  T3 database, so it hides remote T3 sessions and refuses their mail. Leave it
+  unset on a hub that serves remote T3 sessions.
 
 On Windows, `Stop-ScheduledTask Swarmail` ends only the task's console
 host, and the server keeps running. To stop the server for good, run

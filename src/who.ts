@@ -11,7 +11,7 @@
 // Without --all, rows with no live host process or running T3 Code thread and no activity in the last day are left out.
 // Names this session registered under (selfNames in registry.ts) are marked "(you)", and `self` in --json.
 
-import { databasePath, homeDir, t3Home, tildePath } from "./paths.ts";
+import { databasePath, homeDir, isLoopbackUrl, swarmailUrl, t3Home, tildePath } from "./paths.ts";
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
@@ -63,7 +63,8 @@ export interface WhoRow {
   roomOwner: boolean;
   task: string;
   sameSessionAs: string[];
-  unread: number;
+  /** Null when the roster came from a remote server, whose unread counts this machine's database cannot give. */
+  unread: number | null;
   oldestUnread: string | null;
 }
 
@@ -228,7 +229,7 @@ export function whoRows(
     stateDir: string;
     threads: Map<string, T3Thread>;
     room: LiveRoom | null;
-    queues?: Map<string, Queue>;
+    queues?: Map<string, Queue> | null;
     checkout?: (dir: string) => string | null;
   },
   threadOf = t3ThreadId,
@@ -265,8 +266,8 @@ export function whoRows(
       roomOwner,
       task: withoutTag(agent.task_description),
       sameSessionAs: [],
-      unread: queues.get(agent.name)?.unread ?? 0,
-      oldestUnread: queues.get(agent.name)?.oldest ?? null,
+      unread: queues ? (queues.get(agent.name)?.unread ?? 0) : null,
+      oldestUnread: queues?.get(agent.name)?.oldest ?? null,
     };
   });
   fillNativeTitles(rows, roster, states, project);
@@ -301,7 +302,7 @@ export function whoRows(
       roomOwner: false,
       task: "not in visible roster; registration and delivery unknown",
       sameSessionAs: [],
-      unread: 0,
+      unread: queues ? 0 : null,
       oldestUnread: null,
     });
   }
@@ -321,13 +322,15 @@ export function main(args: string[]): void {
   const roster = callTool("list_agents", { project_key: project, limit: 1000 }) as RosterAgent[];
   const home = homeDir();
   const now = Date.now();
+  // Unread counts come from this machine's database, which is not the remote server's.
+  const remote = !isLoopbackUrl(swarmailUrl());
   const rows = whoRows({
     project,
     roster,
     stateDir: registryDir(),
     threads: t3Threads(t3StatePath(t3Home())),
     room: liveRoom(process.env.SWARMAIL_LIVE_ROOM || null),
-    queues: unreadQueues(dbPath, project),
+    queues: remote ? null : unreadQueues(dbPath, project),
   }).filter(
     (row) =>
       all ||
@@ -342,6 +345,9 @@ export function main(args: string[]): void {
     return;
   }
   console.log(`${basename(project)} (${project}), ${new Date(now).toISOString()}`);
+  if (remote) {
+    console.log("unread counts are not shown for a remote server");
+  }
   for (const row of rows) {
     const who =
       row.name === null
