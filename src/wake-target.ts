@@ -88,9 +88,20 @@ export function serverHeaders(
   }
 }
 
-/** A server that answers 401 or 403 rejects the token, which no retry fixes and every thread shares. */
-export function rejectedToken(status: number): void {
+/**
+ * A server that answers 401 or 403 rejects the token, which no retry fixes and every thread shares. When the token
+ * file changed while the request was in flight, the rejection was of the old token, and the retry sends the new one.
+ */
+export function rejectedToken(
+  status: number,
+  sent: Record<string, string>,
+  base: string,
+  env: NodeJS.ProcessEnv = process.env,
+): void {
   if (status === 401 || status === 403) {
+    if (serverHeaders(base, env).authorization !== sent.authorization) {
+      throw new BridgeError("the token file changed during the request; retrying", true);
+    }
     throw new TargetAuthenticationError(
       `Swarmail refused the request (HTTP ${status}); SWARMAIL_TOKEN_FILE must hold this server's token`,
     );

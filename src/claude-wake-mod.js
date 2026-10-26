@@ -216,6 +216,7 @@ export function register(on) {
     const wakeUrl = (await $.env.get("SWARMAIL_WAKE_URL")) || "http://127.0.0.1:18765";
     if (!isLoopback(wakeUrl)) {
       generation++; // Ends a chain this session's earlier start began.
+      held = null; // A hint it held must not start a turn after the hand-over.
       await $.env.set("SWARMAIL_WAKE_MOD", "0"); // An inherited "1" would stop the hooks too.
       return next(e);
     }

@@ -23,7 +23,7 @@ export async function ensureWakeEligible(
         : AbortSignal.timeout(2000),
       redirect: "error",
     });
-    rejectedToken(response.status);
+    rejectedToken(response.status, headers, base, env);
     if (!response.ok || ((await response.json()) as { eligible?: unknown }).eligible !== true) {
       throw new Error("held");
     }

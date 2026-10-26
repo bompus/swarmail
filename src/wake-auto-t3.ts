@@ -472,9 +472,10 @@ export function lifecycleReconciliation(swarmailUrl: string, signal: AbortSignal
   return async () => {
     let reason: string | undefined;
     try {
+      const sent = serverHeaders(swarmailUrl);
       const response = await fetch(new URL("/lifecycle/reconcile", swarmailUrl), {
         method: "POST",
-        headers: serverHeaders(swarmailUrl),
+        headers: sent,
         redirect: "error",
         signal: AbortSignal.any([signal, AbortSignal.timeout(2000)]),
       });
@@ -486,7 +487,7 @@ export function lifecycleReconciliation(swarmailUrl: string, signal: AbortSignal
           reason = "unexpected response";
         }
       } else {
-        rejectedToken(response.status);
+        rejectedToken(response.status, sent, swarmailUrl);
         reason = `HTTP ${response.status}`;
       }
     } catch (error) {

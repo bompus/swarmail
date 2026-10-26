@@ -299,16 +299,17 @@ async function waitForMail(
         if (!health.ok) {
           throw new Error(`healthz ${health.status}`);
         }
+        const sent = serverHeaders(base, env); // Read per attempt, so a rotated token file is picked up.
         const res = await fetch(
           `${base}/wait?session=${sid}&timeout=${left}${delivery?.query() ?? retry}`,
           {
-            headers: serverHeaders(base, env), // Read per attempt, so a rotated token file is picked up.
+            headers: sent,
             redirect: "error",
             signal: AbortSignal.any([request.signal, AbortSignal.timeout((left + 5) * 1000)]),
           },
         );
         retry = "";
-        rejectedToken(res.status);
+        rejectedToken(res.status, sent, base, env);
         // 200 carries the hint, and an HTTP error (409: a newer wait replaced this one) ends the hook too.
         // 204 ends one wait; the loop waits again until the hook's own time is up.
         if (res.status === 200) {
@@ -403,7 +404,7 @@ async function nativeContextHint(sid: string, env: NodeJS.ProcessEnv): Promise<s
       signal: AbortSignal.timeout(1500),
       redirect: "error",
     });
-    rejectedToken(response.status);
+    rejectedToken(response.status, headers, url.origin, env);
     return response.status === 200
       ? await delivery.receive(response, () =>
           ensureWakeEligible(wakeUrl(env), sid, undefined, env),

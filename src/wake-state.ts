@@ -182,7 +182,7 @@ export async function waitForOffer(
   if (response.status === 204) {
     return null;
   }
-  rejectedToken(response.status);
+  rejectedToken(response.status, headers, config.swarmailUrl);
   if (!response.ok) {
     throw new BridgeError(`Swarmail HTTP ${response.status}`, response.status >= 500);
   }
@@ -219,7 +219,7 @@ export async function peekUnreadMailboxes(
       signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
       redirect: "error",
     });
-    rejectedToken(response.status);
+    rejectedToken(response.status, headers, config.swarmailUrl);
     if (!response.ok || !response.headers.get("content-type")?.startsWith("application/json")) {
       throw new Error("snapshot unavailable");
     }

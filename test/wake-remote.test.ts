@@ -434,3 +434,29 @@ test("a server that rejects the token is an authentication failure, not a hold t
     await rejecting.stop(true);
   }
 });
+
+test("a rejection of a token that has since been replaced is retried, not fatal", async () => {
+  const file = join(dir, "replaced-token");
+  writeFileSync(file, `${"c".repeat(40)}\n`);
+  const rotating = Bun.serve({
+    hostname: REMOTE,
+    port: 0,
+    fetch() {
+      writeFileSync(file, `${"d".repeat(40)}\n`);
+      return new Response("no", { status: 401 });
+    },
+  });
+  const token = process.env.SWARMAIL_TOKEN_FILE;
+  process.env.SWARMAIL_TOKEN_FILE = file;
+  try {
+    const held = await ensureWakeEligible(`http://${REMOTE}:${rotating.port}`, "s-1").then(
+      () => null,
+      (error: { retryable?: boolean }) => error,
+    );
+    expect(held).not.toBeInstanceOf(TargetAuthenticationError);
+    expect(held?.retryable).toBe(true);
+  } finally {
+    process.env.SWARMAIL_TOKEN_FILE = token;
+    await rotating.stop(true);
+  }
+});

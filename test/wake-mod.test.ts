@@ -298,6 +298,20 @@ test("a wait already running when the mod stands down for a remote server starts
   expect(s.timers).toEqual([]);
 });
 
+test("a hint held when the mod stands down for a remote server is not submitted afterwards", async () => {
+  const s = session();
+  await s.start();
+  await s.turnStart();
+  s.state.responses.push(hint(42));
+  await s.tick();
+  await s.turnComplete();
+  const remote = session({ home: { HOME: "/h", SWARMAIL_WAKE_URL: "http://100.64.0.5:18765" } });
+  s.state.statusRead = () => remote.start();
+  s.timers.shift()!.fn();
+  await Bun.sleep(20);
+  expect(s.state.submitted).toEqual([]);
+});
+
 test("held hints survive inactive lifecycle and deliver after reopen without early acknowledgment", async () => {
   const s = session();
   await s.start();
