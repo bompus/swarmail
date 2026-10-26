@@ -632,7 +632,12 @@ test("unavailable or malformed snapshots retain the pending offer and queued not
     () => Response.json({ mailboxes: [{ recipient: "BlueLake" }] }),
     () => Response.json({ mailboxes: [null] }),
     () =>
-      Response.json({ mailboxes: Array(1001).fill({ recipient: "BlueLake", project: "repo-a" }) }),
+      Response.json({
+        mailboxes: Array.from({ length: 1001 }, () => ({
+          recipient: "BlueLake",
+          project: "repo-a",
+        })),
+      }),
     () =>
       Response.json({
         mailboxes: [

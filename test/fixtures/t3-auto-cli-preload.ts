@@ -17,7 +17,9 @@ if (scanUrl) {
   const timeout = setTimeout;
   (globalThis as any).setTimeout = (fn: (...args: any[]) => void, ms: number, ...args: any[]) =>
     ms === 2000
-      ? timeout(() => fetch(scanUrl).then(() => fn(...args)), 0)
+      ? timeout(() => {
+          void fetch(scanUrl).then(() => fn(...args));
+        }, 0)
       : timeout(fn, ms, ...args);
   (Bun as any).sleep = (ms: number) => {
     if (

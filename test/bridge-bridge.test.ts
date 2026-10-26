@@ -417,7 +417,7 @@ for (const boundary of ["mail", "target"]) {
       });
       socket.on("close", () => sockets.delete(socket));
       let input = "";
-      socket.on("data", async (chunk: Buffer) => {
+      const forward = async (chunk: Buffer) => {
         input += chunk.toString();
         const split = input.indexOf("\r\n\r\n");
         if (split < 0) {
@@ -472,6 +472,9 @@ for (const boundary of ["mail", "target"]) {
             "\r\n" +
             body,
         );
+      };
+      socket.on("data", (chunk: Buffer) => {
+        void forward(chunk);
       });
     });
     await new Promise<void>((resolve) => proxy.listen(0, "127.0.0.1", resolve));

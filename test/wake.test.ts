@@ -109,6 +109,7 @@ async function waiting(pid?: number) {
       existsSync(join(dir, "state/swarmail-wake/s-1"))
         ? readFileSync(join(dir, "state/swarmail-wake/s-1"), "utf8")
         : "",
+      10,
     );
     if (found && (pid === undefined || found === pid)) {
       return found;
@@ -281,10 +282,10 @@ test("the shell-free re-arm starts a wait only for a registered session with no 
   const waits = rearm({}, ["rearm;", "exit", "$LASTEXITCODE"]);
   // The wait writes its PID file only after it reads its host's command line, which on Windows starts
   // PowerShell: normally about a second, but a loaded runner has taken longer than 5 s.
-  for (let i = 0; i < 150 && parseInt(readFileSync(pidFile, "utf8")) !== waits.pid; i++) {
+  for (let i = 0; i < 150 && parseInt(readFileSync(pidFile, "utf8"), 10) !== waits.pid; i++) {
     await Bun.sleep(100);
   }
-  expect(parseInt(readFileSync(pidFile, "utf8"))).toBe(waits.pid);
+  expect(parseInt(readFileSync(pidFile, "utf8"), 10)).toBe(waits.pid);
   await send("GreenCastle");
   expect(await waits.exited).toBe(2);
   expect(await new Response(waits.stderr).text()).toBe("Swarmail: run swarmail inbox --session.\n");
@@ -469,7 +470,7 @@ for (const [name, hook] of Object.entries(HOOKS)) {
       const newer = start();
       try {
         expect(await older.exited).toBe(0);
-        expect(parseInt(readFileSync(pidFile, "utf8"))).toBe(newer.pid);
+        expect(parseInt(readFileSync(pidFile, "utf8"), 10)).toBe(newer.pid);
         await send("GreenCastle");
         expect(await newer.exited).toBe(2);
         expect(existsSync(pidFile)).toBe(false);
