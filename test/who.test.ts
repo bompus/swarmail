@@ -455,3 +455,30 @@ test("a roster from a remote server reports unread mail as unknown, not zero", (
   expect(rows(new Map())[0]!.unread).toBe(0);
   expect(rows(new Map([["TanOwl", { unread: 2, oldest: null }]]))[0]!.unread).toBe(2);
 });
+
+test("a remote roster ignores sessions registered with the local server", () => {
+  const dir = mkdtempSync(join(tmpdir(), "who-server-"));
+  try {
+    writeFileSync(
+      join(dir, "c583.json"),
+      JSON.stringify({
+        name: "TanOwl",
+        projects: ["/a"],
+        host: { name: "claude", pid: 7, start: "1" },
+      }),
+    );
+    const roster = [
+      { name: "TanOwl", task_description: "", last_active_ts: "2026-09-26T05:47:00Z" },
+    ];
+    const at = (server: string) =>
+      whoRows(
+        { project: "/a", roster, stateDir: dir, threads: new Map(), room: null, server },
+        () => null,
+        () => true,
+      )[0]!.sessionId;
+    expect(at("http://127.0.0.1:18765/mcp/")).toBe("c583");
+    expect(at("http://100.64.0.1:18765/mcp/")).toBeNull();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

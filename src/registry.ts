@@ -475,7 +475,9 @@ function hostProvider(host: { name?: string } | null): string | undefined {
  * whatever its port, and state from before the URL was recorded belongs to it.
  */
 export const sameServer = (recorded: string | undefined, current: string): boolean =>
-  recorded === undefined || isLoopbackUrl(recorded) ? isLoopbackUrl(current) : recorded === current;
+  recorded === undefined || isLoopbackUrl(recorded)
+    ? isLoopbackUrl(current)
+    : recorded.replace(/\/+$/, "") === current.replace(/\/+$/, "");
 
 export function selfNames(
   env: NodeJS.ProcessEnv = process.env,

@@ -228,6 +228,8 @@ test("a name registered with one server is not this session's name at another", 
   writeFileSync(join(state, "a.json"), JSON.stringify({ name: "GreenLake", host, server: remote }));
   const at = (url: string) => [...selfNames({ ...env, SWARMAIL_URL: url }, host)];
   expect(at(remote)).toEqual(["GreenLake"]);
+  // The server accepts the path with or without its trailing slash.
+  expect(at(remote.replace(/\/$/, ""))).toEqual(["GreenLake"]);
   expect(at("http://127.0.0.1:18765/mcp/")).toEqual([]);
   expect(at("http://localhost:9/mcp/")).toEqual([]);
   // State from before the URL was recorded belongs to the local server.

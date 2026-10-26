@@ -311,8 +311,10 @@ What does not carry over yet:
   a project name, because it cannot list the server's projects.
 - A hub with `SWARMAIL_HOST` never drops projects whose checkout is gone, since
   it cannot tell a deleted checkout from one on another machine.
-- The git guard checks this machine's database, so file reservations held on the
-  hub do not block a commit or push made on another machine.
+- The git guard checks this machine's database and the names a session holds on
+  this machine's server, so file reservations held on the hub do not block a
+  commit or push made on another machine, and a session registered only with the
+  hub is never treated as the holder of a local reservation.
 - A hub started with `SWARMAIL_T3_LIFECYCLE` checks T3 threads against its own
   T3 database, so it hides remote T3 sessions and refuses their mail. Leave it
   unset on a hub that serves remote T3 sessions.

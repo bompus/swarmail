@@ -21,7 +21,14 @@ import { primaryCheckout } from "./checkout.ts";
 import { location, locationLabel, type Location } from "./location.ts";
 import { callTool } from "./client.ts";
 import { hostAlive } from "./proc.ts";
-import { nameIn, openRegistry, registryDir, selfNames, type RegisterState } from "./registry.ts";
+import {
+  nameIn,
+  openRegistry,
+  registryDir,
+  sameServer,
+  selfNames,
+  type RegisterState,
+} from "./registry.ts";
 import { t3StatePath, t3ThreadId, t3Threads, type T3Thread } from "./t3-state.ts";
 import { leadingTag, parseTag, withoutTag } from "./tag.ts";
 import { nativeTitles } from "./native-titles.ts";
@@ -223,6 +230,7 @@ export function whoRows(
     room,
     queues = new Map(),
     checkout = primaryCheckout,
+    server = swarmailUrl(),
   }: {
     project: string;
     roster: RosterAgent[];
@@ -231,11 +239,15 @@ export function whoRows(
     room: LiveRoom | null;
     queues?: Map<string, Queue> | null;
     checkout?: (dir: string) => string | null;
+    server?: string;
   },
   threadOf = t3ThreadId,
   alive = hostAlive,
 ): WhoRow[] {
-  const states = openRegistry(stateDir).all();
+  // Sessions registered with another server say nothing about this roster.
+  const states = openRegistry(stateDir)
+    .all()
+    .filter((state) => sameServer(state.server, server));
   const rows = roster.map((agent): WhoRow => {
     const tag = parseTag(agent.task_description);
     const sessionId = tag?.sessionId ?? sessionNamed(states, project, agent.name) ?? null;
