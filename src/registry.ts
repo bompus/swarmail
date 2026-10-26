@@ -10,6 +10,7 @@ import {
   openSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -34,6 +35,8 @@ export interface RegisterState {
   host?: HostProcess | null;
   /** When the host reported the session ended (SessionEnd); its next prompt or edit clears it. */
   ended?: string;
+  /** The server URL it registered with; the hook starts over when the URL changes, as names belong to one server. */
+  server?: string;
   /** The T3 thread whose automatic bridge (wake-auto-t3.ts) owns this session's wake; set when its registration settles. */
   wakeThread?: string;
 }
@@ -305,6 +308,8 @@ export interface Registry<S extends RegisterState = RegisterState> {
    * name stays registered: a resumed session keeps its session id, and with it its name.
    */
   end(sessionId: string, release?: (project: string, name: string) => unknown, now?: Date): void;
+  /** Drops the session's state, so its next edit registers afresh. */
+  forget(sessionId: string): void;
   /** Deletes registrations whose session ended more than `days` ago; returns how many. */
   prune(days?: number, now?: number): number;
 }
@@ -407,6 +412,10 @@ export function openRegistry<S extends RegisterState = RegisterState>(
         result = { before, after };
       });
       return result;
+    },
+
+    forget(sessionId) {
+      locked(sessionId, (file) => rmSync(file, { force: true }));
     },
 
     resume(sessionId, since) {

@@ -10,6 +10,7 @@
 import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { primaryCheckout, worktreeRoot } from "./checkout.ts";
+import { swarmailUrl } from "./client.ts";
 import { hostProcess, sameHost } from "./proc.ts";
 import { nameIn, openRegistry, serverRegister, type Session } from "./registry.ts";
 import { sessionTag, SESSION_ENV } from "./tag.ts";
@@ -188,6 +189,13 @@ function main(input: HookInput): string {
     return "";
   }
   const registry = openRegistry();
+  // Names belong to one server. State recorded against another server would skip registering here, or reuse a name
+  // that another session holds on this server. State from before the server was recorded is kept.
+  const server = swarmailUrl();
+  const earlier = registry.read(sessionId);
+  if (earlier?.server !== undefined && earlier.server !== server) {
+    registry.forget(sessionId);
+  }
   const settle = (project: string, tag: string, worktree?: string): string => {
     const register = serverRegister(session, tag, undefined, worktree);
     const settled = registry.settle(sessionId, {
@@ -196,7 +204,7 @@ function main(input: HookInput): string {
       tag,
       worktree,
       register,
-      extra: { host: hostProcess() },
+      extra: { host: hostProcess(), server },
     });
     if (settled?.after.pending?.project === project) {
       return failureNotice(project, tag, register.refusal);

@@ -1134,3 +1134,39 @@ test("SessionEnd records the end and releases reservations in each project, keep
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("a session whose hook now talks to a different server registers there afresh", async () => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-server-")));
+  const first = fakeMail((name) => (name === "list_agents" ? [] : { name: "BlueLake" }));
+  const second = fakeMail((name) => (name === "list_agents" ? [] : { name: "RedPine" }));
+  try {
+    const repo = join(dir, "repo");
+    Bun.spawnSync(["git", "init", "-q", repo]);
+    const input = JSON.stringify({
+      session_id: "move-1",
+      cwd: repo,
+      tool_input: { file_path: join(repo, "a.txt") },
+    });
+    const script = join(import.meta.dir, "../src/cli.ts");
+    const runAgainst = async (mail: { url: string }) =>
+      await Bun.spawn(["bun", script, "register"], {
+        stdin: new Blob([input]),
+        env: { ...process.env, SWARMAIL_URL: mail.url, XDG_STATE_HOME: join(dir, "state") },
+      }).exited;
+    await runAgainst(first);
+    await runAgainst(first);
+    expect(first.calls.filter((call) => call.name === "register_agent")).toHaveLength(1);
+    await runAgainst(second);
+    const registered = second.calls.filter((call) => call.name === "register_agent");
+    expect(registered).toHaveLength(1);
+    // The first server's name belongs to the first server.
+    expect(registered[0]!.arguments.name).toBeUndefined();
+    expect(
+      JSON.parse(readFileSync(join(dir, "state/swarmail-register/move-1.json"), "utf8")).name,
+    ).toBe("RedPine");
+  } finally {
+    await first.stop();
+    await second.stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

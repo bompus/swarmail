@@ -270,3 +270,14 @@ test("a hub with a remote listener keeps a project whose checkout it cannot find
   expect(await survives("local.sqlite3")).toBe(false);
   expect(await survives("hub.sqlite3", { hostname: REMOTE, token: TOKEN })).toBe(true);
 });
+
+test("the overdue command refuses to run against a remote server", async () => {
+  const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "overdue", "--dry-run"], {
+    env: { ...process.env, SWARMAIL_URL: `http://${REMOTE}:${server.port}/mcp/` },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const err = await new Response(proc.stderr).text();
+  expect(await proc.exited).toBe(2);
+  expect(err).toContain("remote server");
+});

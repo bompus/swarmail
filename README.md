@@ -255,12 +255,19 @@ user environment (`setx SWARMAIL_PORT 18865`) at the next logon.
 
 By default the server listens on `127.0.0.1` only. To let sessions on another
 machine use it, make one machine the hub and give it a second listener on a
-private-network address:
+private-network address. Create the token, then set the two variables for the
+server you already run and restart it:
 
 ```bash
 umask 077 && head -c 32 /dev/urandom | base64 | tr -d '\n=+/' > ~/.config/swarmail-token
-SWARMAIL_HOST=$(tailscale ip -4) SWARMAIL_TOKEN_FILE=~/.config/swarmail-token swarmail serve
+systemctl --user edit swarmail   # under [Service]: Environment=SWARMAIL_HOST=<tailscale ip -4>
+                                 #                   Environment=SWARMAIL_TOKEN_FILE=%h/.config/swarmail-token
+systemctl --user restart swarmail
 ```
+
+On Windows set the two variables in your user environment and sign in again.
+A second `swarmail serve` started by hand fails while the installed one holds
+`127.0.0.1:18765`, so stop the service first if you run it that way.
 
 The loopback listener is unchanged, so local hosts and hooks keep working without
 a token, and the command and register hook send the token only to a URL that is
@@ -293,6 +300,11 @@ What does not carry over yet:
   liveness checks do not see it.
 - Wake hooks and bridges do not send the token, so mail to a remote session
   is read when that session checks its inbox.
+- `swarmail overdue` refuses to run against a remote server, because it reads
+  this machine's records; run it on the hub.
+- A session that starts a hook against a different server than it registered
+  with registers again there, and leaves its old name on the first server until
+  that server retires it.
 - `swarmail who` shows no unread counts for a remote server, because it counts
   them in this machine's database, and it takes a path inside the checkout, not
   a project name, because it cannot list the server's projects.
