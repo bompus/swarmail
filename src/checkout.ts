@@ -34,7 +34,7 @@ export function worktreeRoot(dir: string): string | null {
 export const REPOSITORY_PREFIX = "git:";
 
 /**
- * The name a git remote URL gives its repository, the same from every clone and every protocol: `git:host/owner/repo`
+ * The name a git remote URL gives its repository, the same from every clone and every protocol, in lower case: `git:host/owner/repo`
  * for https://host/owner/repo.git, ssh://git@host:22/owner/repo and git@host:owner/repo.git. Null for a URL with no
  * host, such as a path on this machine.
  */
@@ -55,13 +55,13 @@ export function repositoryName(remote: string): string | null {
     }
   }
   path = path.replace(/^\/+|\/+$/g, "").replace(/\.git$/i, "");
-  return host && path ? `${REPOSITORY_PREFIX}${host.toLowerCase()}/${path}` : null;
+  return host && path ? `${REPOSITORY_PREFIX}${host}/${path}`.toLowerCase() : null;
 }
 
-/** The repository name of the clone holding `dir`, from its `origin` remote; null without one. */
+/** The repository name of the clone holding `dir`, from the URL git uses for its `origin` remote; null without one. */
 export function repositoryKey(dir: string, run: (args: string[]) => string = git): string | null {
   try {
-    return repositoryName(run(["-C", dir, "config", "--get", "remote.origin.url"]));
+    return repositoryName(run(["-C", dir, "remote", "get-url", "origin"]));
   } catch {
     return null;
   }

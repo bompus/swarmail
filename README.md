@@ -290,9 +290,11 @@ A host that connects to MCP over HTTP itself needs the same `Authorization`
 header in its server entry, or `swarmail-mcp` as a relay.
 
 Against a remote server a project is named by the repository, not by a path:
-the `origin` URL of the clone, written `git:host/owner/repo` whatever the
-protocol (`https://github.com/bompus/swarmail.git` and
-`git@github.com:bompus/swarmail.git` are the same repository). When the hub holds
+the URL git uses for the clone's `origin` remote, written `git:host/owner/repo` in
+lower case whatever the protocol (`https://github.com/bompus/swarmail.git` and
+`git@github.com:bompus/swarmail.git` are the same repository). Only the host and
+path count: the user, port, `.git` suffix and a leading slash are ignored, and a
+`url.<base>.insteadOf` rewrite is applied first. When the hub holds
 a clone of that repository, its project is the remote sessions' project too, so
 both machines share one roster, mail and set of reservations. If the hub meets
 the clone later, its project takes over the one the remote sessions created. A hub

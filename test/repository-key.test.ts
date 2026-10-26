@@ -11,7 +11,7 @@ import { createTools } from "../src/tools.ts";
 test("every clone and protocol of a repository names it the same", () => {
   const same = [
     "https://github.com/bompus/swarmail.git",
-    "https://user:token@GitHub.com/bompus/swarmail",
+    "https://user:token@GitHub.com/Bompus/SwarmAil",
     "git@github.com:bompus/swarmail.git",
     "ssh://git@github.com:22/bompus/swarmail/",
     "git://github.com/bompus/swarmail.git",
@@ -132,6 +132,67 @@ test("removing a project removes the names that pointed at it", () => {
     rmSync(hub, { recursive: true });
     expect(pruneGoneProjects(db, { home: dir })).toBe(1);
     expect(db.query("SELECT count(*) AS n FROM project_aliases").get()).toEqual({ n: 0 });
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the key follows the URL git uses, so a rewritten remote names the repository it reaches", () => {
+  const dir = mkdtempSync(join(tmpdir(), "repo-key-"));
+  try {
+    const clone = repo(dir, "clone", "https://github.com/bompus/swarmail");
+    Bun.spawnSync([
+      "git",
+      "-C",
+      clone,
+      "config",
+      "url.https://git.example.com/.insteadOf",
+      "https://github.com/",
+    ]);
+    expect(repositoryKey(clone)).toBe("git:git.example.com/bompus/swarmail");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("repositories whose names differ only in punctuation stay separate projects", () => {
+  const dir = mkdtempSync(join(tmpdir(), "repo-key-"));
+  const db = openDatabase(join(dir, "mail.sqlite"));
+  try {
+    const tools = createTools(db, { databasePath: join(dir, "mail.sqlite") }) as Record<
+      "ensure_project",
+      (a: Args) => any
+    >;
+    const dashed = tools.ensure_project({ human_key: "git:github.com/acme/foo-bar" });
+    const underscored = tools.ensure_project({ human_key: "git:github.com/acme/foo_bar" });
+    expect(underscored.id).not.toBe(dashed.id);
+    expect(tools.ensure_project({ human_key: "git:github.com/acme/foo-bar" }).id).toBe(dashed.id);
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a remembered checkout stops answering for a repository its origin no longer names", () => {
+  const dir = mkdtempSync(join(tmpdir(), "repo-key-"));
+  const db = openDatabase(join(dir, "mail.sqlite"));
+  try {
+    const tools = createTools(db, { databasePath: join(dir, "mail.sqlite") }) as Record<
+      "ensure_project",
+      (a: Args) => any
+    >;
+    const a = "git:github.com/acme/a";
+    const b = "git:github.com/acme/b";
+    const hub = repo(dir, "hub", "https://github.com/acme/a");
+    const project = tools.ensure_project({ human_key: hub });
+    expect(tools.ensure_project({ human_key: a }).id).toBe(project.id);
+    Bun.spawnSync(["git", "-C", hub, "remote", "set-url", "origin", "https://github.com/acme/b"]);
+    // The clone now holds b; a has no checkout here, so it gets its own project.
+    expect(tools.ensure_project({ human_key: b }).id).toBe(project.id);
+    const separate = tools.ensure_project({ human_key: a });
+    expect(separate.id).not.toBe(project.id);
+    expect(separate.human_key).toBe(a);
   } finally {
     db.close();
     rmSync(dir, { recursive: true, force: true });
