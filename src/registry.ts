@@ -449,7 +449,11 @@ export function openRegistry<S extends RegisterState = RegisterState>(
     end(
       sessionId,
       release = (project, name) =>
-        callTool("release_file_reservations", { project_key: project, agent_name: name }),
+        callTool("release_file_reservations", {
+          project_key: project,
+          agent_name: name,
+          session_ended: true,
+        }),
       now = new Date(),
     ) {
       let state: S | undefined;

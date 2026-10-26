@@ -133,6 +133,7 @@ test("migrating a released database preserves messages without inventing sender 
       ALTER TABLE messages DROP COLUMN revision;
       DROP TABLE message_mutations;
       DROP TABLE project_aliases;
+      ALTER TABLE agents DROP COLUMN session_ended_ts;
       PRAGMA user_version = 1;
       INSERT INTO wake_cursors(session, announced, offered) VALUES('previous-session',10,12);
       INSERT INTO projects VALUES (1,'repo','/r',1);
@@ -253,7 +254,7 @@ test("version-five upgrade retains mail, retry results and uncertain cursors", (
       ALTER TABLE messages DROP COLUMN notification_policy;
       ALTER TABLE messages DROP COLUMN revision;
       ALTER TABLE message_recipients DROP COLUMN withdrawn_ts;
-      DROP TABLE message_mutations; DROP TABLE project_aliases; PRAGMA user_version=5;`);
+      DROP TABLE message_mutations; DROP TABLE project_aliases; ALTER TABLE agents DROP COLUMN session_ended_ts; PRAGMA user_version=5;`);
     const cursors = db.query("SELECT * FROM wake_cursors").all();
     const keys = db.query("SELECT * FROM idempotency_keys").all();
     db.close();

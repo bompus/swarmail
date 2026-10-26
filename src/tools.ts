@@ -89,7 +89,11 @@ interface ToolBase {
   destructive?: true;
   /** Can give a waiting session unread mail: a new message, or a newly tagged or unretired recipient. */
   wakes?: true;
-  run: (s: MailStore, a: Args, info: { databasePath: string }) => unknown;
+  run: (
+    s: MailStore,
+    a: Args,
+    info: { databasePath: string; db: Database; waitingSessions?: () => Iterable<string> },
+  ) => unknown;
 }
 
 // A declared output contract always has a transaction-time check.
@@ -312,8 +316,9 @@ export const TOOLS: Tool[] = [
     },
     required: ["project_key"],
     readOnly: true,
-    run: (s, a) => {
+    run: (s, a, info) => {
       const p = s.project(a.project_key);
+      const waiting = new Set(info.waitingSessions?.());
       const since =
         a.active_within_days === undefined
           ? 0
@@ -332,6 +337,10 @@ export const TOOLS: Tool[] = [
         location: labels[i],
         inception_ts: iso(r.inception_ts),
         last_active_ts: iso(r.last_active_ts),
+        // Whether a wake hook or bridge is waiting on this server for the session's mail right now, and when its host
+        // reported the session ended: a roster read from another machine cannot see either on its own.
+        waiting_for_mail: [r.session_id, r.t3_thread].some((id) => id && waiting.has(id)),
+        session_ended_at: iso(r.session_ended_ts),
       }));
     },
   },
@@ -833,16 +842,23 @@ export const TOOLS: Tool[] = [
       agent_name: AGENT,
       paths: RESERVATION_PATHS,
       file_reservation_ids: RESERVATION_IDS,
+      session_ended: prop(
+        "boolean",
+        "Sent by the host's SessionEnd hook, so list_agents shows the session ended until you act again.",
+      ),
     },
     required: ["project_key", "agent_name"],
     destructive: true,
-    run: (s, a) => {
+    run: (s, a, info) => {
       const p = s.project(a.project_key),
         who = s.acting(p, a.agent_name),
         now = nowUs();
       const rows = s.ownActive(p, who, a);
       for (const r of rows) {
         s.release(r.id, now);
+      }
+      if (a.session_ended === true) {
+        info.db.run("UPDATE agents SET session_ended_ts = ? WHERE id = ?", [now, who.id]);
       }
       return { released: rows.length, released_at: iso(now) };
     },
@@ -877,6 +893,8 @@ export function createTools(
     lifecycle?: Lifecycle;
     registry?: string;
     mutationsEnabled?: boolean;
+    /** The sessions with a wake wait open on this server. */
+    waitingSessions?: () => Iterable<string>;
   },
 ): Record<string, (a: Args) => unknown> {
   const s = new MailStore(db, info.lifecycle, info.registry, info.mutationsEnabled);
@@ -885,7 +903,7 @@ export function createTools(
       t.name,
       (a: Args) =>
         s.atomic(() => {
-          const value = t.run(s, a, info);
+          const value = t.run(s, a, { ...info, db });
           const validate = t.validateResult;
           if (validate) {
             if (!validate(value)) {

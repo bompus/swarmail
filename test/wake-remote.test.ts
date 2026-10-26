@@ -119,6 +119,33 @@ test("the wake client calls send the token to a server on another machine", asyn
   expect(reconcile.status).toBe(401);
 });
 
+const listed = async () =>
+  (await call("list_agents", { project_key: P })).find((row: any) => row.name === "GreenCastle");
+
+test("the roster says whether a session is waiting for mail and whether its host reported it ended", async () => {
+  expect(await listed()).toMatchObject({ waiting_for_mail: false, session_ended_at: null });
+  const open = new AbortController();
+  const waiting = fetch(`${hub}/wait?session=s-1&timeout=5`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+    signal: open.signal,
+  }).catch(() => null);
+  await Bun.sleep(100);
+  expect(await listed()).toMatchObject({ waiting_for_mail: true });
+  open.abort();
+  await waiting;
+  await Bun.sleep(50);
+  expect(await listed()).toMatchObject({ waiting_for_mail: false });
+  await call("release_file_reservations", {
+    project_key: P,
+    agent_name: "GreenCastle",
+    session_ended: true,
+  });
+  expect((await listed()).session_ended_at).toMatch(/^\d{4}-\d\d-\d\dT/);
+  // Any later call as the agent shows the session is back.
+  await call("release_file_reservations", { project_key: P, agent_name: "GreenCastle" });
+  expect((await listed()).session_ended_at).toBeNull();
+});
+
 test("without the token those calls are refused instead of reading the hub's mail", async () => {
   const token = process.env.SWARMAIL_TOKEN_FILE;
   delete process.env.SWARMAIL_TOKEN_FILE;

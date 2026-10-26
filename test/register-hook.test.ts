@@ -1300,3 +1300,43 @@ test("a session that never got a name from a remote server registers with the lo
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("SessionEnd tells the server the session ended, for a roster read from another machine", async () => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "end-server-")));
+  const calls: any[] = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      calls.push(((await req.json()) as any).params);
+      return Response.json({
+        jsonrpc: "2.0",
+        id: 1,
+        result: { content: [{ type: "text", text: JSON.stringify({ released: 0 }) }] },
+      });
+    },
+  });
+  try {
+    writeFileSync(join(dir, "s1.json"), JSON.stringify({ name: "TanOwl", projects: ["/a"] }));
+    const source = join(import.meta.dir, "../src/registry.ts");
+    // curl runs synchronously, so the mock server must answer from this process while the hook runs in another.
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `import {openRegistry} from ${JSON.stringify(source)}; openRegistry(${JSON.stringify(dir)}).end("s1");`,
+      ],
+      { env: { ...process.env, SWARMAIL_URL: `http://127.0.0.1:${server.port}/mcp/` } },
+    );
+    expect(await child.exited).toBe(0);
+    expect(calls).toEqual([
+      {
+        name: "release_file_reservations",
+        arguments: { project_key: "/a", agent_name: "TanOwl", session_ended: true },
+      },
+    ]);
+  } finally {
+    await server.stop(true);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

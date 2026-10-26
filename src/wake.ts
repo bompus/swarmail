@@ -273,5 +273,5 @@ export function createWaiters(
     }, 0);
   }
 
-  return { wait, notify, peek: mailboxSnapshot(db) };
+  return { wait, notify, peek: mailboxSnapshot(db), waiting: () => [...waiting.keys()] };
 }

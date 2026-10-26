@@ -310,9 +310,13 @@ at the same moment can still collide, because the hook reads the roster before i
 
 What does not carry over yet:
 
-- The server reads process state, branch and session titles from its own
-  machine, so a remote session appears without a branch or title and its
-  liveness checks do not see it.
+- The server reads branch and session titles from its own machine, so a remote
+  session appears without a branch or title. `swarmail who` shows a remote
+  session as alive ("waiting for mail on the server") only while a wake hook or
+  bridge of that session has a wait open on the server, and as ended after the
+  session's SessionEnd hook reports it, until the session acts again. A session
+  that is mid-turn, or has no wake hook, shows as liveness unknown. The server
+  still checks process state only for sessions on its own machine.
 - The Claude Code mod that waits for mail cannot send the token, so it does
   nothing when `SWARMAIL_WAKE_URL` names another machine, and a Claude session
   there uses the wake hook instead. Wake hooks and

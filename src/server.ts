@@ -293,7 +293,13 @@ export function createServer(
   };
   sweep();
   setInterval(sweep, 3_600_000).unref();
-  const tools = createTools(db, { databasePath, lifecycle, registry, mutationsEnabled });
+  const tools = createTools(db, {
+    databasePath,
+    lifecycle,
+    registry,
+    mutationsEnabled,
+    waitingSessions: () => waiters.waiting(),
+  });
   const waiters = createWaiters(db, wakePollMs, eligible);
 
   const callTool = (name: string, args: Record<string, unknown>, structured: boolean) => {

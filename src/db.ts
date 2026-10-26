@@ -149,6 +149,11 @@ const MIGRATIONS: ((db: Database) => void)[] = [
       alias TEXT PRIMARY KEY, project_id INTEGER NOT NULL REFERENCES projects(id)
     )`);
   },
+  // When the agent's host reported the session ended, so a roster read from another machine can say so. The agent's
+  // next tool call as itself clears it.
+  (db) => {
+    db.run("ALTER TABLE agents ADD COLUMN session_ended_ts INTEGER");
+  },
 ];
 
 /** The schema version of a database this build has fully migrated. */

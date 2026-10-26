@@ -482,3 +482,49 @@ test("a remote roster ignores sessions registered with the local server", () => 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("who takes a session on another machine from the server: waiting means alive, an ended report means ended", () => {
+  const dir = mkdtempSync(join(tmpdir(), "who-remote-"));
+  try {
+    const rows = (agent: Record<string, unknown>) =>
+      whoRows(
+        {
+          project: "git:github.com/acme/widget",
+          stateDir: dir,
+          roster: [{ name: "BlueLake", task_description: "[claude:s] task", ...agent }],
+          threads: new Map(),
+          room: null,
+        },
+        () => null,
+        () => false,
+      );
+    expect(rows({})[0]).toMatchObject({ hostAlive: null, waiting: false, ended: null });
+    expect(rows({ waiting_for_mail: true })[0]).toMatchObject({
+      hostAlive: true,
+      waiting: true,
+      ended: null,
+    });
+    expect(rows({ session_ended_at: "2026-10-26T10:00:00.000Z" })[0]).toMatchObject({
+      hostAlive: null,
+      waiting: false,
+      ended: "2026-10-26T10:00:00.000Z",
+    });
+    // A resumed session that waits again is alive, whatever the server last heard of its end.
+    expect(
+      rows({ waiting_for_mail: true, session_ended_at: "2026-10-26T10:00:00.000Z" })[0],
+    ).toMatchObject({ hostAlive: true, waiting: true, ended: null });
+    // A session this machine has registered keeps its own process check.
+    writeFileSync(
+      join(dir, "s.json"),
+      JSON.stringify({
+        name: "BlueLake",
+        sessionId: "s",
+        projects: ["git:github.com/acme/widget"],
+        host: { name: "claude", pid: 7, start: "1" },
+      }),
+    );
+    expect(rows({ waiting_for_mail: true })[0]).toMatchObject({ hostAlive: false, waiting: false });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

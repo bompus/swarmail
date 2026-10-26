@@ -240,6 +240,7 @@ for (const admitted of [false, true]) {
       ALTER TABLE messages DROP COLUMN notification_policy;
       ALTER TABLE messages DROP COLUMN revision;
       DROP TABLE message_mutations;
+      ALTER TABLE agents DROP COLUMN session_ended_ts;
       PRAGMA user_version = 2;`);
       f.db.close();
       f = fixture(path);
@@ -307,6 +308,7 @@ test("a released-v2 read notice does not suppress mail that arrived afterward", 
       ALTER TABLE messages DROP COLUMN notification_policy;
       ALTER TABLE messages DROP COLUMN revision;
       DROP TABLE message_mutations;
+      ALTER TABLE agents DROP COLUMN session_ended_ts;
       PRAGMA user_version = 2;`);
     f.db.close();
     f = fixture(path);

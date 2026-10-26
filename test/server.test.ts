@@ -1365,9 +1365,11 @@ test("MCP roster native titles refresh while sender titles remain send-time snap
       "model",
       "name",
       "program",
+      "session_ended_at",
       "session_id",
       "t3_thread",
       "task_description",
+      "waiting_for_mail",
     ]);
     expect(Object.keys(agent.location).sort()).toEqual(["branch", "repo", "title", "worktree"]);
     const message = {

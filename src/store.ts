@@ -84,6 +84,7 @@ export interface Agent extends Identity {
   inception_ts: number;
   last_active_ts: number;
   retired_at: number | null;
+  session_ended_ts: number | null;
   lifecycle_profile: string | null;
   lifecycle_thread: string | null;
 }
@@ -259,7 +260,7 @@ const queries = (db: Database) => ({
     `SELECT name FROM agents WHERE project_id = ? AND retired_at IS NULL AND ${lifecycleEligible("agents")} ORDER BY last_active_ts DESC, id DESC`,
   ),
   touch: db.query<unknown, [number, number]>(
-    "UPDATE agents SET last_active_ts = ?, retired_at = NULL WHERE id = ?",
+    "UPDATE agents SET last_active_ts = ?, retired_at = NULL, session_ended_ts = NULL WHERE id = ?",
   ),
   message: db.query<Row, [number, number]>(
     "SELECT * FROM messages WHERE id = ? AND project_id = ?",
@@ -432,10 +433,10 @@ export class MailStore {
 
   unretire(who: Agent, now: number): void {
     this.requireLifecycle(who);
-    this.db.run("UPDATE agents SET retired_at = NULL, last_active_ts = ? WHERE id = ?", [
-      now,
-      who.id,
-    ]);
+    this.db.run(
+      "UPDATE agents SET retired_at = NULL, last_active_ts = ?, session_ended_ts = NULL WHERE id = ?",
+      [now, who.id],
+    );
   }
 
   uniqueName(projectId: number): string {
@@ -501,7 +502,7 @@ export class MailStore {
         throw new ToolError("INVALID_ARGUMENT", refusal);
       }
       this.db.run(
-        `UPDATE agents SET program = ?, model = ?, task_description = ?, last_active_ts = ?, retired_at = NULL,
+        `UPDATE agents SET program = ?, model = ?, task_description = ?, last_active_ts = ?, retired_at = NULL, session_ended_ts = NULL,
         host = ?, session_id = ?, t3_thread = ?, build = ?, cwd = ?, worktree = ? WHERE id = ?`,
         [
           str(a.program, "program"),
