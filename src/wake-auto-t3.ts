@@ -25,7 +25,7 @@ import {
   serverRegister,
   type RegisterState,
 } from "./registry.ts";
-import { sessionTag } from "./tag.ts";
+import { sessionTag, withoutDetails } from "./tag.ts";
 import { openWakeState } from "./wake-state.ts";
 import { bridgeBinding, runBridge } from "./wake-bridge.ts";
 import { followT3Backend } from "./wake-t3-backend.ts";
@@ -200,7 +200,10 @@ export function enrollT3Threads(
       !known.ended &&
       known.name &&
       known.projects.some(
-        (project) => known.tags?.[project] === tag && known.pending?.project !== project,
+        (project) =>
+          known.tags?.[project] !== undefined &&
+          withoutDetails(known.tags[project]) === tag &&
+          known.pending?.project !== project,
       )
     ) {
       continue;

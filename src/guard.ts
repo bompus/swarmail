@@ -83,7 +83,7 @@ function heldOnServer(project: string, url: string): Reservation[] {
     return callTool("list_file_reservations", { project_key: project }, url) as Reservation[];
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!message.includes("NOT_FOUND")) {
+    if (!/Project .* not found/.test(message)) {
       console.error(
         `swarmail guard: could not read reservations from ${url}; this check was skipped.`,
       );

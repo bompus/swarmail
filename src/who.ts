@@ -275,7 +275,7 @@ export function whoRows(
       tag?.branch || tag?.title
         ? {
             repo: basename(project),
-            worktree: tag.cwd ?? "",
+            worktree: tag.worktree ?? tag.cwd ?? "",
             branch: tag.branch,
             title: tag.title,
           }

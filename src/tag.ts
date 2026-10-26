@@ -10,6 +10,7 @@ export interface Tag {
   build: string | null;
   branch: string | null;
   title: string | null;
+  worktree: string | null;
   cwd: string | null;
 }
 
@@ -49,6 +50,7 @@ export function sessionTag(
     build = buildSource,
     branch,
     title,
+    worktree,
   }: {
     t3?: string | null;
     host: string;
@@ -56,6 +58,7 @@ export function sessionTag(
     build?: string | null;
     branch?: string | null;
     title?: string | null;
+    worktree?: string | null;
   },
   cwd: unknown,
   home = homeDir(),
@@ -69,7 +72,12 @@ export function sessionTag(
     parts.push(`branch:${encodeURIComponent(branch)}`);
   }
   if (title) {
-    parts.push(`title:${encodeURIComponent(title.slice(0, TITLE_LENGTH))}`);
+    // By code point, so a long title never ends in half a character, which cannot be encoded.
+    const kept = Array.from(title.toWellFormed()).slice(0, TITLE_LENGTH).join("");
+    parts.push(`title:${encodeURIComponent(kept)}`);
+  }
+  if (worktree) {
+    parts.push(`worktree:${encodeURIComponent(tildePath(home, worktree))}`);
   }
   if (typeof cwd === "string" && cwd) {
     parts.push(`cwd:${tildePath(home, cwd)}`);
@@ -90,6 +98,7 @@ export function parseTag(description: unknown): Tag | null {
     build: null,
     branch: null,
     title: null,
+    worktree: null,
     cwd: null,
   };
   const cwd = /(?:^| )cwd:(.*)$/s.exec(tag);
@@ -105,6 +114,8 @@ export function parseTag(description: unknown): Tag | null {
       out.branch = decoded(value);
     } else if (key === "title") {
       out.title = decoded(value);
+    } else if (key === "worktree") {
+      out.worktree = decoded(value);
     } else if (!out.host) {
       Object.assign(out, { host: key, sessionId: value || null });
     }
@@ -191,6 +202,7 @@ export const tagOf = (row: Identity): Tag => ({
   build: row.build,
   branch: null,
   title: null,
+  worktree: null,
   cwd: row.cwd,
 });
 
@@ -207,3 +219,7 @@ export function sameSessionRow<T>(
   const same = rows.filter((row) => sameSession(read(row), tag));
   return same.find((row) => !!tag?.t3 && read(row)?.t3 === tag.t3) ?? same[0] ?? null;
 }
+
+/** The tag without the details only a hook on the session's own machine can read, for comparing registrations. */
+export const withoutDetails = (tag: string): string =>
+  tag.replace(/ (?:branch|title|worktree):[^ \]]*/g, "");

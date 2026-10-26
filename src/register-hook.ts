@@ -245,24 +245,13 @@ function main(input: HookInput): string {
   const dir = targetDir({ ...input, cwd: session.cwd });
   const project = dir && projectFor(dir, server);
   const t3 = t3ThreadId(sessionId);
-  // The server cannot read the branch or title of a session on another machine, so the tag carries them.
-  const away = dir && !isLoopbackUrl(server) ? worktreeRoot(dir) : null;
-  const tag = sessionTag(
-    {
-      ...session,
-      t3,
-      branch: away && branch(away),
-      title: away && nativeTitles([{ host: session.host, session_id: session.sessionId }])[0],
-    },
-    session.cwd,
-  );
   if (!project) {
     // A clone without an origin cannot be named to a remote server; the start says so once, not on every edit.
     const bare = starting && dir && !isLoopbackUrl(server) && worktreeRoot(dir);
     return starting
       ? (bare
           ? "Swarmail: this clone has no origin remote, which a remote server needs to name its repository, so this session is not registered. Add one and start the session again. "
-          : "") + startNotice(tag)
+          : "") + startNotice(sessionTag({ ...session, t3 }, session.cwd))
       : "";
   }
   // Most edits after the first find the project registered under this tag and skip the lock.
@@ -273,6 +262,18 @@ function main(input: HookInput): string {
       known?.worktrees?.[project])
     : undefined;
   const worktree = recorded ?? (dir ? (worktreeRoot(dir) ?? undefined) : undefined);
+  // The server cannot read the edit checkout, branch or title of a session on another machine, so the tag carries them.
+  const away = worktree && !isLoopbackUrl(server);
+  const tag = sessionTag(
+    {
+      ...session,
+      t3,
+      worktree: away ? worktree : null,
+      branch: away ? branch(worktree) : null,
+      title: away ? nativeTitles([{ host: session.host, session_id: session.sessionId }])[0] : null,
+    },
+    session.cwd,
+  );
   const text =
     known &&
     !known.ended &&

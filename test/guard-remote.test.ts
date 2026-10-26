@@ -130,3 +130,28 @@ test("an unreachable hub is reported and does not block the commit", async () =>
   expect(run.out).toContain("could not read reservations");
   expect(run.out).not.toContain(TOKEN);
 });
+
+test("a hub that lacks the tool is reported, not taken for a project with no reservations", async () => {
+  const old = Bun.serve({
+    hostname: REMOTE,
+    port: 0,
+    fetch: () =>
+      Response.json({
+        jsonrpc: "2.0",
+        id: 1,
+        result: {
+          isError: true,
+          content: [{ type: "text", text: "NOT_FOUND: Unknown tool 'list_file_reservations'" }],
+        },
+      }),
+  });
+  try {
+    stage("src/a.ts");
+    const run = await guardRun({}, `http://${REMOTE}:${old.port}/mcp/`);
+    expect(run.code).toBe(0);
+    expect(run.out).toContain("could not read reservations");
+  } finally {
+    await old.stop(true);
+    git("reset", "-q");
+  }
+});
