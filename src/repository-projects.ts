@@ -57,7 +57,12 @@ export function projectOf(db: Database, name: string): Project | null {
 export function claim(db: Database, key: string): Project | null {
   if (isName(key)) {
     const hash = createHash("sha1").update(key).digest("hex").slice(0, 8);
-    const slug = `${key.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}-${hash}`;
+    const base = `${key.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}-${hash}`;
+    // A checkout that took over an earlier project for this name keeps its slug, so a new one needs another.
+    let slug = base;
+    for (let n = 2; db.query("SELECT 1 FROM projects WHERE slug = ?").get(slug); n++) {
+      slug = `${base}-${n}`;
+    }
     return db
       .query<Project, [string, string, number]>(
         "INSERT INTO projects (slug, human_key, created_at) VALUES (?, ?, ?) RETURNING *",

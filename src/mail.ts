@@ -144,11 +144,11 @@ function parse(args: string[]) {
 }
 
 /** The project key mail is filed under for the repository around `cwd` (see projectFor). */
-function projectOf(cwd: string): string {
-  const project = projectFor(cwd);
+function projectOf(cwd: string, env: NodeJS.ProcessEnv): string {
+  const project = projectFor(cwd, swarmailUrl(env));
   if (!project) {
     throw new Error(
-      isLoopbackUrl(swarmailUrl(process.env))
+      isLoopbackUrl(swarmailUrl(env))
         ? `${cwd} is not inside a git repository`
         : `${cwd} is not inside a git clone with an origin remote, which a remote server needs to name the repository`,
     );
@@ -197,7 +197,7 @@ export async function mail(
       }
       return await sessionInbox(env, opts);
     }
-    const project = projectOf(cwd);
+    const project = projectOf(cwd, env);
     if (command === "search") {
       return await search(env, project, positional.join(" "), opts);
     }

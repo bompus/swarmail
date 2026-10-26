@@ -42,7 +42,10 @@ export function repositoryName(remote: string): string | null {
   const url = remote.trim();
   let host: string;
   let path: string;
-  const scp = /^(?:[^@/\\]+@)?([^:/\\]{2,}):(?!\/\/)(.+)$/.exec(url);
+  // user@host:path, with an IPv6 host in brackets; a drive letter such as C:\repo is a path on this machine.
+  const scp = /^[A-Za-z]:[\\/]/.test(url)
+    ? null
+    : /^(?:[^@/\\]+@)?(\[[^\]]+\]|[^@:/\\]+):(?!\/\/)(.+)$/.exec(url);
   if (scp) {
     [, host, path] = scp as unknown as [string, string, string];
   } else {

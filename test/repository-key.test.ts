@@ -20,6 +20,12 @@ test("every clone and protocol of a repository names it the same", () => {
     expect(repositoryName(url)).toBe("git:github.com/bompus/swarmail");
   }
   expect(repositoryName("https://github.com/bompus/other")).toBe("git:github.com/bompus/other");
+  // IPv6 hosts keep their brackets in every spelling; a one-letter host is a host, not a drive.
+  expect(repositoryName("git@[2001:db8::1]:team/repo.git")).toBe("git:[2001:db8::1]/team/repo");
+  expect(repositoryName("ssh://git@[2001:db8::1]/team/repo.git")).toBe(
+    "git:[2001:db8::1]/team/repo",
+  );
+  expect(repositoryName("git@a:team/repo.git")).toBe("git:a/team/repo");
   // A path on this machine names no repository that another machine could share.
   for (const url of ["/srv/git/repo.git", "file:///srv/repo.git", "C:\\work\\repo", ""]) {
     expect(repositoryName(url)).toBeNull();
@@ -193,6 +199,31 @@ test("a remembered checkout stops answering for a repository its origin no longe
     const separate = tools.ensure_project({ human_key: a });
     expect(separate.id).not.toBe(project.id);
     expect(separate.human_key).toBe(a);
+    // The project the checkout adopted keeps the name's slug; removing the checkout still lets the name get a project.
+    rmSync(hub, { recursive: true });
+    expect(tools.ensure_project({ human_key: a }).id).toBe(separate.id);
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a name whose project a checkout adopted still gets its own project after the checkout moves on", () => {
+  const dir = mkdtempSync(join(tmpdir(), "repo-key-"));
+  const db = openDatabase(join(dir, "mail.sqlite"));
+  try {
+    const tools = createTools(db, { databasePath: join(dir, "mail.sqlite") }) as Record<
+      "ensure_project",
+      (a: Args) => any
+    >;
+    const a = "git:github.com/acme/a";
+    const waiting = tools.ensure_project({ human_key: a });
+    const hub = repo(dir, "hub", "https://github.com/acme/a");
+    expect(tools.ensure_project({ human_key: hub }).id).toBe(waiting.id);
+    Bun.spawnSync(["git", "-C", hub, "remote", "set-url", "origin", "https://github.com/acme/b"]);
+    const second = tools.ensure_project({ human_key: a });
+    expect(second.id).not.toBe(waiting.id);
+    expect(second.human_key).toBe(a);
   } finally {
     db.close();
     rmSync(dir, { recursive: true, force: true });

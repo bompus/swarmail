@@ -298,7 +298,9 @@ path count: the user, port, `.git` suffix and a leading slash are ignored, and a
 a clone of that repository, its project is the remote sessions' project too, so
 both machines share one roster, mail and set of reservations. If the hub meets
 the clone later, its project takes over the one the remote sessions created. A hub
-that holds several clones of the repository uses the one registered first. A
+that holds several clones of the repository uses the one registered first, and a
+hub clone that registered before it had an `origin` keeps its own project, apart
+from the one remote sessions created for the repository. A
 clone with no `origin` remote cannot be named to a remote server, and the command
 and hooks say so.
 
