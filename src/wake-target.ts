@@ -1,7 +1,7 @@
 // Native editor delivery, with explicit target protocols and immutable command receipts.
 import { readFileSync, statSync } from "node:fs";
 import { isAbsolute } from "node:path";
-import { bearerToken, isLoopbackUrl } from "./paths.ts";
+import { authHeaders, bearerToken, isLoopbackUrl } from "./paths.ts";
 
 export interface WakeTarget {
   type: "t3-v2-queue" | "opencode-v2-queue";
@@ -69,6 +69,20 @@ export function localUrl(value: unknown): string {
     url.hostname = "127.0.0.1";
   }
   return url.origin;
+}
+
+/**
+ * The Authorization header for the Swarmail server at `base`, read before a request so an unreadable token file is
+ * reported as itself and not retried as a dropped connection.
+ */
+export function serverHeaders(base: string): Record<string, string> {
+  try {
+    return authHeaders(process.env, base);
+  } catch (error) {
+    throw new BridgeError(
+      `SWARMAIL_TOKEN_FILE: ${error instanceof Error ? error.message : "unreadable"}`,
+    );
+  }
 }
 
 /**

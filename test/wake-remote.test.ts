@@ -168,6 +168,49 @@ test("the Claude hook waits on a server on another machine with the token", asyn
   );
 });
 
+test("an unreadable token file is reported at once, not retried as a dropped connection", async () => {
+  const bad = join(dir, "short-token");
+  writeFileSync(bad, "short\n");
+  const hook = [
+    process.execPath,
+    join(import.meta.dir, "../src/cli.ts"),
+    "hook",
+    "wake",
+    "claude",
+    "5",
+  ];
+  const run = Bun.spawn(hook, {
+    stdin: new Blob([
+      JSON.stringify({
+        session_id: "s-1",
+        transcript_path: "/h/.claude/projects/w/s-1.jsonl",
+        hook_event_name: "Stop",
+      }),
+    ]),
+    env: {
+      ...process.env,
+      SWARMAIL_WAKE_URL: hub,
+      SWARMAIL_TOKEN_FILE: bad,
+      CLAUDE_PID: String(process.pid),
+    },
+    stderr: "pipe",
+  });
+  expect(await run.exited).toBe(0);
+  expect(await new Response(run.stderr).text()).toContain("SWARMAIL_TOKEN_FILE");
+  const token = process.env.SWARMAIL_TOKEN_FILE;
+  process.env.SWARMAIL_TOKEN_FILE = bad;
+  try {
+    const held = await ensureWakeEligible(hub, "s-1").then(
+      () => null,
+      (error: { message: string; retryable?: boolean }) => error,
+    );
+    expect(held?.message).toContain("SWARMAIL_TOKEN_FILE");
+    expect(held?.retryable).toBe(false);
+  } finally {
+    process.env.SWARMAIL_TOKEN_FILE = token;
+  }
+});
+
 test("a bridge accepts a server on another machine only when it has the token to send", () => {
   expect(serverUrl(hub)).toBe(hub);
   expect(serverUrl("http://localhost:18765")).toBe("http://127.0.0.1:18765");

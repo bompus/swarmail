@@ -9,12 +9,12 @@ import {
   TargetAuthenticationError,
   localUrl,
   rejectRemovedTargetType,
+  serverHeaders,
   serverUrl,
 } from "./wake-target.ts";
 import type { WakeTarget } from "./wake-target.ts";
 import { primaryCheckout } from "./checkout.ts";
 import { swarmailUrl } from "./client.ts";
-import { authHeaders } from "./paths.ts";
 import { processIdentity } from "./proc.ts";
 import {
   openRegistry,
@@ -472,7 +472,7 @@ function lifecycleReconciliation(swarmailUrl: string, signal: AbortSignal) {
     try {
       const response = await fetch(new URL("/lifecycle/reconcile", swarmailUrl), {
         method: "POST",
-        headers: authHeaders(process.env, swarmailUrl),
+        headers: serverHeaders(swarmailUrl),
         redirect: "error",
         signal: AbortSignal.any([signal, AbortSignal.timeout(2000)]),
       });
@@ -488,7 +488,7 @@ function lifecycleReconciliation(swarmailUrl: string, signal: AbortSignal) {
       }
     } catch (error) {
       // Unavailable or incompatible cores hold the scan without exposing response bodies.
-      reason = holdReason(error);
+      reason = error instanceof BridgeError ? error.message : holdReason(error);
     }
     if (reason === undefined) {
       if (heldSince !== undefined && !signal.aborted) {

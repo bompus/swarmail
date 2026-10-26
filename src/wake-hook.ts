@@ -13,6 +13,7 @@ import { openHookDelivery } from "./hook-delivery.ts";
 import { updateHint } from "./updates.ts";
 import { SESSION_RE } from "./wake.ts";
 import { authHeaders, stateHome, wakeUrl } from "./paths.ts";
+import { BridgeError, serverHeaders } from "./wake-target.ts";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -226,6 +227,16 @@ async function waitForMail(
     return 0;
   }
   const quiet = () => quietWake(host);
+  let auth: Record<string, string>;
+  try {
+    auth = authHeaders(env, wakeUrl(env));
+  } catch (error) {
+    // Retrying cannot fix an unreadable token file, and a silent hook would wait for days.
+    console.error(
+      `swarmail wake: SWARMAIL_TOKEN_FILE: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return quiet();
+  }
   let payload: Record<string, unknown> = {};
   try {
     payload = JSON.parse(input);
@@ -286,7 +297,7 @@ async function waitForMail(
         const res = await fetch(
           `${base}/wait?session=${sid}&timeout=${left}${delivery?.query() ?? retry}`,
           {
-            headers: authHeaders(env, base),
+            headers: auth,
             signal: AbortSignal.any([request.signal, AbortSignal.timeout((left + 5) * 1000)]),
           },
         );
@@ -373,9 +384,10 @@ async function nativeContextHint(sid: string, env: NodeJS.ProcessEnv): Promise<s
   const delivery = openHookDelivery(sid, env);
   try {
     const url = new URL("/wait", wakeUrl(env));
+    const headers = serverHeaders(url.href);
     url.search = new URLSearchParams({ session: sid, timeout: "0" }).toString() + delivery.query();
     const response = await fetch(url, {
-      headers: authHeaders(env, url.href),
+      headers,
       signal: AbortSignal.timeout(1500),
       redirect: "error",
     });
@@ -420,8 +432,11 @@ export async function contextHook(
       }
       hint = [await nativeContextHint(sid, env), hint].filter(Boolean).join("\n");
     }
-  } catch {
+  } catch (error) {
     // Mail delivery must never block a tool or grant permissions when the server is unavailable.
+    if (error instanceof BridgeError) {
+      console.error(`swarmail wake: ${error.message}`);
+    }
   }
   const output = !hint
     ? {}
