@@ -106,8 +106,12 @@ ended sessions, after confirming with the host that each has ended.
 They do not prove that the session or model is currently running. Read and
 acknowledgment timestamps are observations, not proof that a model accepted work.
 `list_agents` also reports `waiting_for_mail` (a wake hook or bridge has a wait
-open on this server) and `session_ended_at` (the host's SessionEnd hook
-reported the end). Neither proves that a session is running or ended.
+open on this server that began after the agent's last end report) and
+`session_ended_at` (the host's SessionEnd hook reported the end; null when none
+is recorded or the agent has acted since). `waiting_for_mail: false` does not
+prove no wait is open: a wait opened before the end report, or refused because its
+session ID names several registrations, shows false. Neither field proves that a
+session is running or ended.
 
 `swarmail ping` observes a pong generated while the recipient wake hook waits.
 Success establishes that response at that time, not a model reply or future

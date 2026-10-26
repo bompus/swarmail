@@ -312,8 +312,9 @@ export const TOOLS: Tool[] = [
       "program, model, task and session details, including t3_thread for a T3 link. Use it to find who to message; whois returns " +
       "one agent. active_within_days filters recent activity, not whether a session is running. " +
       "Metadata and activity do not prove current session or model liveness. " +
-      "waiting_for_mail is true while a wake hook or bridge has a wait open on this server; " +
-      "session_ended_at is when the host's SessionEnd hook reported the end. " +
+      "waiting_for_mail is true while a wake hook or bridge has a wait open on this server that began after the agent's last end report. " +
+      "false does not prove that no wait is open: a wait opened before the end report, or refused because its session ID names several registrations, shows false. " +
+      "session_ended_at is when the host's SessionEnd hook reported the end, or null if none is recorded or the agent has acted since. " +
       "Neither proves a session is running or ended; confirm with the owning host before retiring another agent. " +
       "limit caps this single result; there is no continuation cursor, so a full result may omit " +
       "agents.",
