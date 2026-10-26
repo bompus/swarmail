@@ -324,7 +324,8 @@ What does not carry over yet:
   session ID and the T3 thread, not by project or host: an end report from an earlier registration that shares its session ID with a
   successor in another T3 thread (or its T3 thread with a successor in another
   project) can mark the successor ended, or hide its open wait, until the successor
-  acts or waits again.
+  acts or waits again. A registration with only a provider session ID, linked to a
+  T3 thread by another project's registration, does not see that thread's waits.
   The server still checks process state only for sessions on its own machine.
 - The Claude Code mod that waits for mail cannot send the token, so it does
   nothing when `SWARMAIL_WAKE_URL` names another machine, and a Claude session

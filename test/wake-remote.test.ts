@@ -302,6 +302,7 @@ test("a session ID that comes to name two registrations after a wait began is no
   await Bun.sleep(100);
   expect(await waiting()).toEqual({ IvoryPine: true });
   await register(names[1]!, "thread-y");
+  await Bun.sleep(100);
   expect(await waiting()).toEqual({ IvoryPine: false, RoseWillow: false });
   open.abort();
   await request;

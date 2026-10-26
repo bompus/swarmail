@@ -209,6 +209,8 @@ export function createWaiters(
   const { cursor, pending } = pendingMail(db, eligible);
   const waiting = new Map<string, (value: null | false) => void>();
   const waitingSince = new Map<string, number>();
+  // Open waits whose session ID the last check found to name no single registration: not presence.
+  const refused = new Set<string>();
   const checks = new Map<string, () => void>();
   let scheduled = false;
 
@@ -230,6 +232,7 @@ export function createWaiters(
         if (waiting.get(session) === done) {
           waiting.delete(session);
           waitingSince.delete(session);
+          refused.delete(session);
           checks.delete(session);
         }
         resolve(value);
@@ -237,8 +240,10 @@ export function createWaiters(
       const stop = () => done(null);
       const check = () => {
         if (!eligible(session)) {
+          refused.add(session);
           return;
         }
+        refused.delete(session);
         if (!started) {
           cursor.begin(session, retry, after);
           started = true;
@@ -286,8 +291,7 @@ export function createWaiters(
     wait,
     notify,
     peek: mailboxSnapshot(db),
-    // A session ID that has since come to name two registrations identifies neither.
-    waiting: () => new Map([...waitingSince].filter(([session]) => eligible(session))),
+    waiting: () => new Map([...waitingSince].filter(([session]) => !refused.has(session))),
     /** Stops counting these sessions' open waits as presence: the session they belonged to has ended. */
     endWaits: (sessions: string[]) => {
       for (const session of sessions) {
