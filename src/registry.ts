@@ -17,7 +17,15 @@ import {
 import { join } from "node:path";
 import { callTool, swarmailUrl } from "./client.ts";
 import { hostProcess, type HostProcess } from "./proc.ts";
-import { leadingTag, parseTag, sameSessionRow, withoutTag, SESSION_ENV, type Tag } from "./tag.ts";
+import {
+  leadingTag,
+  parseTag,
+  sameSession,
+  sameSessionRow,
+  withoutTag,
+  SESSION_ENV,
+  type Tag,
+} from "./tag.ts";
 import { t3StatePath, t3ThreadId } from "./t3-state.ts";
 import { SESSION_RE } from "./wake.ts";
 
@@ -237,6 +245,13 @@ export function serverRegister(
         // No roster read: register with the placeholder task.
       }
       const row = name ? rows.find((r) => r.name === name) : rowForSession(rows, parseTag(tag));
+      // The session's name may belong to another session in this project, such as one on the hub that took it first.
+      // A row with no tag is from before tags and is taken to be this session's.
+      const holder = row && parseTag(leadingTag(String(row.task_description ?? "")));
+      if (name && holder && !sameSession(holder, parseTag(tag))) {
+        register.refusal = `${name} is held by another session in ${project}`;
+        return null;
+      }
       const reuse = name ?? row?.name;
       return (
         (

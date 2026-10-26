@@ -26,6 +26,13 @@ test("every clone and protocol of a repository names it the same", () => {
     "git:[2001:db8::1]/team/repo",
   );
   expect(repositoryName("git@a:team/repo.git")).toBe("git:a/team/repo");
+  // git sends a URL's escapes decoded, so both spellings reach one repository.
+  expect(repositoryName("ssh://git@git.example.com/team/my%20repo.git")).toBe(
+    repositoryName("git@git.example.com:/team/my repo.git"),
+  );
+  expect(repositoryName("https://git.example.com/team/100%.git")).toBe(
+    "git:git.example.com/team/100%",
+  );
   // A path on this machine names no repository that another machine could share.
   for (const url of ["/srv/git/repo.git", "file:///srv/repo.git", "C:\\work\\repo", ""]) {
     expect(repositoryName(url)).toBeNull();
@@ -202,6 +209,30 @@ test("a remembered checkout stops answering for a repository its origin no longe
     // The project the checkout adopted keeps the name's slug; removing the checkout still lets the name get a project.
     rmSync(hub, { recursive: true });
     expect(tools.ensure_project({ human_key: a }).id).toBe(separate.id);
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a repository's mailbox survives its hub checkout being away for a while", () => {
+  const dir = mkdtempSync(join(tmpdir(), "repo-key-"));
+  const db = openDatabase(join(dir, "mail.sqlite"));
+  try {
+    const tools = createTools(db, { databasePath: join(dir, "mail.sqlite") }) as Record<
+      "ensure_project",
+      (a: Args) => any
+    >;
+    const name = "git:github.com/acme/a";
+    const hub = repo(dir, "hub", "https://github.com/acme/a");
+    const project = tools.ensure_project({ human_key: hub });
+    expect(tools.ensure_project({ human_key: name }).id).toBe(project.id);
+    rmSync(hub, { recursive: true });
+    // Another remote session arrives while the checkout is away; it joins the same mailbox, not a second one.
+    expect(tools.ensure_project({ human_key: name }).id).toBe(project.id);
+    repo(dir, "hub", "https://github.com/acme/a");
+    expect(tools.ensure_project({ human_key: hub }).id).toBe(project.id);
+    expect(tools.ensure_project({ human_key: name }).id).toBe(project.id);
   } finally {
     db.close();
     rmSync(dir, { recursive: true, force: true });

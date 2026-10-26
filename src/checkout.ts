@@ -33,6 +33,15 @@ export function worktreeRoot(dir: string): string | null {
 /** Starts a project key that names a repository, not a checkout path. */
 export const REPOSITORY_PREFIX = "git:";
 
+// git sends a URL's path decoded, so ssh://host/my%20repo and host:my repo name one repository.
+function decodePath(path: string): string {
+  try {
+    return decodeURIComponent(path);
+  } catch {
+    return path;
+  }
+}
+
 /**
  * The name a git remote URL gives its repository, the same from every clone and every protocol, in lower case: `git:host/owner/repo`
  * for https://host/owner/repo.git, ssh://git@host:22/owner/repo and git@host:owner/repo.git. Null for a URL with no
@@ -52,7 +61,7 @@ export function repositoryName(remote: string): string | null {
     try {
       const parsed = new URL(url);
       host = parsed.hostname;
-      path = parsed.pathname;
+      path = decodePath(parsed.pathname);
     } catch {
       return null;
     }

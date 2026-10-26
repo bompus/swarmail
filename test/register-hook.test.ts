@@ -790,6 +790,47 @@ test("the hook registers under a fresh name when the server refuses the session'
   }
 });
 
+test("the hook does not take a name another session holds in the project", async () => {
+  // serverRegister blocks on curl, so it runs in its own process, away from the stand-in server.
+  const calls: [string, string | undefined][] = [];
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(req) {
+      const msg = (await req.json()) as any;
+      const { name, arguments: args } = msg.params;
+      calls.push([name, args.name]);
+      const reply = (result: unknown) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
+      const text = (value: unknown) => ({
+        content: [{ type: "text", text: JSON.stringify(value) }],
+      });
+      if (name === "list_agents") {
+        return reply(text([{ name: "TanOwl", task_description: "[codex:hub-session] hub work" }]));
+      }
+      return reply(text({ name: args.name ?? "BlueHarbor" }));
+    },
+  });
+  try {
+    const code = `
+      import { ensureRegistered, serverRegister } from ${JSON.stringify(join(import.meta.dir, "../src/registry.ts"))};
+      const session = { host: "claude", program: "claude-code", model: null, sessionId: "s1", cwd: null };
+      const register = serverRegister(session, "[claude:s1]", ${JSON.stringify(`http://127.0.0.1:${server.port}/mcp/`)});
+      const state = { name: "TanOwl", projects: ["/home/u/a"], tags: { "/home/u/a": "[claude:s1]" } };
+      console.log(JSON.stringify(ensureRegistered(state, "git:host/o/r", "[claude:s1]", register)));`;
+    const proc = Bun.spawn(["bun", "-e", code], { stdout: "pipe" });
+    await proc.exited;
+    const state = JSON.parse(await new Response(proc.stdout).text());
+    expect(state.name).toBe("TanOwl");
+    expect(state.names).toEqual({ "git:host/o/r": "BlueHarbor" });
+    // The other session's row is never registered over.
+    expect(calls.filter(([tool]) => tool === "register_agent")).toEqual([
+      ["register_agent", undefined],
+    ]);
+  } finally {
+    await server.stop(true);
+  }
+});
+
 test("a failed registration tells Claude, then the next prompt retries against the server and reports the name", async () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-retry-")));
   const port = freePort();

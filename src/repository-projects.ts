@@ -20,19 +20,22 @@ const remember = (db: Database, name: string, project: Project): void => {
 /**
  * The project for a repository name: the checkout of that repository this machine holds (the earliest project when
  * it holds several), remembered once found. Null when it holds none. A remembered checkout counts only while its
- * origin still names the repository.
+ * origin still names the repository or it is missing for now.
  */
 export function projectOf(db: Database, name: string): Project | null {
   const holds = (project: Project): boolean =>
     isAbsolute(project.human_key) &&
     existsSync(project.human_key) &&
     repositoryKey(project.human_key) === name;
+  // A checkout that is missing for now keeps its mailbox; one that exists and names another repository does not.
+  const keeps = (project: Project): boolean =>
+    isAbsolute(project.human_key) && (!existsSync(project.human_key) || holds(project));
   const aliased = db
     .query<Project, [string]>(
       "SELECT p.* FROM project_aliases a JOIN projects p ON p.id = a.project_id WHERE a.alias = ?",
     )
     .get(name);
-  if (aliased && holds(aliased)) {
+  if (aliased && keeps(aliased)) {
     return aliased;
   }
   if (aliased) {
