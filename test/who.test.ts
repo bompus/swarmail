@@ -6,7 +6,7 @@ import { openDatabase } from "../src/db.ts";
 import type { Args } from "../src/store.ts";
 import type { T3Thread } from "../src/t3-state.ts";
 import { createTools } from "../src/tools.ts";
-import { parseTag, sessionTag, withoutDetails } from "../src/tag.ts";
+import { parseTag, sessionTag, withDetailsOf, withoutDetails } from "../src/tag.ts";
 import { resolveProject, whoRows } from "../src/who.ts";
 
 test("reads the session tag", () => {
@@ -509,6 +509,42 @@ test("a long title is cut by character and never breaks the tag", () => {
   expect(withoutDetails(tag)).toBe(
     sessionTag({ host: "claude", sessionId: "s", build: null }, "/h/launch", "/h"),
   );
+});
+
+test("a scan's tag takes a hook's branch, title and checkout even when the builds differ, and nothing from another session", () => {
+  const hook = sessionTag(
+    {
+      host: "claude",
+      sessionId: "s",
+      build: "old",
+      t3: "t",
+      branch: "feat/x",
+      title: "Fix $& it",
+      worktree: "/h/w",
+    },
+    "/h/launch",
+    "/h",
+  );
+  const scan = sessionTag(
+    { host: "claude", sessionId: "s", build: "new", t3: "t" },
+    "/h/launch",
+    "/h",
+  );
+  const merged = withDetailsOf(scan, hook);
+  expect(parseTag(merged)).toMatchObject({
+    build: "new",
+    branch: "feat/x",
+    title: "Fix $& it",
+    worktree: "~/w",
+    cwd: "~/launch",
+  });
+  const other = sessionTag(
+    { host: "claude", sessionId: "z", build: "old", t3: "t", branch: "b" },
+    "/h/launch",
+    "/h",
+  );
+  expect(withDetailsOf(scan, other)).toBe(scan);
+  expect(withDetailsOf(scan, undefined)).toBe(scan);
 });
 
 test("who shows a session on another machine with the branch and title its tag carries", () => {

@@ -223,3 +223,16 @@ export function sameSessionRow<T>(
 /** The tag without the details only a hook on the session's own machine can read, for comparing registrations. */
 export const withoutDetails = (tag: string): string =>
   tag.replace(/ (?:branch|title|worktree):[^ \]]*/g, "");
+
+/**
+ * `bare`, the tag a scan of the session's own record builds, with the branch, title and edit checkout of `known`, the
+ * tag a hook registered, when both name the same session; otherwise `bare`. The builds may differ.
+ */
+export function withDetailsOf(bare: string, known: string | undefined): string {
+  const core = (tag: string) => withoutDetails(tag).replace(/ build:[^ \]]*/, "");
+  if (!known || core(known) !== core(bare)) {
+    return bare;
+  }
+  const details = (known.match(/ (?:branch|title|worktree):[^ \]]*/g) ?? []).join("");
+  return details ? bare.replace(" cwd:", () => `${details} cwd:`) : bare;
+}

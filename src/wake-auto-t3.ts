@@ -25,7 +25,7 @@ import {
   serverRegister,
   type RegisterState,
 } from "./registry.ts";
-import { sessionTag, withoutDetails } from "./tag.ts";
+import { sessionTag, withDetailsOf } from "./tag.ts";
 import { openWakeState } from "./wake-state.ts";
 import { bridgeBinding, runBridge } from "./wake-bridge.ts";
 import { followT3Backend } from "./wake-t3-backend.ts";
@@ -194,25 +194,22 @@ export function enrollT3Threads(
       sessionId: session,
       cwd: row.cwd,
     };
-    const bare = sessionTag({ ...context, t3: row.thread_id }, row.cwd);
+    const project = projectFor(row.cwd, url);
+    if (!project) {
+      continue;
+    }
     // A hook on the session's own machine may have registered it with a branch, title and edit checkout the scan
-    // cannot read; registering again keeps that tag.
-    const tag =
-      known.projects
-        .map((project) => known.tags?.[project])
-        .find((t) => t && withoutDetails(t) === bare) ?? bare;
+    // cannot read; registering again keeps them.
+    const tag = withDetailsOf(
+      sessionTag({ ...context, t3: row.thread_id }, row.cwd),
+      known.tags?.[project],
+    );
     if (
       known.wakeThread === row.thread_id &&
       !known.ended &&
       known.name &&
-      known.projects.some(
-        (project) => known.tags?.[project] === tag && known.pending?.project !== project,
-      )
+      known.projects.some((p) => known.tags?.[p] === tag && known.pending?.project !== p)
     ) {
-      continue;
-    }
-    const project = projectFor(row.cwd, url);
-    if (!project) {
       continue;
     }
     states.settle(session, {
