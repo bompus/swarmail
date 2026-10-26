@@ -226,13 +226,20 @@ export const withoutDetails = (tag: string): string =>
 
 /**
  * `bare`, the tag a scan of the session's own record builds, with the branch, title and edit checkout of `known`, the
- * tag a hook registered, when both name the same session; otherwise `bare`. The builds may differ.
+ * tag a hook registered, when both name the same native session; otherwise `bare`. The builds may differ, and the scan
+ * may add the T3 thread a hook could not resolve.
  */
 export function withDetailsOf(bare: string, known: string | undefined): string {
-  const core = (tag: string) => withoutDetails(tag).replace(/ build:[^ \]]*/, "");
-  if (!known || core(known) !== core(bare)) {
+  const a = parseTag(bare);
+  const b = parseTag(known);
+  const bareAt = bare.indexOf(" cwd:");
+  const knownAt = known?.indexOf(" cwd:") ?? -1;
+  if (!a || !b || bareAt < 0 || knownAt < 0 || !sameSession(a, b) || a.cwd !== b.cwd) {
     return bare;
   }
-  const details = (known.match(/ (?:branch|title|worktree):[^ \]]*/g) ?? []).join("");
-  return details ? bare.replace(" cwd:", () => `${details} cwd:`) : bare;
+  // The launch path ends the tag and may hold anything, so only what precedes it holds details.
+  const details = (
+    known?.slice(0, knownAt).match(/ (?:branch|title|worktree):[^ \]]*/g) ?? []
+  ).join("");
+  return `${bare.slice(0, bareAt)}${details}${bare.slice(bareAt)}`;
 }

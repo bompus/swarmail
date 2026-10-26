@@ -539,12 +539,25 @@ test("a scan's tag takes a hook's branch, title and checkout even when the build
     cwd: "~/launch",
   });
   const other = sessionTag(
-    { host: "claude", sessionId: "z", build: "old", t3: "t", branch: "b" },
+    { host: "claude", sessionId: "z", build: "old", t3: "u", branch: "b" },
     "/h/launch",
     "/h",
   );
   expect(withDetailsOf(scan, other)).toBe(scan);
   expect(withDetailsOf(scan, undefined)).toBe(scan);
+
+  // A hook that could not resolve the T3 thread yet still passes its details on once the scan adds it.
+  const unlinked = sessionTag(
+    { host: "claude", sessionId: "s", build: "old", branch: "feat/x" },
+    "/h/launch",
+    "/h",
+  );
+  expect(parseTag(withDetailsOf(scan, unlinked))).toMatchObject({ t3: "t", branch: "feat/x" });
+
+  // A launch path that looks like a detail is not one.
+  const odd = sessionTag({ host: "claude", sessionId: "s", t3: "t" }, "/h/a branch:evil", "/h");
+  expect(withDetailsOf(odd, odd)).toBe(odd);
+  expect(withDetailsOf(scan, odd)).toBe(scan);
 });
 
 test("who shows a session on another machine with the branch and title its tag carries", () => {
