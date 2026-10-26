@@ -59,6 +59,8 @@ test.each([
 test.each([
   "It runs on one machine by default.",
   "It runs on one machine, by default.",
+  "It runs on a single machine by default.",
+  "Mail on a single machine or across machines.",
   "Mail on one machine or across machines.",
   "Mail on one machine\nor across machines.",
   "The database holds mail on your computer, where the server runs.",
@@ -68,7 +70,9 @@ test.each([
 
 test("a folder counts every text file under it", () => {
   const root = tree({ "packages/plugin/skills/SKILL.md": "Swarmail is local mail." });
-  expect(publicProblems(root, ["packages"])[0]).toContain("packages/plugin/skills/SKILL.md");
+  expect(publicProblems(root, ["packages"])[0]).toContain(
+    join("packages", "plugin", "skills", "SKILL.md"),
+  );
 });
 
 test("names a README banner whose alt text differs from the tagline", () => {

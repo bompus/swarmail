@@ -10,7 +10,7 @@
     {
       "name": "swarmail",
       "source": "packages/cursor-plugin",
-      "description": "Connects Cursor to a Swarmail server, on this machine or another."
+      "description": "Connects Cursor to the Swarmail server's loopback address, 127.0.0.1:18765."
     }
   ]
 }
