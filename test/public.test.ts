@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { publicProblems } from "../scripts/check-public.ts";
+import { publicProblems, readable } from "../scripts/check-public.ts";
 import { IMAGES, STALE_SCOPE, TAGLINE, assetText } from "../scripts/lib/brand.ts";
 
 const roots: string[] = [];
@@ -49,8 +49,10 @@ test.each([
   "Nothing leaves your machine.",
   "Local\nmail between sessions",
   "on one machine,\nand no other",
+  String.raw`"Local\nmail between coding-agent sessions on one\ncomputer"`,
+  '"Swarmail provides local " + "mail between sessions."',
 ])("rejects %j", (text) => {
-  expect(STALE_SCOPE.test(text.replace(/\s+/g, " "))).toBe(true);
+  expect(STALE_SCOPE.test(readable(text))).toBe(true);
   expect(publicProblems(tree({ "docs/usage.md": text }), ["docs/usage.md"])[0]).toContain(
     "docs/usage.md",
   );

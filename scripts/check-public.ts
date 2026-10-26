@@ -36,12 +36,21 @@ function textFiles(root: string, path: string): string[] {
 
 const sha256 = (file: string) => createHash("sha256").update(readFileSync(file)).digest("hex");
 
+/**
+ * The text as a reader sees it: string literals joined by `+`, escaped line breaks and tabs turned into
+ * spaces, and whitespace collapsed, so a phrase split over lines, escapes or concatenated pieces still matches.
+ */
+export const readable = (source: string): string =>
+  source
+    .replace(/(["'`])\s*\+\s*\1/g, "")
+    .replace(/\\[nrt]/g, " ")
+    .replace(/\s+/g, " ");
+
 /** What is wrong with the public text under `root`; empty when it is current. */
 export function publicProblems(root: string, paths = PUBLIC_PATHS): string[] {
   const problems: string[] = [];
   for (const file of paths.flatMap((path) => textFiles(root, path))) {
-    // Collapsed, so a phrase broken over two lines still matches.
-    const text = readFileSync(join(root, file), "utf8").replace(/\s+/g, " ");
+    const text = readable(readFileSync(join(root, file), "utf8"));
     const hit = STALE_SCOPE.exec(text);
     if (hit) {
       problems.push(`${file}: still describes Swarmail as local to one machine: "${hit[0]}"`);
