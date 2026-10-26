@@ -7,8 +7,10 @@ Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## What fits
 
-Swarmail stays a local server for one machine: no network transport, no
-accounts. Leave out names of private projects or repositories, local paths,
+Swarmail is a local server for one machine by default: no accounts, and
+nothing listens beyond the loopback address until the owner sets
+`SWARMAIL_HOST` with a bearer token, which adds one listener on the address the
+owner names (a private-network address is the intended choice) and nothing wider. Leave out names of private projects or repositories, local paths,
 home directories and credentials, including in test fixtures.
 
 Inside T3 Code, Swarmail prefers T3 Code's own thread messaging, delegated tasks

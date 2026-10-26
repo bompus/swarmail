@@ -319,8 +319,8 @@ test("runtime enrollment registers a fresh read-only T3 session without native h
   });
   try {
     const source = join(import.meta.dir, "../src/wake-auto-t3.ts");
-    const run = async (after: string) => {
-      const code = `import {enrollT3Threads} from ${JSON.stringify(source)}; enrollT3Threads(${JSON.stringify(f.registry)},${JSON.stringify(join(f.root, ".t3"))},${JSON.stringify(after)},${JSON.stringify(`http://127.0.0.1:${server.port}/mcp/`)});`;
+    const run = async (after: string, url = `http://127.0.0.1:${server.port}/mcp/`) => {
+      const code = `import {enrollT3Threads} from ${JSON.stringify(source)}; enrollT3Threads(${JSON.stringify(f.registry)},${JSON.stringify(join(f.root, ".t3"))},${JSON.stringify(after)},${JSON.stringify(url)});`;
       expect(
         await Bun.spawn([process.execPath, "-e", code], { stdout: "pipe", stderr: "pipe" }).exited,
       ).toBe(0);
@@ -334,6 +334,13 @@ test("runtime enrollment registers a fresh read-only T3 session without native h
       name: "BlueLake",
       projects: [repo],
       wakeThread: "thread-1",
+      server: `http://127.0.0.1:${server.port}/mcp/`,
+    });
+    // A name registered with the local server is not reused against another one.
+    await run("2026-09-30T21:00:00Z", "http://100.64.0.1:9/mcp/");
+    expect(JSON.parse(readFileSync(f.state, "utf8"))).toMatchObject({
+      name: "BlueLake",
+      server: `http://127.0.0.1:${server.port}/mcp/`,
     });
     expect([...automaticT3Threads(f.registry, join(f.root, ".t3"))]).toEqual(["thread-1"]);
   } finally {

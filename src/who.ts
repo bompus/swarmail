@@ -11,7 +11,7 @@
 // Without --all, rows with no live host process or running T3 Code thread and no activity in the last day are left out.
 // Names this session registered under (selfNames in registry.ts) are marked "(you)", and `self` in --json.
 
-import { databasePath, homeDir, t3Home, tildePath } from "./paths.ts";
+import { databasePath, homeDir, isLoopbackUrl, swarmailUrl, t3Home, tildePath } from "./paths.ts";
 import { Database } from "bun:sqlite";
 import { existsSync, readFileSync } from "node:fs";
 import { basename } from "node:path";
@@ -21,7 +21,14 @@ import { primaryCheckout } from "./checkout.ts";
 import { location, locationLabel, type Location } from "./location.ts";
 import { callTool } from "./client.ts";
 import { hostAlive } from "./proc.ts";
-import { nameIn, openRegistry, registryDir, selfNames, type RegisterState } from "./registry.ts";
+import {
+  nameIn,
+  openRegistry,
+  registryDir,
+  sameServer,
+  selfNames,
+  type RegisterState,
+} from "./registry.ts";
 import { t3StatePath, t3ThreadId, t3Threads, type T3Thread } from "./t3-state.ts";
 import { leadingTag, parseTag, withoutTag } from "./tag.ts";
 import { nativeTitles } from "./native-titles.ts";
@@ -63,7 +70,8 @@ export interface WhoRow {
   roomOwner: boolean;
   task: string;
   sameSessionAs: string[];
-  unread: number;
+  /** Null when the roster came from a remote server, whose unread counts this machine's database cannot give. */
+  unread: number | null;
   oldestUnread: string | null;
 }
 
@@ -222,19 +230,24 @@ export function whoRows(
     room,
     queues = new Map(),
     checkout = primaryCheckout,
+    server = swarmailUrl(),
   }: {
     project: string;
     roster: RosterAgent[];
     stateDir: string;
     threads: Map<string, T3Thread>;
     room: LiveRoom | null;
-    queues?: Map<string, Queue>;
+    queues?: Map<string, Queue> | null;
     checkout?: (dir: string) => string | null;
+    server?: string;
   },
   threadOf = t3ThreadId,
   alive = hostAlive,
 ): WhoRow[] {
-  const states = openRegistry(stateDir).all();
+  // Sessions registered with another server say nothing about this roster.
+  const states = openRegistry(stateDir)
+    .all()
+    .filter((state) => sameServer(state.server, server));
   const rows = roster.map((agent): WhoRow => {
     const tag = parseTag(agent.task_description);
     const sessionId = tag?.sessionId ?? sessionNamed(states, project, agent.name) ?? null;
@@ -265,8 +278,8 @@ export function whoRows(
       roomOwner,
       task: withoutTag(agent.task_description),
       sameSessionAs: [],
-      unread: queues.get(agent.name)?.unread ?? 0,
-      oldestUnread: queues.get(agent.name)?.oldest ?? null,
+      unread: queues ? (queues.get(agent.name)?.unread ?? 0) : null,
+      oldestUnread: queues?.get(agent.name)?.oldest ?? null,
     };
   });
   fillNativeTitles(rows, roster, states, project);
@@ -301,7 +314,7 @@ export function whoRows(
       roomOwner: false,
       task: "not in visible roster; registration and delivery unknown",
       sameSessionAs: [],
-      unread: 0,
+      unread: queues ? 0 : null,
       oldestUnread: null,
     });
   }
@@ -317,7 +330,14 @@ export function main(args: string[]): void {
   const all = args.includes("--all");
   const target = args.find((arg) => !arg.startsWith("--")) ?? process.cwd();
   const dbPath = databasePath();
-  const project = resolveProject(target, projectKeys(dbPath));
+  // Unread counts come from this machine's database, which is not the remote server's, and neither are its project names.
+  const remote = !isLoopbackUrl(swarmailUrl());
+  if (remote && !/[\\/]/.test(target) && !primaryCheckout(target)) {
+    throw new Error(
+      `${target} is a project name; a remote server needs a path inside the checkout`,
+    );
+  }
+  const project = resolveProject(target, remote ? [] : projectKeys(dbPath));
   const roster = callTool("list_agents", { project_key: project, limit: 1000 }) as RosterAgent[];
   const home = homeDir();
   const now = Date.now();
@@ -327,7 +347,7 @@ export function main(args: string[]): void {
     stateDir: registryDir(),
     threads: t3Threads(t3StatePath(t3Home())),
     room: liveRoom(process.env.SWARMAIL_LIVE_ROOM || null),
-    queues: unreadQueues(dbPath, project),
+    queues: remote ? null : unreadQueues(dbPath, project),
   }).filter(
     (row) =>
       all ||
@@ -342,6 +362,9 @@ export function main(args: string[]): void {
     return;
   }
   console.log(`${basename(project)} (${project}), ${new Date(now).toISOString()}`);
+  if (remote) {
+    console.log("unread counts are not shown for a remote server");
+  }
   for (const row of rows) {
     const who =
       row.name === null

@@ -219,3 +219,22 @@ test("the installed hook blocks a real commit and preserves the hook chain", () 
   expect(blocked.stderr).toContain("src/z.ts  (src/*.ts, held by GreenLake)");
   expect(run({ SWARMAIL_AGENT: "GreenLake" }).status).toBe(0);
 });
+
+test("a name registered with one server is not this session's name at another", () => {
+  const state = join(dir, "state", "swarmail-register");
+  mkdirSync(state, { recursive: true });
+  const host = { pid: 42, start: "7" } as HostProcess;
+  const remote = "http://100.64.0.1:18765/mcp/";
+  writeFileSync(join(state, "a.json"), JSON.stringify({ name: "GreenLake", host, server: remote }));
+  const at = (url: string) => [...selfNames({ ...env, SWARMAIL_URL: url }, host)];
+  expect(at(remote)).toEqual(["GreenLake"]);
+  // The server accepts the path with or without its trailing slash.
+  expect(at(remote.replace(/\/$/, ""))).toEqual(["GreenLake"]);
+  expect(at("http://127.0.0.1:18765/mcp/")).toEqual([]);
+  expect(at("http://localhost:9/mcp/")).toEqual([]);
+  // State from before the URL was recorded belongs to the local server.
+  writeFileSync(join(state, "a.json"), JSON.stringify({ name: "GreenLake", host }));
+  expect(at("http://127.0.0.1:18765/mcp/")).toEqual(["GreenLake"]);
+  expect(at(remote)).toEqual([]);
+  rmSync(state, { recursive: true });
+});

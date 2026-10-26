@@ -6,7 +6,7 @@
 //   swarmail search <words...> [--limit N] [--cursor CURSOR] [--json | --json-page]  project mail matching every word, best match first
 //   swarmail thread <id> [--limit N] [--json]                   a thread's messages, oldest first; needs no sender name
 // The sender is --as, else SWARMAIL_AGENT, else the name the register hook recorded for the agent host above this shell.
-import { swarmailUrl } from "./paths.ts";
+import { authHeaders, swarmailUrl } from "./paths.ts";
 import { compileResourceNotice } from "./resource-notice.ts";
 import { pageLimit } from "./store.ts";
 import { primaryCheckout } from "./checkout.ts";
@@ -70,6 +70,7 @@ export async function call(
   signal?: AbortSignal,
 ): Promise<any> {
   const url = swarmailUrl(env);
+  const auth = authHeaders(env, url);
   let body: any;
   let status: number | undefined;
   try {
@@ -78,7 +79,11 @@ export async function call(
       // Every tool answers promptly; a server that does not is down or wedged.
       signal: signal ?? AbortSignal.timeout(10_000),
       redirect: "error",
-      headers: { "content-type": "application/json", accept: "application/json" },
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+        ...auth,
+      },
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,

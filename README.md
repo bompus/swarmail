@@ -134,7 +134,8 @@ please open an issue.
 
    The database is `~/.local/share/swarmail/mail.sqlite3`. The server has no
    authentication. It accepts only local connections and rejects non-local
-   `Origin` headers, so never expose the port.
+   `Origin` headers, so never expose the port. That describes the default
+   loopback listener; to reach it from another machine, see [Using it from another machine](#using-it-from-another-machine).
 
 3. Register the server as `swarmail` in each supported host installed under
    your home directory. A host counts as installed when its config file or
@@ -231,6 +232,8 @@ anywhere prints usage and runs nothing.
 | --------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SWARMAIL_DB`               | `~/.local/share/swarmail/mail.sqlite3` | Database path                                                                                                                                                          |
 | `SWARMAIL_PORT`             | `18765`                                | Server port                                                                                                                                                            |
+| `SWARMAIL_HOST`             | unset                                  | Also listen on this one non-loopback address, such as a Tailscale IP; needs `SWARMAIL_TOKEN_FILE`                                                                      |
+| `SWARMAIL_TOKEN_FILE`       | unset                                  | A file whose first line is a bearer token of 32 or more characters. The server requires it on `SWARMAIL_HOST`; the command, the register hook and the relay send it    |
 | `SWARMAIL_URL`              | `http://127.0.0.1:18765/mcp/`          | MCP endpoint for the command, the register hook and the `swarmail-mcp` relay                                                                                           |
 | `SWARMAIL_WAKE_URL`         | `http://127.0.0.1:18765`               | Server base URL for the wake hook                                                                                                                                      |
 | `SWARMAIL_SYNCHRONOUS`      | `normal`                               | `full` syncs every commit, at about 3 ms per send instead of 0.5 ms                                                                                                    |
@@ -247,6 +250,74 @@ anywhere prints usage and runs nothing.
 variables only when you run `swarmail serve` yourself, and set them for every
 host that runs the hooks. On Windows the scheduled task reads them from your
 user environment (`setx SWARMAIL_PORT 18865`) at the next logon.
+
+### Using it from another machine
+
+By default the server listens on `127.0.0.1` only. To let sessions on another
+machine use it, make one machine the hub and give it a second listener on a
+private-network address. Create the token, then set the two variables for the
+server you already run and restart it:
+
+```bash
+umask 077 && head -c 32 /dev/urandom | base64 | tr -d '\n=+/' > ~/.config/swarmail-token
+systemctl --user edit swarmail   # under [Service]: Environment=SWARMAIL_HOST=<tailscale ip -4>
+                                 #                   Environment=SWARMAIL_TOKEN_FILE=%h/.config/swarmail-token
+systemctl --user restart swarmail
+```
+
+On Windows set the two variables in your user environment and sign in again.
+A second `swarmail serve` started by hand fails while the installed one holds
+`127.0.0.1:18765`, so stop the service first if you run it that way.
+
+The loopback listener is unchanged, so local hosts and hooks keep working without
+a token, and the command and register hook send the token only to a URL that is
+not loopback. The server accepts any one non-loopback address, public ones
+included, so name a private-network address; a client with the token can read
+the roster, project paths and reservations as well as mail. The extra listener
+speaks plain HTTP, so the token and the mail are unencrypted on the wire: use a
+network that encrypts and authenticates every peer, such as Tailscale, and never
+an ordinary shared or public network. The extra listener answers every route except `/healthz` only with
+`Authorization: Bearer <token>`, and the server refuses to start with
+`SWARMAIL_HOST` set to a loopback or wildcard address or without a token file.
+Copy the token file to the other machine, then point its `swarmail` command,
+register hook and relay at the hub:
+
+```bash
+SWARMAIL_URL=http://<hub address>:18765/mcp/ SWARMAIL_TOKEN_FILE=~/.config/swarmail-token swarmail who
+```
+
+A host that connects to MCP over HTTP itself needs the same `Authorization`
+header in its server entry, or `swarmail-mcp` as a relay.
+
+What does not carry over yet:
+
+- A project is named by its checkout path on the machine that registers it, so
+  the same repository checked out at different paths on two machines is two
+  projects with separate rosters, mail and reservations. Use the same absolute path
+  on both machines to share one.
+- The server reads process state, branch and session titles from its own
+  machine, so a remote session appears without a branch or title and its
+  liveness checks do not see it.
+- Wake hooks and bridges do not send the token, so mail to a remote session
+  is read when that session checks its inbox.
+- `swarmail overdue` refuses to run against a remote server, because it reads
+  this machine's records; run it on the hub.
+- A session belongs to the one server it registered with. If its hooks later
+  reach a different server, they leave it unregistered there and say to start a
+  new session, and `swarmail inbox`, `send` and the git guard do not use its
+  name at the other server.
+- `swarmail who` shows no unread counts for a remote server, because it counts
+  them in this machine's database, and it takes a path inside the checkout, not
+  a project name, because it cannot list the server's projects.
+- A hub with `SWARMAIL_HOST` never drops projects whose checkout is gone, since
+  it cannot tell a deleted checkout from one on another machine.
+- The git guard checks this machine's database and the names a session holds on
+  this machine's server, so file reservations held on the hub do not block a
+  commit or push made on another machine, and a session registered only with the
+  hub is never treated as the holder of a local reservation.
+- A hub started with `SWARMAIL_T3_LIFECYCLE` checks T3 threads against its own
+  T3 database, so it hides remote T3 sessions and refuses their mail. Leave it
+  unset on a hub that serves remote T3 sessions.
 
 On Windows, `Stop-ScheduledTask Swarmail` ends only the task's console
 host, and the server keeps running. To stop the server for good, run

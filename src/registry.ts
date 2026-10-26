@@ -2,7 +2,7 @@
 // under a lock file, and the server calls that register a session. The hook and the T3 supervisor
 // register through `openRegistry`; `who`, the guard and the wake hook only read.
 import { renameOver } from "./files.ts";
-import { stateHome, t3Home } from "./paths.ts";
+import { isLoopbackUrl, stateHome, t3Home } from "./paths.ts";
 import {
   closeSync,
   existsSync,
@@ -34,6 +34,8 @@ export interface RegisterState {
   host?: HostProcess | null;
   /** When the host reported the session ended (SessionEnd); its next prompt or edit clears it. */
   ended?: string;
+  /** The server URL it registered with. Names belong to one server, so another URL never uses them. */
+  server?: string;
   /** The T3 thread whose automatic bridge (wake-auto-t3.ts) owns this session's wake; set when its registration settles. */
   wakeThread?: string;
 }
@@ -246,7 +248,8 @@ export function serverRegister(
               model: session.model || session.host,
               task_description: `${tag} ${keptTask(row?.task_description)}`,
               ...(reuse && { name: reuse }),
-              ...(worktree !== undefined && { worktree }),
+              // A remote server cannot check a checkout on this machine, and rejects one it cannot find.
+              ...(worktree !== undefined && isLoopbackUrl(url) && { worktree }),
             },
             url,
           ) as { name?: string }
@@ -467,6 +470,15 @@ function hostProvider(host: { name?: string } | null): string | undefined {
  * Names owned by this session, as registered in `project` when given; a shared host process alone
  * never identifies one of its sessions.
  */
+/**
+ * Whether state recorded against `recorded` belongs to the server at `current`. The local server is one server
+ * whatever its port, and state from before the URL was recorded belongs to it.
+ */
+export const sameServer = (recorded: string | undefined, current: string): boolean =>
+  recorded === undefined || isLoopbackUrl(recorded)
+    ? isLoopbackUrl(current)
+    : recorded.replace(/\/+$/, "") === current.replace(/\/+$/, "");
+
 export function selfNames(
   env: NodeJS.ProcessEnv = process.env,
   host = hostProcess(),
@@ -497,6 +509,7 @@ export function selfNames(
       (state) =>
         state.host?.pid === host.pid &&
         state.host.start === host.start &&
+        sameServer(state.server, swarmailUrl(env)) &&
         (!explicit || state.sessionId === env[explicit[1]]),
     );
   if (!explicit && states.length > 1) {

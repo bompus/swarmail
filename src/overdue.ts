@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { call as mcpCall } from "./mail.ts";
-import { databasePath, stateHome } from "./paths.ts";
+import { databasePath, isLoopbackUrl, stateHome, swarmailUrl } from "./paths.ts";
 
 type Call = (name: string, args: Record<string, unknown>) => Promise<any>;
 export interface Note {
@@ -197,6 +197,13 @@ export async function overdue(
   if (unknown.length > 0) {
     console.error(
       `swarmail overdue: unknown argument ${unknown.join(" ")}; usage: swarmail overdue [--dry-run]`,
+    );
+    return 2;
+  }
+  // It reads this machine's records and answers through the server, so the two must be the same machine.
+  if (!isLoopbackUrl(swarmailUrl(env))) {
+    console.error(
+      "swarmail overdue: SWARMAIL_URL names a remote server; run it on the machine that runs the server",
     );
     return 2;
   }
