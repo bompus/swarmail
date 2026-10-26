@@ -272,7 +272,7 @@ export function whoRows(
       );
     // A session on another machine reports its branch and title in its tag; the server has no checkout to read them from.
     const tagged: Location | null =
-      tag?.branch || tag?.title
+      tag?.branch || tag?.title || tag?.worktree
         ? {
             repo: basename(project),
             worktree: tag.worktree ?? tag.cwd ?? "",

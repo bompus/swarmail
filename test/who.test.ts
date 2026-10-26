@@ -544,6 +544,32 @@ test("who shows a session on another machine with the branch and title its tag c
   }
 });
 
+test("who shows the edit checkout a remote session reports even with no branch or title", () => {
+  const dir = mkdtempSync(join(tmpdir(), "who-tag-worktree-"));
+  try {
+    const [row] = whoRows(
+      {
+        project: "git:github.com/acme/widget",
+        stateDir: dir,
+        roster: [
+          {
+            name: "BlueLake",
+            task_description: "[claude:s worktree:~%2Fw%2Fedit cwd:~/w/launch] task",
+            location: null,
+          },
+        ],
+        threads: new Map(),
+        room: null,
+      },
+      () => null,
+      () => false,
+    );
+    expect(row!.location).toMatchObject({ worktree: "~/w/edit", branch: null });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("who takes a session on another machine from the server: waiting means alive, an ended report means ended", () => {
   const dir = mkdtempSync(join(tmpdir(), "who-remote-"));
   try {

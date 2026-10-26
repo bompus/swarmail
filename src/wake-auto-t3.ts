@@ -194,16 +194,19 @@ export function enrollT3Threads(
       sessionId: session,
       cwd: row.cwd,
     };
-    const tag = sessionTag({ ...context, t3: row.thread_id }, row.cwd);
+    const bare = sessionTag({ ...context, t3: row.thread_id }, row.cwd);
+    // A hook on the session's own machine may have registered it with a branch, title and edit checkout the scan
+    // cannot read; registering again keeps that tag.
+    const tag =
+      known.projects
+        .map((project) => known.tags?.[project])
+        .find((t) => t && withoutDetails(t) === bare) ?? bare;
     if (
       known.wakeThread === row.thread_id &&
       !known.ended &&
       known.name &&
       known.projects.some(
-        (project) =>
-          known.tags?.[project] !== undefined &&
-          withoutDetails(known.tags[project]) === tag &&
-          known.pending?.project !== project,
+        (project) => known.tags?.[project] === tag && known.pending?.project !== project,
       )
     ) {
       continue;

@@ -324,7 +324,7 @@ holds (`list_file_reservations`) and refuses a commit or push that touches one
 held by another session; a hub it cannot reach is reported and the commit goes
 ahead. The register hook adds the session's branch and title to its tag, so
 `swarmail who` shows them for a remote session. A branch change or a new title
-appears after that session's next hook run, and a title only once the host has
+appears after that session's next edit or session start, and a title only once the host has
 stored one.
 
 What does not carry over yet:
