@@ -266,6 +266,12 @@ test("looking a repository up reads only; registering remembers the checkout; an
     writeFileSync(join(hub, ".git", "config"), "[broken\n");
     expect(tools.ensure_project({ human_key: name }).id).toBe(project.id);
     expect(aliases()).toBe(1);
+    // Origin set to a path on this machine: the clone no longer names the repository.
+    writeFileSync(
+      join(hub, ".git", "config"),
+      '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\turl = /srv/git/other.git\n',
+    );
+    expect(tools.ensure_project({ human_key: name }).id).not.toBe(project.id);
   } finally {
     db.close();
     rmSync(dir, { recursive: true, force: true });
@@ -280,18 +286,19 @@ test("a session cannot take a retired session's name by asking for it", () => {
       "register_agent" | "retire_agent",
       (a: Args) => any
     >;
+    const project_key = "git:github.com/acme/a";
     const register = (tag: string, name?: string) =>
       tools.register_agent({
-        project_key: "git:github.com/acme/a",
+        project_key,
         name,
         program: "test",
         model: "test",
         task_description: `${tag} work`,
       });
     const hub = register("[codex:hub-session]");
-    tools.retire_agent({ project_key: "git:github.com/acme/a", agent_name: hub.name });
+    tools.retire_agent({ project_key, agent_name: hub.name });
     expect(() => register("[claude:laptop-session]", hub.name)).toThrow("retired session");
-    // The retired session itself, and a request for a fresh name, still work.
+    // The session itself, and a request for a fresh name, still work.
     expect(register("[codex:hub-session]", hub.name).name).toBe(hub.name);
     expect(register("[claude:laptop-session]").name).not.toBe(hub.name);
   } finally {

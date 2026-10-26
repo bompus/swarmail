@@ -71,13 +71,19 @@ export function repositoryName(remote: string): string | null {
   return host && path ? `${REPOSITORY_PREFIX}${host}/${path}`.toLowerCase() : null;
 }
 
-/** The repository name of the clone holding `dir`, from the URL git uses for its `origin` remote; null without one. */
-export function repositoryKey(dir: string, run: (args: string[]) => string = git): string | null {
+/** The URL git uses for the `origin` remote of the clone holding `dir`; null when git cannot read one. */
+export function originUrl(dir: string, run: (args: string[]) => string = git): string | null {
   try {
-    return repositoryName(run(["-C", dir, "remote", "get-url", "origin"]));
+    return run(["-C", dir, "remote", "get-url", "origin"]);
   } catch {
     return null;
   }
+}
+
+/** The repository name of the clone holding `dir`, from its `origin` remote; null without a usable one. */
+export function repositoryKey(dir: string, run: (args: string[]) => string = git): string | null {
+  const url = originUrl(dir, run);
+  return url === null ? null : repositoryName(url);
 }
 
 /**

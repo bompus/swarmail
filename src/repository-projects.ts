@@ -4,7 +4,7 @@ import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { isAbsolute } from "node:path";
-import { REPOSITORY_PREFIX, repositoryKey } from "./checkout.ts";
+import { REPOSITORY_PREFIX, originUrl, repositoryKey, repositoryName } from "./checkout.ts";
 import { nowUs } from "./db.ts";
 import type { Project } from "./store.ts";
 
@@ -20,17 +20,22 @@ const remember = (db: Database, name: string, project: Project): void => {
 /**
  * The project for a repository name: the checkout of that repository this machine holds (the earliest project when
  * it holds several). Null when it holds none. A remembered checkout counts while it is missing for now, or its origin
- * names the repository or cannot be read; one whose origin names another repository does not. With `persist`, the
+ * names the repository or cannot be read at all; one whose origin names another repository does not. With `persist`, the
  * lookup also remembers the checkout it found and forgets a checkout that stopped counting; read-only tools leave
  * it off so they write nothing.
  */
 export function projectOf(db: Database, name: string, persist = false): Project | null {
-  const origin = (project: Project): string | null => repositoryKey(project.human_key);
   const holds = (project: Project): boolean =>
-    isAbsolute(project.human_key) && existsSync(project.human_key) && origin(project) === name;
-  const keeps = (project: Project): boolean =>
     isAbsolute(project.human_key) &&
-    (!existsSync(project.human_key) || [name, null].includes(origin(project)));
+    existsSync(project.human_key) &&
+    repositoryKey(project.human_key) === name;
+  const keeps = (project: Project): boolean => {
+    const url =
+      isAbsolute(project.human_key) && existsSync(project.human_key)
+        ? originUrl(project.human_key)
+        : null;
+    return isAbsolute(project.human_key) && (url === null || repositoryName(url) === name);
+  };
   const aliased = db
     .query<Project, [string]>(
       "SELECT p.* FROM project_aliases a JOIN projects p ON p.id = a.project_id WHERE a.alias = ?",

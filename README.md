@@ -301,8 +301,11 @@ the clone later, its project takes over the one the remote sessions created. A h
 that holds several clones of the repository uses the one registered first, and a
 hub clone that registered before it had an `origin` keeps its own project, apart
 from the one remote sessions created for the repository. A
-clone with no `origin` remote cannot be named to a remote server, and the command
-and hooks say so.
+clone with no `origin` remote cannot be named to a remote server; the command
+says so, and the hook says so when the session starts. A clone whose origin git cannot read
+keeps the project it had. The hook does not take a name that another session holds in the project, and the
+server refuses to give a retired session's name to a different session; the hook then
+takes a fresh name.
 
 What does not carry over yet:
 

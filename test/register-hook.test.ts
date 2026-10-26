@@ -831,6 +831,44 @@ test("the hook does not take a name another session holds in the project", async
   }
 });
 
+test("a session in a clone with no origin is told why a remote server does not register it", async () => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-no-origin-")));
+  try {
+    const repo = join(dir, "repo");
+    Bun.spawnSync(["git", "init", "-q", repo]);
+    const env = {
+      ...process.env,
+      SWARMAIL_URL: "http://hub.example.test:18766/mcp/",
+      XDG_STATE_HOME: join(dir, "state"),
+      HOME: dir,
+    };
+    const run = async (input: unknown): Promise<string> => {
+      const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
+        stdin: new Blob([JSON.stringify(input)]),
+        env,
+      });
+      await proc.exited;
+      return (await new Response(proc.stdout).text()).trim();
+    };
+    const claude = {
+      session_id: "no-origin-1",
+      cwd: repo,
+      transcript_path: join(dir, ".claude/projects/-repo/no-origin-1.jsonl"),
+    };
+    const start = await run({ ...claude, hook_event_name: "SessionStart", source: "startup" });
+    expect(start).toContain("this clone has no origin remote");
+    // Edits after it stay quiet.
+    const edit = {
+      ...claude,
+      hook_event_name: "PreToolUse",
+      tool_input: { file_path: join(repo, "a.txt") },
+    };
+    expect(await run(edit)).toBe("");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a failed registration tells Claude, then the next prompt retries against the server and reports the name", async () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-retry-")));
   const port = freePort();
