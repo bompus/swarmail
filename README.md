@@ -319,10 +319,16 @@ waiting session, and the roster shows it waiting and then ended. That run
 called the server's HTTP interface from a script. It did not use the
 `swarmail` command, the hooks or a real agent session on Windows.
 
+Against a remote server, the git guard reads the exclusive reservations the hub
+holds (`list_file_reservations`) and refuses a commit or push that touches one
+held by another session; a hub it cannot reach is reported and the commit goes
+ahead. The register hook adds the session's branch and title to its tag, so
+`swarmail who` shows them for a remote session. A branch change or a new title
+appears after that session's next edit or session start, and a title only once the host has
+stored one.
+
 What does not carry over yet:
 
-- The server reads branch and session titles from its own machine, so a remote
-  session appears without a branch or title.
 - `swarmail who` shows a remote
   session as alive ("waiting for mail on the server") only while a wake hook or
   bridge of that session has a wait that began after its last end report, and as
@@ -356,10 +362,6 @@ What does not carry over yet:
   a project name, because it cannot list the server's projects.
 - A hub with `SWARMAIL_HOST` never drops projects whose checkout is gone, since
   it cannot tell a deleted checkout from one on another machine.
-- The git guard checks this machine's database and the names a session holds on
-  this machine's server, so file reservations held on the hub do not block a
-  commit or push made on another machine, and a session registered only with the
-  hub is never treated as the holder of a local reservation.
 - A hub started with `SWARMAIL_T3_LIFECYCLE` checks T3 threads against its own
   T3 database, so it hides remote T3 sessions and refuses their mail. Leave it
   unset on a hub that serves remote T3 sessions.

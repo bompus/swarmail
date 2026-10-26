@@ -67,7 +67,7 @@ seat through `codex exec` in its read-only sandbox), three runs each, 48 replies
 required check. In the one that did not, Sonnet's reply to `evaluate` offered a preview,
 `bun scripts/configure-mcp.ts --dry-run && bun scripts/configure-hooks.ts --dry-run`, and said it would
 not run it until the user chose; both flags exist, and the grader read the chained command as applying
-the installers. The 0.6.0 run used seven seats, so this one covers fewer models.
+the installers. The 0.6.0 run used seven seats, so this one covers fewer models. `tools.json` has since gained `list_file_reservations`, which no case uses, so the replies were not rerun for it.
 
 | Case       | Cells passing |
 | ---------- | ------------- |

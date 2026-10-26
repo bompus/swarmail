@@ -11,12 +11,20 @@ import { existsSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { projectFor, worktreeRoot } from "./checkout.ts";
 import { swarmailUrl } from "./client.ts";
-import { isLoopbackUrl } from "./paths.ts";
+import { isLoopbackUrl, t3Home } from "./paths.ts";
+import { branch } from "./location.ts";
+import { nativeTitles } from "./native-titles.ts";
 import { hostProcess, sameHost } from "./proc.ts";
 import { nameIn, openRegistry, sameServer, serverRegister, type Session } from "./registry.ts";
 import { sessionTag, SESSION_ENV } from "./tag.ts";
-import { t3ThreadId } from "./t3-state.ts";
+import { t3StatePath, t3ThreadId, t3Threads } from "./t3-state.ts";
 import { updateHint } from "./updates.ts";
+
+/** The session's title: T3's saved one for a thread, else the host's own record. */
+function sessionTitle(t3: string | null, session: Session): string | null {
+  const saved = t3 ? t3Threads(t3StatePath(t3Home())).get(t3)?.title : null;
+  return saved || nativeTitles([{ host: session.host, session_id: session.sessionId }])[0] || null;
+}
 
 /** A hook payload. Each host sends its own shape, so every field is checked before use. */
 export interface HookInput {
@@ -243,14 +251,13 @@ function main(input: HookInput): string {
   const dir = targetDir({ ...input, cwd: session.cwd });
   const project = dir && projectFor(dir, server);
   const t3 = t3ThreadId(sessionId);
-  const tag = sessionTag({ ...session, t3 }, session.cwd);
   if (!project) {
     // A clone without an origin cannot be named to a remote server; the start says so once, not on every edit.
     const bare = starting && dir && !isLoopbackUrl(server) && worktreeRoot(dir);
     return starting
       ? (bare
           ? "Swarmail: this clone has no origin remote, which a remote server needs to name its repository, so this session is not registered. Add one and start the session again. "
-          : "") + startNotice(tag)
+          : "") + startNotice(sessionTag({ ...session, t3 }, session.cwd))
       : "";
   }
   // Most edits after the first find the project registered under this tag and skip the lock.
@@ -261,6 +268,18 @@ function main(input: HookInput): string {
       known?.worktrees?.[project])
     : undefined;
   const worktree = recorded ?? (dir ? (worktreeRoot(dir) ?? undefined) : undefined);
+  // The server cannot read the edit checkout, branch or title of a session on another machine, so the tag carries them.
+  const away = worktree && !isLoopbackUrl(server);
+  const tag = sessionTag(
+    {
+      ...session,
+      t3,
+      worktree: away ? worktree : null,
+      branch: away ? branch(worktree) : null,
+      title: away ? sessionTitle(t3, session) : null,
+    },
+    session.cwd,
+  );
   const text =
     known &&
     !known.ended &&

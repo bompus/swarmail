@@ -6,7 +6,7 @@ import { openDatabase } from "../src/db.ts";
 import type { Args } from "../src/store.ts";
 import type { T3Thread } from "../src/t3-state.ts";
 import { createTools } from "../src/tools.ts";
-import { parseTag } from "../src/tag.ts";
+import { parseTag, sessionTag, withDetailsOf, withoutDetails } from "../src/tag.ts";
 import { resolveProject, whoRows } from "../src/who.ts";
 
 test("reads the session tag", () => {
@@ -15,6 +15,16 @@ test("reads the session tag", () => {
     host: "claude",
     sessionId: "a5ff",
     build: "0439",
+    branch: null,
+    title: null,
+    worktree: null,
+    cwd: "~/w/x",
+  });
+  expect(
+    parseTag("[claude:a5ff branch:feat%2Flogin title:Fix%20the%20%5Blogin%5D%20page cwd:~/w/x] t"),
+  ).toMatchObject({
+    branch: "feat/login",
+    title: "Fix the [login] page",
     cwd: "~/w/x",
   });
   expect(parseTag("[codex:s1 cwd:~/project folder/with  spaces ] task")?.cwd).toBe(
@@ -478,6 +488,136 @@ test("a remote roster ignores sessions registered with the local server", () => 
       )[0]!.sessionId;
     expect(at("http://127.0.0.1:18765/mcp/")).toBe("c583");
     expect(at("http://100.64.0.1:18765/mcp/")).toBeNull();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a long title is cut by character and never breaks the tag", () => {
+  const title = `${"a".repeat(119)}😀 and more`;
+  const tag = sessionTag(
+    { host: "claude", sessionId: "s", build: null, branch: "feat/x", title, worktree: "/h/w" },
+    "/h/launch",
+    "/h",
+  );
+  expect(parseTag(tag)).toMatchObject({
+    branch: "feat/x",
+    title: `${"a".repeat(119)}😀`,
+    worktree: "~/w",
+    cwd: "~/launch",
+  });
+  expect(withoutDetails(tag)).toBe(
+    sessionTag({ host: "claude", sessionId: "s", build: null }, "/h/launch", "/h"),
+  );
+});
+
+test("a scan's tag takes a hook's branch, title and checkout even when the builds differ, and nothing from another session", () => {
+  const hook = sessionTag(
+    {
+      host: "claude",
+      sessionId: "s",
+      build: "old",
+      t3: "t",
+      branch: "feat/x",
+      title: "Fix $& it",
+      worktree: "/h/w",
+    },
+    "/h/launch",
+    "/h",
+  );
+  const scan = sessionTag(
+    { host: "claude", sessionId: "s", build: "new", t3: "t" },
+    "/h/launch",
+    "/h",
+  );
+  const merged = withDetailsOf(scan, hook);
+  expect(parseTag(merged)).toMatchObject({
+    build: "new",
+    branch: "feat/x",
+    title: "Fix $& it",
+    worktree: "~/w",
+    cwd: "~/launch",
+  });
+  const other = sessionTag(
+    { host: "claude", sessionId: "z", build: "old", t3: "u", branch: "b" },
+    "/h/launch",
+    "/h",
+  );
+  expect(withDetailsOf(scan, other)).toBe(scan);
+  expect(withDetailsOf(scan, undefined)).toBe(scan);
+
+  // A hook that could not resolve the T3 thread yet still passes its details on once the scan adds it.
+  const unlinked = sessionTag(
+    { host: "claude", sessionId: "s", build: "old", branch: "feat/x" },
+    "/h/launch",
+    "/h",
+  );
+  expect(parseTag(withDetailsOf(scan, unlinked))).toMatchObject({ t3: "t", branch: "feat/x" });
+
+  // T3 may report another directory than the one the hook was launched in.
+  const moved = sessionTag({ host: "claude", sessionId: "s", t3: "t" }, "/h/other", "/h");
+  expect(parseTag(withDetailsOf(moved, hook))).toMatchObject({ branch: "feat/x", cwd: "~/other" });
+
+  // A launch path that looks like a detail is not one.
+  const odd = sessionTag({ host: "claude", sessionId: "s", t3: "t" }, "/h/a branch:evil", "/h");
+  expect(withDetailsOf(odd, odd)).toBe(odd);
+  expect(withDetailsOf(scan, odd)).toBe(scan);
+});
+
+test("who shows a session on another machine with the branch and title its tag carries", () => {
+  const dir = mkdtempSync(join(tmpdir(), "who-tag-"));
+  try {
+    const [row] = whoRows(
+      {
+        project: "git:github.com/acme/widget",
+        stateDir: dir,
+        roster: [
+          {
+            name: "BlueLake",
+            task_description:
+              "[claude:s branch:feat%2Flogin title:Fix%20login worktree:~%2Fw%2Fwidget-edit cwd:~/w/widget] task",
+            location: null,
+          },
+        ],
+        threads: new Map(),
+        room: null,
+      },
+      () => null,
+      () => false,
+    );
+    expect(row!.title).toBe("Fix login");
+    expect(row!.location).toEqual({
+      repo: "widget",
+      worktree: "~/w/widget-edit",
+      branch: "feat/login",
+      title: "Fix login",
+    });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("who shows the edit checkout a remote session reports even with no branch or title", () => {
+  const dir = mkdtempSync(join(tmpdir(), "who-tag-worktree-"));
+  try {
+    const [row] = whoRows(
+      {
+        project: "git:github.com/acme/widget",
+        stateDir: dir,
+        roster: [
+          {
+            name: "BlueLake",
+            task_description: "[claude:s worktree:~%2Fw%2Fedit cwd:~/w/launch] task",
+            location: null,
+          },
+        ],
+        threads: new Map(),
+        room: null,
+      },
+      () => null,
+      () => false,
+    );
+    expect(row!.location).toMatchObject({ worktree: "~/w/edit", branch: null });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

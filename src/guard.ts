@@ -1,12 +1,13 @@
 // `swarmail guard <pre-commit|pre-push>`: refuses a commit or push that touches a path another agent holds
 // an exclusive Swarmail reservation on. Installed into a repository's hook chain by scripts/install-guard.ts.
 // SWARMAIL_GUARD=warn reports without blocking, SWARMAIL_GUARD=off skips the check; `--no-verify` skips every hook.
-import { databasePath } from "./paths.ts";
+import { databasePath, isLoopbackUrl, swarmailUrl } from "./paths.ts";
 import { Database } from "bun:sqlite";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { nowUs } from "./db.ts";
-import { primaryCheckout } from "./checkout.ts";
+import { projectFor } from "./checkout.ts";
+import { callTool } from "./client.ts";
 import { overlaps } from "./glob.ts";
 import { selfNames } from "./registry.ts";
 
@@ -53,6 +54,44 @@ function changedPaths(hook: string, stdin: string, cwd: string): string[] {
   return [...paths];
 }
 
+/** Exclusive reservations in this machine's database. */
+function heldLocally(project: string, dbPath: string): Reservation[] {
+  if (!existsSync(dbPath)) {
+    return [];
+  }
+  const db = new Database(dbPath, { readonly: true });
+  try {
+    db.run("PRAGMA busy_timeout = 2000");
+    return db
+      .query<Reservation, [string, number]>(
+        `SELECT f.path_pattern, a.name AS agent FROM file_reservations f
+         JOIN agents a ON a.id = f.agent_id JOIN projects p ON p.id = f.project_id
+         WHERE p.human_key = ? AND f.exclusive = 1 AND f.released_ts IS NULL AND f.expires_ts > ?`,
+      )
+      .all(project, nowUs());
+  } finally {
+    db.close();
+  }
+}
+
+/**
+ * Exclusive reservations the server holds for the project. A server that cannot be reached is reported and the
+ * commit goes ahead, because the guard is advisory; a project the server has never seen has none.
+ */
+function heldOnServer(project: string, url: string): Reservation[] {
+  try {
+    return callTool("list_file_reservations", { project_key: project }, url) as Reservation[];
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/Project .* not found/.test(message)) {
+      console.error(
+        `swarmail guard: could not read reservations from ${url}; this check was skipped.`,
+      );
+    }
+    return [];
+  }
+}
+
 export function guard(
   hook: string | undefined,
   stdin = "",
@@ -67,35 +106,25 @@ export function guard(
   if (mode === "off") {
     return 0;
   }
-  const dbPath = databasePath(env);
-  // Sessions register under the primary checkout, whichever worktree they commit from.
-  const project = primaryCheckout(cwd);
-  if (!project || !existsSync(dbPath)) {
+  const url = swarmailUrl(env);
+  let remote: boolean;
+  try {
+    remote = !isLoopbackUrl(url);
+  } catch {
+    console.error(`swarmail guard: ${url} is not a URL; this check was skipped.`);
     return 0;
   }
-
-  const db = new Database(dbPath, { readonly: true });
-  let held: Reservation[];
-  try {
-    db.run("PRAGMA busy_timeout = 2000");
-    held = db
-      .query<Reservation, [string, number]>(
-        `SELECT f.path_pattern, a.name AS agent FROM file_reservations f
-         JOIN agents a ON a.id = f.agent_id JOIN projects p ON p.id = f.project_id
-         WHERE p.human_key = ? AND f.exclusive = 1 AND f.released_ts IS NULL AND f.expires_ts > ?`,
-      )
-      .all(project, nowUs());
-  } finally {
-    db.close();
+  // Sessions register under the primary checkout, whichever worktree they commit from; on a remote server the
+  // project is the repository's name.
+  const project = projectFor(cwd, url);
+  if (!project) {
+    return 0;
   }
+  const held = remote ? heldOnServer(project, url) : heldLocally(project, databasePath(env));
   if (held.length === 0) {
     return 0;
   }
-  const self = new Set(
-    [...selfNames({ ...env, SWARMAIL_URL: undefined }, undefined, project)].map((n) =>
-      n.toLowerCase(),
-    ),
-  );
+  const self = new Set([...selfNames(env, undefined, project)].map((n) => n.toLowerCase()));
   const foreign = held.filter((r) => !self.has(r.agent.toLowerCase()));
   if (foreign.length === 0) {
     return 0;

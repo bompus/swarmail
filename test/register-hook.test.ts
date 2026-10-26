@@ -831,6 +831,89 @@ test("the hook does not take a name another session holds in the project", async
   }
 });
 
+test("a session registering with a remote server puts its branch in its tag, and one registering locally does not", async () => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-branch-")));
+  try {
+    const repo = join(dir, "repo");
+    const git = (...args: string[]) => Bun.spawnSync(["git", "-C", repo, ...args]);
+    Bun.spawnSync(["git", "init", "-q", "-b", "feat/login", repo]);
+    git("remote", "add", "origin", "https://github.com/acme/widget.git");
+    const start = async (url: string): Promise<string> => {
+      const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
+        stdin: new Blob([
+          JSON.stringify({
+            session_id: "branch-1",
+            cwd: repo,
+            transcript_path: join(dir, ".claude/projects/-repo/branch-1.jsonl"),
+            hook_event_name: "SessionStart",
+            source: "startup",
+          }),
+        ]),
+        env: {
+          ...process.env,
+          SWARMAIL_URL: url,
+          XDG_STATE_HOME: join(dir, "state"),
+          HOME: dir,
+        },
+      });
+      await proc.exited;
+      return (await new Response(proc.stdout).text()).trim();
+    };
+    // Neither server answers, so each notice shows the tag the hook tried to register.
+    expect(await start("http://hub.example.test:18766/mcp/")).toContain("branch:feat%2Flogin");
+    expect(await start("http://127.0.0.1:1/mcp/")).not.toContain("branch:");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a resumed session reports the branch and path of the checkout it last edited, not the one it started in", async () => {
+  const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-edit-branch-")));
+  try {
+    const repo = join(dir, "repo");
+    const other = join(dir, "other");
+    const git = (...args: string[]) => Bun.spawnSync(["git", "-C", repo, ...args]);
+    Bun.spawnSync(["git", "init", "-q", "-b", "main", repo]);
+    git("remote", "add", "origin", "https://github.com/acme/widget.git");
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "i");
+    git("worktree", "add", "-q", "-b", "feat/edit", other);
+    const state = join(dir, "state", "swarmail-register");
+    mkdirSync(state, { recursive: true });
+    writeFileSync(
+      join(state, "edit-1.json"),
+      JSON.stringify({
+        name: null,
+        projects: [],
+        worktrees: { "git:github.com/acme/widget": other },
+      }),
+    );
+    const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
+      stdin: new Blob([
+        JSON.stringify({
+          session_id: "edit-1",
+          cwd: repo,
+          transcript_path: join(dir, ".claude/projects/-repo/edit-1.jsonl"),
+          hook_event_name: "SessionStart",
+          source: "resume",
+        }),
+      ]),
+      env: {
+        ...process.env,
+        SWARMAIL_URL: "http://hub.example.test:18766/mcp/",
+        XDG_STATE_HOME: join(dir, "state"),
+        HOME: dir,
+      },
+    });
+    await proc.exited;
+    const out = await new Response(proc.stdout).text();
+    expect(out).toContain("branch:feat%2Fedit");
+    expect(out).toContain(`worktree:${encodeURIComponent(other.replace(dir, "~"))}`);
+    expect(out).not.toContain("branch:main");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("a session in a clone with no origin is told why a remote server does not register it", async () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-no-origin-")));
   try {
