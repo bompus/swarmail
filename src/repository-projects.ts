@@ -19,17 +19,18 @@ const remember = (db: Database, name: string, project: Project): void => {
 
 /**
  * The project for a repository name: the checkout of that repository this machine holds (the earliest project when
- * it holds several), remembered once found. Null when it holds none. A remembered checkout counts only while its
- * origin still names the repository or it is missing for now.
+ * it holds several). Null when it holds none. A remembered checkout counts while it is missing for now, or its origin
+ * names the repository or cannot be read; one whose origin names another repository does not. With `persist`, the
+ * lookup also remembers the checkout it found and forgets a checkout that stopped counting; read-only tools leave
+ * it off so they write nothing.
  */
-export function projectOf(db: Database, name: string): Project | null {
+export function projectOf(db: Database, name: string, persist = false): Project | null {
+  const origin = (project: Project): string | null => repositoryKey(project.human_key);
   const holds = (project: Project): boolean =>
-    isAbsolute(project.human_key) &&
-    existsSync(project.human_key) &&
-    repositoryKey(project.human_key) === name;
-  // A checkout that is missing for now keeps its mailbox; one that exists and names another repository does not.
+    isAbsolute(project.human_key) && existsSync(project.human_key) && origin(project) === name;
   const keeps = (project: Project): boolean =>
-    isAbsolute(project.human_key) && (!existsSync(project.human_key) || holds(project));
+    isAbsolute(project.human_key) &&
+    (!existsSync(project.human_key) || [name, null].includes(origin(project)));
   const aliased = db
     .query<Project, [string]>(
       "SELECT p.* FROM project_aliases a JOIN projects p ON p.id = a.project_id WHERE a.alias = ?",
@@ -38,7 +39,7 @@ export function projectOf(db: Database, name: string): Project | null {
   if (aliased && keeps(aliased)) {
     return aliased;
   }
-  if (aliased) {
+  if (aliased && persist) {
     db.run("DELETE FROM project_aliases WHERE alias = ?", [name]);
   }
   const waiting = db
@@ -48,7 +49,7 @@ export function projectOf(db: Database, name: string): Project | null {
     return waiting;
   }
   const clone = db.query<Project, []>("SELECT * FROM projects ORDER BY id").all().find(holds);
-  if (clone) {
+  if (clone && persist) {
     remember(db, name, clone);
   }
   return clone ?? null;

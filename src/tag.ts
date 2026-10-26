@@ -93,6 +93,35 @@ export function sameSession(a: Tag | null, b: Tag | null): boolean {
   return !!a.sessionId && a.host === b.host && a.sessionId === b.sessionId;
 }
 
+/**
+ * Why registering as `id` may not replace the agent `row`, or null when it may: the row is bound to another lifecycle
+ * identity, or `named` asks for the name of a retired session that `id` is not.
+ */
+export function replaceRefusal(
+  row: Identity & {
+    retired_at: number | null;
+    lifecycle_profile: string | null;
+    lifecycle_thread: string | null;
+  },
+  id: Identity,
+  named: boolean,
+): string | null {
+  if (
+    row.lifecycle_profile &&
+    (row.t3_thread
+      ? row.lifecycle_thread !== id.t3_thread
+      : id.t3_thread
+        ? row.lifecycle_thread !== id.t3_thread
+        : row.host !== id.host || row.session_id !== id.session_id)
+  ) {
+    return "Registration cannot replace a bound lifecycle identity.";
+  }
+  const retired = row.retired_at != null && !!(row.session_id || row.t3_thread);
+  return named && retired && !sameSession(tagOf(row), tagOf(id))
+    ? "That name belongs to a retired session; omit the name to get a new one."
+    : null;
+}
+
 /** The session columns of an `agents` row, parsed once from its description's leading tag; all null without one. */
 export interface Identity {
   host: string | null;

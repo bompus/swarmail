@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { projectFor, repositoryKey, repositoryName } from "../src/checkout.ts";
@@ -32,6 +32,10 @@ test("every clone and protocol of a repository names it the same", () => {
   );
   expect(repositoryName("https://git.example.com/team/100%.git")).toBe(
     "git:git.example.com/team/100%",
+  );
+  // A literal # or ? in an ssh path is part of the path git sends, so it keeps repositories apart.
+  expect(repositoryName("ssh://git@git.example.com/acme/repo#one.git")).not.toBe(
+    repositoryName("ssh://git@git.example.com/acme/repo#two.git"),
   );
   // A path on this machine names no repository that another machine could share.
   for (const url of ["/srv/git/repo.git", "file:///srv/repo.git", "C:\\work\\repo", ""]) {
@@ -233,6 +237,63 @@ test("a repository's mailbox survives its hub checkout being away for a while", 
     repo(dir, "hub", "https://github.com/acme/a");
     expect(tools.ensure_project({ human_key: hub }).id).toBe(project.id);
     expect(tools.ensure_project({ human_key: name }).id).toBe(project.id);
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("looking a repository up reads only; registering remembers the checkout; an unreadable origin forgets nothing", () => {
+  const dir = mkdtempSync(join(tmpdir(), "repo-key-"));
+  const db = openDatabase(join(dir, "mail.sqlite"));
+  try {
+    const tools = createTools(db, { databasePath: join(dir, "mail.sqlite") }) as Record<
+      "ensure_project" | "list_agents",
+      (a: Args) => any
+    >;
+    const name = "git:github.com/acme/a";
+    const hub = repo(dir, "hub", "https://github.com/acme/a");
+    const project = tools.ensure_project({ human_key: hub });
+    const aliases = () => (db.query("SELECT COUNT(*) AS n FROM project_aliases").get() as any).n;
+    const changes = () => (db.query("SELECT total_changes() AS n").get() as any).n;
+    const before = changes();
+    expect(tools.list_agents({ project_key: name })).toEqual([]);
+    expect(aliases()).toBe(0);
+    expect(changes()).toBe(before);
+    expect(tools.ensure_project({ human_key: name }).id).toBe(project.id);
+    expect(aliases()).toBe(1);
+    // Git cannot read the clone's configuration for a moment: the mailbox stays where it was.
+    writeFileSync(join(hub, ".git", "config"), "[broken\n");
+    expect(tools.ensure_project({ human_key: name }).id).toBe(project.id);
+    expect(aliases()).toBe(1);
+  } finally {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a session cannot take a retired session's name by asking for it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "repo-key-"));
+  const db = openDatabase(join(dir, "mail.sqlite"));
+  try {
+    const tools = createTools(db, { databasePath: join(dir, "mail.sqlite") }) as Record<
+      "register_agent" | "retire_agent",
+      (a: Args) => any
+    >;
+    const register = (tag: string, name?: string) =>
+      tools.register_agent({
+        project_key: "git:github.com/acme/a",
+        name,
+        program: "test",
+        model: "test",
+        task_description: `${tag} work`,
+      });
+    const hub = register("[codex:hub-session]");
+    tools.retire_agent({ project_key: "git:github.com/acme/a", agent_name: hub.name });
+    expect(() => register("[claude:laptop-session]", hub.name)).toThrow("retired session");
+    // The retired session itself, and a request for a fresh name, still work.
+    expect(register("[codex:hub-session]", hub.name).name).toBe(hub.name);
+    expect(register("[claude:laptop-session]").name).not.toBe(hub.name);
   } finally {
     db.close();
     rmSync(dir, { recursive: true, force: true });

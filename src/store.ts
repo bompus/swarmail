@@ -8,7 +8,15 @@ import { primaryCheckout, worktreeRoot } from "./checkout.ts";
 import * as repositories from "./repository-projects.ts";
 import { overlaps } from "./glob.ts";
 import { locations } from "./location.ts";
-import { identity, leadingTag, parseTag, sameSessionRow, tagOf, type Identity } from "./tag.ts";
+import {
+  identity,
+  leadingTag,
+  parseTag,
+  sameSessionRow,
+  tagOf,
+  replaceRefusal,
+  type Identity,
+} from "./tag.ts";
 import { InvalidTimestamp, iso, nowUs, parseIso } from "./db.ts";
 import { lifecycleEligible, type Lifecycle } from "./lifecycle.ts";
 import { SESSION_RE, T3_THREAD_RE } from "./wake.ts";
@@ -312,9 +320,9 @@ export class MailStore {
    * The project a key names. A row stored under the exact key wins, so a project created under a
    * worktree path stays reachable by that path.
    */
-  private lookup(given: string): { k: string; p: Project | null } {
+  private lookup(given: string, persist = false): { k: string; p: Project | null } {
     const exact = repositories.isName(given)
-      ? repositories.projectOf(this.db, given)
+      ? repositories.projectOf(this.db, given, persist)
       : this.q.projectByKey.get(given, slugify(given));
     const k = exact ? given : this.projectKey(given);
     return { k, p: exact ?? (k === given ? null : this.q.projectByKey.get(k, slugify(k))) };
@@ -333,7 +341,7 @@ export class MailStore {
   }
 
   ensureProject(key: unknown): Project {
-    const { k, p } = this.lookup(str(key, "human_key"));
+    const { k, p } = this.lookup(str(key, "human_key"), true);
     return p ?? repositories.claim(this.db, k) ?? this.q.insertProject.get(slugify(k), k, nowUs())!;
   }
 
@@ -488,18 +496,9 @@ export class MailStore {
       const task = String(a.task_description ?? "");
       const description = tag && !leadingTag(task) ? `${tag} ${task}`.trim() : task;
       const id = identity(description);
-      if (
-        existing.lifecycle_profile &&
-        (existing.t3_thread
-          ? existing.lifecycle_thread !== id.t3_thread
-          : id.t3_thread
-            ? existing.lifecycle_thread !== id.t3_thread
-            : existing.host !== id.host || existing.session_id !== id.session_id)
-      ) {
-        throw new ToolError(
-          "INVALID_ARGUMENT",
-          "Registration cannot replace a bound lifecycle identity.",
-        );
+      const refusal = replaceRefusal(existing, id, name != null);
+      if (refusal) {
+        throw new ToolError("INVALID_ARGUMENT", refusal);
       }
       this.db.run(
         `UPDATE agents SET program = ?, model = ?, task_description = ?, last_active_ts = ?, retired_at = NULL,

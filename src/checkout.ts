@@ -61,7 +61,8 @@ export function repositoryName(remote: string): string | null {
     try {
       const parsed = new URL(url);
       host = parsed.hostname;
-      path = decodePath(parsed.pathname);
+      // Git sends a literal ? or # in an ssh path on to the host as part of it.
+      path = decodePath(parsed.pathname + parsed.search + parsed.hash);
     } catch {
       return null;
     }
