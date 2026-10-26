@@ -26,7 +26,12 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   the session's next send, reservation, inbox read, mail change or wait clears it).
   `release_file_reservations` takes `session_ended` and `session_id` for the hook to send; a report from a session
   that no longer holds the name is ignored. Against a remote server, `swarmail who` uses these in place of a process
-  check this machine cannot make. The README lists what a remote session still lacks, such as its branch and title.
+  check this machine cannot make. The README lists what a remote session still lacks.
+
+- Against a remote server, the git guard reads the hub's exclusive file reservations through the new read-only tool
+  `list_file_reservations` and refuses a commit or push that touches one held by another session; a hub it cannot
+  reach is reported and the commit goes ahead. The register hook adds `branch:` and `title:` to the session tag, so
+  `swarmail who` shows a remote session's branch and title.
 
 - `bun run check` checks formatting with `bun fmt --no-script --check` instead of oxfmt, and `bun run fmt` writes with
   `bun fmt --no-script`. Both read the same `.oxfmtrc.json` and check the same files with no differences. Contributors

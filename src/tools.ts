@@ -817,6 +817,27 @@ export const TOOLS: Tool[] = [
     },
   },
   {
+    name: "list_file_reservations",
+    description:
+      "Return every active exclusive reservation in a project as an array of {id, agent, path_pattern, " +
+      "reason, expires_ts}. Released and expired reservations are left out. The git guard on another machine " +
+      "calls it to refuse a commit or push that touches a path someone here reserved.",
+    properties: { project_key: PROJECT },
+    required: ["project_key"],
+    readOnly: true,
+    run: (s, a) =>
+      s
+        .activeReservations(s.project(a.project_key).id, nowUs())
+        .filter((r) => r.exclusive)
+        .map((r) => ({
+          id: r.id,
+          agent: r.agent,
+          path_pattern: r.path_pattern,
+          reason: r.reason,
+          expires_ts: iso(r.expires_ts),
+        })),
+  },
+  {
     name: "renew_file_reservations",
     description:
       "Extend your active reservations by extend_seconds past their current expiry; each call " +

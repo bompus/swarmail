@@ -12,6 +12,8 @@ import { dirname, isAbsolute, resolve } from "node:path";
 import { projectFor, worktreeRoot } from "./checkout.ts";
 import { swarmailUrl } from "./client.ts";
 import { isLoopbackUrl } from "./paths.ts";
+import { branch } from "./location.ts";
+import { nativeTitles } from "./native-titles.ts";
 import { hostProcess, sameHost } from "./proc.ts";
 import { nameIn, openRegistry, sameServer, serverRegister, type Session } from "./registry.ts";
 import { sessionTag, SESSION_ENV } from "./tag.ts";
@@ -243,7 +245,17 @@ function main(input: HookInput): string {
   const dir = targetDir({ ...input, cwd: session.cwd });
   const project = dir && projectFor(dir, server);
   const t3 = t3ThreadId(sessionId);
-  const tag = sessionTag({ ...session, t3 }, session.cwd);
+  // The server cannot read the branch or title of a session on another machine, so the tag carries them.
+  const away = dir && !isLoopbackUrl(server) ? worktreeRoot(dir) : null;
+  const tag = sessionTag(
+    {
+      ...session,
+      t3,
+      branch: away && branch(away),
+      title: away && nativeTitles([{ host: session.host, session_id: session.sessionId }])[0],
+    },
+    session.cwd,
+  );
   if (!project) {
     // A clone without an origin cannot be named to a remote server; the start says so once, not on every edit.
     const bare = starting && dir && !isLoopbackUrl(server) && worktreeRoot(dir);

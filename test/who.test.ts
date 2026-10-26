@@ -15,6 +15,15 @@ test("reads the session tag", () => {
     host: "claude",
     sessionId: "a5ff",
     build: "0439",
+    branch: null,
+    title: null,
+    cwd: "~/w/x",
+  });
+  expect(
+    parseTag("[claude:a5ff branch:feat%2Flogin title:Fix%20the%20%5Blogin%5D%20page cwd:~/w/x] t"),
+  ).toMatchObject({
+    branch: "feat/login",
+    title: "Fix the [login] page",
     cwd: "~/w/x",
   });
   expect(parseTag("[codex:s1 cwd:~/project folder/with  spaces ] task")?.cwd).toBe(
@@ -478,6 +487,39 @@ test("a remote roster ignores sessions registered with the local server", () => 
       )[0]!.sessionId;
     expect(at("http://127.0.0.1:18765/mcp/")).toBe("c583");
     expect(at("http://100.64.0.1:18765/mcp/")).toBeNull();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("who shows a session on another machine with the branch and title its tag carries", () => {
+  const dir = mkdtempSync(join(tmpdir(), "who-tag-"));
+  try {
+    const [row] = whoRows(
+      {
+        project: "git:github.com/acme/widget",
+        stateDir: dir,
+        roster: [
+          {
+            name: "BlueLake",
+            task_description:
+              "[claude:s branch:feat%2Flogin title:Fix%20login cwd:~/w/widget] task",
+            location: null,
+          },
+        ],
+        threads: new Map(),
+        room: null,
+      },
+      () => null,
+      () => false,
+    );
+    expect(row!.title).toBe("Fix login");
+    expect(row!.location).toEqual({
+      repo: "widget",
+      worktree: "~/w/widget",
+      branch: "feat/login",
+      title: "Fix login",
+    });
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
