@@ -100,6 +100,10 @@ export function bearerToken(env: NodeJS.ProcessEnv = process.env): string | null
   return token;
 }
 
+/** Whether `url` names the local listener (127.0.0.1, localhost or [::1]), which asks for no token. */
+export const isLoopbackUrl = (url: string): boolean =>
+  /^(localhost|127\.0\.0\.1|\[::1\])$/.test(new URL(url).hostname);
+
 /**
  * The Authorization header for a server at `url`. The local listener asks for no token, so a loopback URL gets none
  * and an unreadable token file cannot break local clients.
@@ -108,7 +112,7 @@ export const authHeaders = (
   env: NodeJS.ProcessEnv = process.env,
   url = swarmailUrl(env),
 ): Record<string, string> => {
-  if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(new URL(url).hostname)) {
+  if (isLoopbackUrl(url)) {
     return {};
   }
   const token = bearerToken(env);

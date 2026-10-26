@@ -21,27 +21,25 @@ export function callTool(
     method: "tools/call",
     params: { name, arguments: args },
   });
+  // The request goes to curl as a config file on stdin, so the bearer token never appears in the process list or in
+  // the message of an error that carries curl's command line.
+  const quote = (value: string) => `"${value.replace(/[\\"]/g, "\\$&")}"`;
+  const config = [
+    ["header", "content-type: application/json"],
+    ["header", "accept: application/json, text/event-stream"],
+    ...Object.entries(authHeaders(process.env, url)).map(([name, value]) => [
+      "header",
+      `${name}: ${value}`,
+    ]),
+    ["data-binary", request],
+    ["url", url],
+  ]
+    .map(([option, value]) => `${option} = ${quote(value!)}`)
+    .join("\n");
   const out = execFileSync(
     "curl",
-    [
-      "-sf",
-      "--connect-timeout",
-      "1",
-      "--max-time",
-      "4",
-      "-H",
-      "content-type: application/json",
-      "-H",
-      "accept: application/json, text/event-stream",
-      ...Object.entries(authHeaders(process.env, url)).flatMap(([name, value]) => [
-        "-H",
-        `${name}: ${value}`,
-      ]),
-      "--data-binary",
-      "@-",
-      url,
-    ],
-    { input: request, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] },
+    ["-sf", "--connect-timeout", "1", "--max-time", "4", "-K", "-"],
+    { input: config, encoding: "utf8", stdio: ["pipe", "pipe", "ignore"] },
   );
   const { result, error } = JSON.parse(out);
   if (error || !result || result.isError) {

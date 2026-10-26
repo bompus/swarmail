@@ -79,6 +79,52 @@ test("the command sends the token from SWARMAIL_TOKEN_FILE", async () => {
   expect(refused).toBeInstanceOf(Error);
 });
 
+// callTool blocks on curl, which would block this process's own server, so the client code runs in a child.
+async function client(script: string, tokenPath: string, url: string) {
+  const proc = Bun.spawn(["bun", "-e", script], {
+    cwd: join(import.meta.dir, ".."),
+    env: { ...process.env, SWARMAIL_TOKEN_FILE: tokenPath, SWARMAIL_URL: url },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [stdout, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  return { code: await proc.exited, out: stdout + stderr };
+}
+
+test("the register hook's client sends the token and keeps it out of errors", async () => {
+  const url = `http://${REMOTE}:${server.port}/mcp/`;
+  const script = `
+    import { callTool } from "./src/client.ts";
+    console.log(JSON.stringify(callTool("ensure_project", { human_key: "/remote/client's \\"project\\"" })));
+  `;
+  const ok = await client(script, tokenFile, url);
+  expect(ok.code).toBe(0);
+  expect(JSON.parse(ok.out).slug).toBe("remote-client-s-project");
+  // A hub that refuses the token makes curl exit nonzero; the error must not echo the token.
+  const wrong = join(dir, "wrong");
+  writeFileSync(wrong, `${"w".repeat(40)}\n`);
+  const refused = await client(script, wrong, url);
+  expect(refused.code).not.toBe(0);
+  expect(refused.out).toContain("curl");
+  expect(refused.out).not.toContain("w".repeat(40));
+});
+
+test("registering with a remote server leaves out the local checkout path", async () => {
+  const script = `
+    import { serverRegister } from "./src/registry.ts";
+    const session = { host: "claude", program: "claude", model: "m", sessionId: "s", cwd: null };
+    const register = serverRegister(session, "[claude:s]", undefined, "/checkout/only/on/this/machine");
+    console.log(JSON.stringify({ name: register("/remote/project", null), refusal: register.refusal }));
+  `;
+  const result = await client(script, tokenFile, `http://${REMOTE}:${server.port}/mcp/`);
+  const { name, refusal } = JSON.parse(result.out);
+  expect(refusal).toBeUndefined();
+  expect(name).toBeString();
+});
+
 test("the relay sends the token from SWARMAIL_TOKEN_FILE", async () => {
   const proc = Bun.spawn(["node", RELAY], {
     env: {

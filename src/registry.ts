@@ -2,7 +2,7 @@
 // under a lock file, and the server calls that register a session. The hook and the T3 supervisor
 // register through `openRegistry`; `who`, the guard and the wake hook only read.
 import { renameOver } from "./files.ts";
-import { stateHome, t3Home } from "./paths.ts";
+import { isLoopbackUrl, stateHome, t3Home } from "./paths.ts";
 import {
   closeSync,
   existsSync,
@@ -246,7 +246,8 @@ export function serverRegister(
               model: session.model || session.host,
               task_description: `${tag} ${keptTask(row?.task_description)}`,
               ...(reuse && { name: reuse }),
-              ...(worktree !== undefined && { worktree }),
+              // A remote server cannot check a checkout on this machine, and rejects one it cannot find.
+              ...(worktree !== undefined && isLoopbackUrl(url) && { worktree }),
             },
             url,
           ) as { name?: string }
