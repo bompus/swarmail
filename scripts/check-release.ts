@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from "node:fs";
+import { ASSET_SOURCE, PUBLIC_FILES, STALE_SCOPE, TAGLINE, assetSource } from "./lib/brand.ts";
 
 const root = new URL("../", import.meta.url);
 const read = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
@@ -47,6 +48,32 @@ for (const entry of readdirSync(new URL("packages/", root), { withFileTypes: tru
     console.error(`CONTRIBUTING.md must name packages/${entry.name}/ in its Listings section`);
     process.exit(1);
   }
+}
+
+// The public text must describe what Swarmail does now. A change to the tagline needs the banners and social preview
+// redrawn (docs/assets/README.md), and stale wording must not survive in a description, plugin listing or README.
+const stale = PUBLIC_FILES.flatMap((path) =>
+  readFileSync(new URL(path, root), "utf8")
+    .split("\n")
+    .flatMap((line, index) =>
+      STALE_SCOPE.test(line) ? [`  ${path}:${index + 1}: ${line.trim()}`] : [],
+    ),
+);
+if (stale.length > 0) {
+  console.error("Public text still describes Swarmail as local to one machine:");
+  console.error(stale.join("\n"));
+  process.exit(1);
+}
+if (!readFileSync(new URL("README.md", root), "utf8").includes(`alt="swarmail: ${TAGLINE}"`)) {
+  console.error(`README.md banner alt text must read "swarmail: ${TAGLINE}"`);
+  process.exit(1);
+}
+// Compared as data: the formatter may lay the file out differently from the renderer.
+if (JSON.stringify(read(ASSET_SOURCE)) !== JSON.stringify(assetSource())) {
+  console.error(
+    `${ASSET_SOURCE} differs from scripts/lib/brand.ts: rerun scripts/render-assets.ts and commit the images`,
+  );
+  process.exit(1);
 }
 
 console.log(`Release versions match ${core.version}`);

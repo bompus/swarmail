@@ -8,6 +8,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { CHIPS, FACTS, NAME, TAGLINE, assetSource } from "./lib/brand.ts";
 
 const chrome = process.env.CHROME;
 if (!chrome) {
@@ -15,11 +16,6 @@ if (!chrome) {
   process.exit(1);
 }
 const outDir = resolve(process.argv[2] ?? "docs/assets");
-
-const NAME = "swarmail";
-const TAGLINE = "Local mail between coding-agent sessions on one machine";
-const CHIPS = ["MCP server", "Threaded inbox and search", "File reservations", "Wake on mail"];
-const FACTS = "One Bun binary · SQLite · localhost by default · MIT";
 
 const BASE_CSS = `
   *{box-sizing:border-box;margin:0;padding:0}
@@ -113,6 +109,8 @@ try {
     }
     console.log(`wrote ${out}`);
   }
+  // Beside the images, so `bun run check` can tell when the text they show has changed since they were drawn.
+  writeFileSync(join(outDir, "source.json"), JSON.stringify(assetSource(), null, 2) + "\n");
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

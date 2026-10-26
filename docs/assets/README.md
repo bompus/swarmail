@@ -14,6 +14,10 @@ a Chrome or Chromium binary and the Lato font:
 CHROME=/path/to/chrome bun scripts/render-assets.ts
 ```
 
+It also writes `source.json`, the tagline, chips and facts the images show, from
+`scripts/lib/brand.ts`. `bun run check` fails when `source.json` no longer
+matches that file, so a change to the text cannot ship with the old images.
+
 It renders the social preview pixel for pixel like the committed file. The
 banners were first rendered through Playwright, so a rerun redraws their text
 edges slightly differently (about 1.4% of their pixels).

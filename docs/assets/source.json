@@ -1,0 +1,6 @@
+{
+  "name": "swarmail",
+  "tagline": "Mail between coding-agent sessions, on one machine or across your own",
+  "chips": ["MCP server", "Threaded inbox and search", "File reservations", "Wake on mail"],
+  "facts": "One Bun binary · SQLite · localhost by default · MIT"
+}

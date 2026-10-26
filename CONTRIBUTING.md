@@ -53,6 +53,14 @@ correction first, and note the materials checked and the evidence for their
 claims in the pull request. A release needs no new measurements for this; label
 an older result with the version it was measured on.
 
+- Whether what Swarmail says it is still matches what it does. Read the
+  changelog since the last release and list each change in where Swarmail
+  runs, who can reach it or what it stores, then find every public file that
+  states the old fact: descriptions, plugin listings, banners and their alt
+  text, the social preview, the GitHub repository description and the server
+  instructions agents read. `bun run check` and `bun run check:published`
+  catch the wording in `scripts/lib/brand.ts`; add a phrase there when a
+  change makes a new one stale.
 - The README, including every sentence that names a version, a count or a
   tested host, and its feature comparison.
   If this release changed the README or `docs/usage.md`, rerun

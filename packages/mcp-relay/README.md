@@ -2,7 +2,7 @@
 
 A stdio relay to a running [Swarmail](https://github.com/bompus/swarmail)
 server, for MCP clients that install servers from a registry. Swarmail is
-local mail between coding-agent sessions on one machine.
+mail between coding-agent sessions, on one machine or across your own.
 
 The relay installs and starts nothing. Install and start the server first by
 following the [Swarmail README](https://github.com/bompus/swarmail#install).

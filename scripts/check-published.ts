@@ -3,6 +3,7 @@
 // CONTRIBUTING.md "Releasing" step 4 requires before a release is called done.
 //   bun scripts/check-published.ts [--version X.Y.Z] [--github URL] [--npm BASE_URL] [--registry URL]
 import { readFileSync } from "node:fs";
+import { STALE_SCOPE } from "./lib/brand.ts";
 
 const root = new URL("../", import.meta.url);
 const read = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf8"));
@@ -65,6 +66,16 @@ for (const [name, url, shown] of channels) {
   } catch (error) {
     problems.push(`${name}: could not be read (${(error as Error).message}) from ${url}`);
   }
+}
+
+// The repository description is set by hand on GitHub, so nothing in the tree keeps it current.
+try {
+  const { description } = await get(`https://api.github.com/repos/${repo}`);
+  if (typeof description === "string" && STALE_SCOPE.test(description)) {
+    problems.push(`GitHub repository description still reads "${description}"`);
+  }
+} catch (error) {
+  problems.push(`GitHub repository description could not be read (${(error as Error).message})`);
 }
 
 if (problems.length > 0) {

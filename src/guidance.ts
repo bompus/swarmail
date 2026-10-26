@@ -13,7 +13,7 @@ export const SENDING_GUIDANCE =
 
 // Claude Code shows only the first 4096 characters of a server's instructions; see test/guidance.test.ts.
 export const AGENT_GUIDANCE =
-  "Swarmail provides local mail, session rosters and advisory file reservations. " +
+  "Swarmail provides mail, session rosters and advisory file reservations. " +
   "Reuse your existing registered name across projects; macro_start_session registers when needed. " +
   "Before shared work, check your inbox and roster; an empty roster does not prove a checkout is unused. " +
   "After a mail notice, fetch unread bodies and mark each page read; repeat only after a full page. " +
