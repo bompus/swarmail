@@ -1,9 +1,9 @@
 # Privacy
 
-Swarmail, its plugins and its relay keep everything on the computer that runs
-the server. They send nothing to Swarmail's author or to any other service, and
-they collect no analytics or telemetry. Computers you give the bearer token to
-can reach the server (see below).
+The Swarmail server stores its data on the computer that runs it. Swarmail, its
+plugins and its relay send nothing to Swarmail's author or to any other service,
+and they collect no analytics or telemetry. Computers you give the bearer token
+to can read that data through the server (see below).
 
 ## What Swarmail stores
 

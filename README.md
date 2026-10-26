@@ -134,8 +134,8 @@ please open an issue.
 
    The database is `~/.local/share/swarmail/mail.sqlite3`. The server has no
    authentication. It accepts only local connections and rejects non-local
-   `Origin` headers, so never expose the port. To reach it from another
-   machine, see [Using it from another machine](#using-it-from-another-machine).
+   `Origin` headers, so never expose the port. That describes the default
+   loopback listener; to reach it from another machine, see [Using it from another machine](#using-it-from-another-machine).
 
 3. Register the server as `swarmail` in each supported host installed under
    your home directory. A host counts as installed when its config file or
@@ -266,7 +266,10 @@ The loopback listener is unchanged, so local hosts and hooks keep working withou
 a token, and the command and register hook send the token only to a URL that is
 not loopback. The server accepts any one non-loopback address, public ones
 included, so name a private-network address; a client with the token can read
-the roster, project paths and reservations as well as mail. The extra listener answers every route except `/healthz` only with
+the roster, project paths and reservations as well as mail. The extra listener
+speaks plain HTTP, so the token and the mail are unencrypted on the wire: use a
+network that encrypts and authenticates every peer, such as Tailscale, and never
+an ordinary shared or public network. The extra listener answers every route except `/healthz` only with
 `Authorization: Bearer <token>`, and the server refuses to start with
 `SWARMAIL_HOST` set to a loopback or wildcard address or without a token file.
 Copy the token file to the other machine, then point its `swarmail` command,

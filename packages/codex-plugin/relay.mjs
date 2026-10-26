@@ -10,9 +10,12 @@ const url = process.env.SWARMAIL_URL || "http://127.0.0.1:18765/mcp/";
 const install = "https://github.com/bompus/swarmail#install";
 // Tool calls answer in milliseconds; nothing on /mcp/ long-polls.
 const TIMEOUT_MS = 30_000;
-// A server on another machine asks for a bearer token; SWARMAIL_TOKEN_FILE names the file that holds it.
+// A server on another machine asks for a bearer token; SWARMAIL_TOKEN_FILE names the file that holds it. The local
+// listener asks for none, so a loopback URL never reads the file.
 const tokenFile = process.env.SWARMAIL_TOKEN_FILE;
-const token = tokenFile ? (readFileSync(tokenFile, "utf8").split("\n")[0] ?? "").trim() : "";
+const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(new URL(url).hostname);
+const token =
+  tokenFile && !local ? (readFileSync(tokenFile, "utf8").split("\n")[0] ?? "").trim() : "";
 /** @type {string | undefined} */
 let protocolVersion;
 
