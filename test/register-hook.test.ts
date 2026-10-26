@@ -1153,6 +1153,7 @@ test("a session already registered with a remote server is left alone by a hook 
             session_id: "move-1",
             cwd: repo,
             hook_event_name: event,
+            transcript_path: join(dir, ".claude/projects/-repo/move-1.jsonl"),
             tool_input: { file_path: join(repo, "a.txt") },
           }),
         ]),
