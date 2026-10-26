@@ -1,7 +1,7 @@
 {
   "name": "swarmail",
   "displayName": "Swarmail",
-  "description": "Connects Claude Code to a Swarmail server running on this machine: mail, a session roster and advisory file reservations shared with other coding-agent sessions. Install and start the server first. If you ran Swarmail's own setup, Claude Code is already connected; do not install this plugin as well.",
+  "description": "Connects Claude Code to a Swarmail server, on this machine or another: mail, a session roster and advisory file reservations shared with other coding-agent sessions. Install and start the server first. If you ran Swarmail's own setup, Claude Code is already connected; do not install this plugin as well.",
   "author": {
     "name": "Aaron Queen"
   },

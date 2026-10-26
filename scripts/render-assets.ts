@@ -5,9 +5,11 @@
 // Chrome's --force-device-scale-factor draws 2x text edges slightly unlike Playwright, which made the
 // committed banners; the 1x social preview comes out identical.
 // The social preview reaches GitHub only by a manual upload (see docs/assets/README.md).
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { CHIPS, FACTS, IMAGES, NAME, TAGLINE, assetText } from "./lib/brand.ts";
 
 const chrome = process.env.CHROME;
 if (!chrome) {
@@ -15,11 +17,6 @@ if (!chrome) {
   process.exit(1);
 }
 const outDir = resolve(process.argv[2] ?? "docs/assets");
-
-const NAME = "swarmail";
-const TAGLINE = "Local mail between coding-agent sessions on one machine";
-const CHIPS = ["MCP server", "Threaded inbox and search", "File reservations", "Wake on mail"];
-const FACTS = "One Bun binary · SQLite · localhost by default · MIT";
 
 const BASE_CSS = `
   *{box-sizing:border-box;margin:0;padding:0}
@@ -73,7 +70,7 @@ const socialPreview = `<!doctype html><html><head><style>${BASE_CSS}
     ${THEME_CSS.dark}
     .wrap{position:absolute;inset:0;padding:96px 96px;display:flex;flex-direction:column;justify-content:center}
     h1{font-size:110px;font-weight:900;letter-spacing:-.02em;line-height:1;margin-top:28px}
-    .tag{font-size:38px;margin-top:22px;max-width:1000px;line-height:1.2}
+    .tag{font-size:38px;margin-top:22px;max-width:1000px;line-height:1.2;text-wrap:balance}
     .chips{display:flex;gap:12px;margin-top:36px;flex-wrap:wrap}
     .chip{font-size:22px;font-weight:700;padding:9px 18px;border-radius:999px;border:1px solid}
     .facts{position:absolute;left:96px;right:96px;bottom:48px;display:flex;justify-content:space-between;font-size:22px}
@@ -113,6 +110,19 @@ try {
     }
     console.log(`wrote ${out}`);
   }
+  // Beside the images, so `bun run check` can tell when the text or an image has changed since they were drawn.
+  const images = Object.fromEntries(
+    IMAGES.map((file) => [
+      file,
+      createHash("sha256")
+        .update(readFileSync(join(outDir, file)))
+        .digest("hex"),
+    ]),
+  );
+  writeFileSync(
+    join(outDir, "source.json"),
+    JSON.stringify({ ...assetText(), images }, null, 2) + "\n",
+  );
 } finally {
   rmSync(work, { recursive: true, force: true });
 }

@@ -6,7 +6,7 @@ You fetched this README with a web tool:
 {{DOC}}
 </document>
 
-User: I'm considering Swarmail (https://github.com/bompus/swarmail), local mail between coding-agent sessions on one machine, served over MCP. Read its README and docs/usage.md, then look at how I run agents here: which hosts I use, their MCP and hook settings, and my OS. Tell me:
+User: I'm considering Swarmail (https://github.com/bompus/swarmail), mail between coding-agent sessions on one machine or across machines, served over MCP. Read its README and docs/usage.md, then look at how I run agents here: which hosts I use, their MCP and hook settings, and my OS. Tell me:
 1. Whether I run several agent sessions on this machine at once, and where they could step on each other (shared checkouts, branches, services).
 2. Whether my hosts support MCP and hooks, and whether this is Linux with systemd or something that needs the manual `swarmail serve` route.
 3. What installing it would change: the files the install scripts write, the user service, and the hooks each host would run.

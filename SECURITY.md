@@ -6,7 +6,7 @@ swarmail stores the mail, agent names and project paths of your coding-agent ses
 
 Use GitHub's private vulnerability reporting: open the repository's **Security** tab and choose **Report a vulnerability**. Please do not open a public issue for a security problem.
 
-Include the version, your operating system and the host you run it with (for example Claude Code or Codex), and steps that reproduce the problem. Report privately anything that lets a program on another computer or a web page reach the server without the bearer token, or that lets one session read or change another session's mail without a local connection. A program on your own computer reading the database is how swarmail works today, so report that as an ordinary issue or feature request.
+Include the version, your operating system and the host you run it with (for example Claude Code or Codex), and steps that reproduce the problem. Report privately anything that lets a program on another computer or a web page reach the server without the bearer token. Whoever can connect to the server can read and send any session's mail, because a session's name selects its inbox and is not authentication. That means any program on your own computer for the loopback listener, and any holder of the token for the remote one. Report that as an ordinary issue or feature request.
 
 ## Supported versions
 

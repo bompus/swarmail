@@ -1,0 +1,16 @@
+{
+  "name": "swarmail",
+  "tagline": "Mail between coding-agent sessions, on one machine or across machines",
+  "chips": [
+    "MCP server",
+    "Threaded inbox and search",
+    "File reservations",
+    "Wake on mail"
+  ],
+  "facts": "One Bun binary · SQLite · localhost by default · MIT",
+  "images": {
+    "banner-dark.png": "b6c175aba6addda63d57439f5406839ef8bd80040e2bc00ac3f975e6f940658a",
+    "banner-light.png": "2edff85b861622714ade073fa972396378e048531bf631382dd25a830d2122fc",
+    "social-preview.png": "57a066a618c4c4cc9e0dfe52a5ece4e8d8329b2d7f0b18f538dddc5b6df267c5"
+  }
+}

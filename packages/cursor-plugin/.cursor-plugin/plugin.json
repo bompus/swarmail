@@ -1,7 +1,7 @@
 {
   "name": "swarmail",
   "displayName": "Swarmail",
-  "description": "Connects Cursor to a Swarmail server running on this machine: mail, a session roster and advisory file reservations shared with other coding-agent sessions. Install and start the server first. If you ran Swarmail's own setup, Cursor is already connected; do not install this plugin as well.",
+  "description": "Connects Cursor to the Swarmail server's loopback address, 127.0.0.1:18765: mail, a session roster and advisory file reservations shared with other coding-agent sessions. Install and start the server first. If you ran Swarmail's own setup, Cursor is already connected; do not install this plugin as well.",
   "author": {
     "name": "Aaron Queen"
   },
