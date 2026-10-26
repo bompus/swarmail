@@ -878,11 +878,11 @@ export const TOOLS: Tool[] = [
     run: (s, a, info) => {
       const p = s.project(a.project_key);
       // A report from a session that no longer holds the name changes nothing, not even the agent's activity.
-      if (
-        a.session_ended === true &&
-        a.session_id !== undefined &&
-        a.session_id !== s.agent(p, a.agent_name).session_id
-      ) {
+      // A registration with no recorded session ID cannot be checked, so its release goes ahead without an end marker.
+      const holder =
+        a.session_ended === true && a.session_id !== undefined ? s.agent(p, a.agent_name) : null;
+      const unverified = holder?.session_id === null;
+      if (holder && !unverified && a.session_id !== holder.session_id) {
         return {
           released: 0,
           released_at: null,
@@ -895,7 +895,7 @@ export const TOOLS: Tool[] = [
       for (const r of rows) {
         s.release(r.id, now);
       }
-      if (a.session_ended === true) {
+      if (a.session_ended === true && !unverified) {
         info.db.run("UPDATE agents SET session_ended_ts = ? WHERE id = ?", [now, who.id]);
         // Waits still open from before the end are not presence, even once a later call clears the report.
         info.endWaits?.([who.session_id, who.t3_thread].filter((id): id is string => !!id));

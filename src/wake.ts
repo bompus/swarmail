@@ -286,7 +286,8 @@ export function createWaiters(
     wait,
     notify,
     peek: mailboxSnapshot(db),
-    waiting: () => new Map(waitingSince),
+    // A session ID that has since come to name two registrations identifies neither.
+    waiting: () => new Map([...waitingSince].filter(([session]) => eligible(session))),
     /** Stops counting these sessions' open waits as presence: the session they belonged to has ended. */
     endWaits: (sessions: string[]) => {
       for (const session of sessions) {

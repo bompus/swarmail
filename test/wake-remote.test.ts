@@ -252,6 +252,61 @@ test("reading an inbox clears the end report of the agent it read for, by thread
   expect(await ended()).toEqual({ AmberCliff: false, TealDune: true });
 });
 
+test("a session end from a registration with no recorded session ID still releases its files, without an end marker", async () => {
+  await call("register_agent", {
+    project_key: P,
+    program: "claude-code",
+    model: "m",
+    name: "OldOak",
+    task_description: "Claude Code session legacy-1 Room C90",
+  });
+  await call("file_reservation_paths", {
+    project_key: P,
+    agent_name: "OldOak",
+    paths: ["legacy/**"],
+    ttl_seconds: 60,
+  });
+  const end = await call("release_file_reservations", {
+    project_key: P,
+    agent_name: "OldOak",
+    session_ended: true,
+    session_id: "legacy-1",
+  });
+  expect(end).toMatchObject({ released: 1 });
+  const row = (await call("list_agents", { project_key: P })).find((r: any) => r.name === "OldOak");
+  expect(row.session_ended_at).toBeNull();
+});
+
+test("a session ID that comes to name two registrations after a wait began is no longer shown as waiting", async () => {
+  const names = ["IvoryPine", "RoseWillow"];
+  const register = (name: string, thread: string) =>
+    call("register_agent", {
+      project_key: P,
+      program: "claude-code",
+      model: "m",
+      name,
+      task_description: `[t3:${thread} claude:native-12] work`,
+    });
+  const waiting = async () =>
+    Object.fromEntries(
+      (await call("list_agents", { project_key: P }))
+        .filter((row: any) => names.includes(row.name))
+        .map((row: any) => [row.name, row.waiting_for_mail]),
+    );
+  await register(names[0]!, "thread-x");
+  const open = new AbortController();
+  const request = fetch(`${hub}/wait?session=native-12&timeout=5`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+    signal: open.signal,
+  }).catch(() => null);
+  await Bun.sleep(100);
+  expect(await waiting()).toEqual({ IvoryPine: true });
+  await register(names[1]!, "thread-y");
+  expect(await waiting()).toEqual({ IvoryPine: false, RoseWillow: false });
+  open.abort();
+  await request;
+});
+
 test("without the token those calls are refused instead of reading the hub's mail", async () => {
   const token = process.env.SWARMAIL_TOKEN_FILE;
   delete process.env.SWARMAIL_TOKEN_FILE;
