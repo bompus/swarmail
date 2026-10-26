@@ -308,6 +308,43 @@ test("a session ID that comes to name two registrations after a wait began is no
   await request;
 });
 
+test("a wait opened before the end report stays out of presence even when it only becomes eligible afterwards", async () => {
+  const find = async () =>
+    (await call("list_agents", { project_key: P })).find((r: any) => r.name === "PaleBirch");
+  await call("register_agent", {
+    project_key: P,
+    program: "claude-code",
+    model: "m",
+    name: "PaleBirch",
+    task_description: "[claude:native-15] work",
+  });
+  await call("retire_agent", { project_key: P, agent_name: "PaleBirch" });
+  const open = new AbortController();
+  const request = fetch(`${hub}/wait?session=native-15&timeout=5`, {
+    headers: { authorization: `Bearer ${TOKEN}` },
+    signal: open.signal,
+  }).catch(() => null);
+  await Bun.sleep(100);
+  // Reporting the end revives the name, so the earlier wait can now pass the eligibility check.
+  await call("release_file_reservations", {
+    project_key: P,
+    agent_name: "PaleBirch",
+    session_ended: true,
+  });
+  await call("register_agent", {
+    project_key: P,
+    program: "claude-code",
+    model: "m",
+    name: "GrayHeron",
+    task_description: "[claude:native-16] work",
+  });
+  await Bun.sleep(100);
+  expect(await find()).toMatchObject({ waiting_for_mail: false });
+  expect((await find()).session_ended_at).not.toBeNull();
+  open.abort();
+  await request;
+});
+
 test("without the token those calls are refused instead of reading the hub's mail", async () => {
   const token = process.env.SWARMAIL_TOKEN_FILE;
   delete process.env.SWARMAIL_TOKEN_FILE;
