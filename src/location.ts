@@ -12,7 +12,7 @@ export interface Location {
 }
 
 /** HEAD is a ref on a branch and a commit when detached; a removed checkout has no current branch. */
-function branch(worktree: string): string | null {
+export function branch(worktree: string): string | null {
   try {
     const dotgit = join(worktree, ".git");
     let gitdir = dotgit;

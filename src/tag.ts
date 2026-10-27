@@ -8,6 +8,9 @@ export interface Tag {
   host: string | null;
   sessionId: string | null;
   build: string | null;
+  branch: string | null;
+  title: string | null;
+  worktree: string | null;
   cwd: string | null;
 }
 
@@ -20,12 +23,24 @@ export const SESSION_ENV: Record<string, string> = {
   agy: "ANTIGRAVITY_CONVERSATION_ID",
 };
 
+/** Longest title a tag carries, so a long one does not bloat every task description. */
+const TITLE_LENGTH = 120;
+
+const decoded = (value: string): string => {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+};
+
 /**
  * The roster tag naming the session and where it runs, e.g.
  * `[t3:<thread id> claude:<session id> build:<hash> cwd:~/src/repo-task]`. The project key is
  * always the primary checkout; cwd names the launch directory, while the edit checkout is recorded
  * separately. `build` is the source hash of the swarmail binary that registered it, so `who` can name
- * a session whose binary is stale; cwd stays last because a path may hold spaces.
+ * a session whose binary is stale; cwd stays last because a path may hold spaces. A session on another machine
+ * adds `branch:<name>` and `title:<percent-encoded title>`, because the server cannot read either from there.
  */
 export function sessionTag(
   {
@@ -33,7 +48,18 @@ export function sessionTag(
     host,
     sessionId,
     build = buildSource,
-  }: { t3?: string | null; host: string; sessionId?: string | null; build?: string | null },
+    branch,
+    title,
+    worktree,
+  }: {
+    t3?: string | null;
+    host: string;
+    sessionId?: string | null;
+    build?: string | null;
+    branch?: string | null;
+    title?: string | null;
+    worktree?: string | null;
+  },
   cwd: unknown,
   home = homeDir(),
 ): string {
@@ -41,6 +67,17 @@ export function sessionTag(
   parts.push(sessionId ? `${host}:${sessionId}` : host);
   if (build) {
     parts.push(`build:${build}`);
+  }
+  if (branch) {
+    parts.push(`branch:${encodeURIComponent(branch)}`);
+  }
+  if (title) {
+    // By code point, so a long title never ends in half a character, which cannot be encoded.
+    const kept = Array.from(title.toWellFormed()).slice(0, TITLE_LENGTH).join("");
+    parts.push(`title:${encodeURIComponent(kept)}`);
+  }
+  if (worktree) {
+    parts.push(`worktree:${encodeURIComponent(tildePath(home, worktree))}`);
   }
   if (typeof cwd === "string" && cwd) {
     parts.push(`cwd:${tildePath(home, cwd)}`);
@@ -54,7 +91,16 @@ export function parseTag(description: unknown): Tag | null {
   if (!tag) {
     return null;
   }
-  const out: Tag = { t3: null, host: null, sessionId: null, build: null, cwd: null };
+  const out: Tag = {
+    t3: null,
+    host: null,
+    sessionId: null,
+    build: null,
+    branch: null,
+    title: null,
+    worktree: null,
+    cwd: null,
+  };
   const cwd = /(?:^| )cwd:(.*)$/s.exec(tag);
   out.cwd = cwd?.[1] ?? null;
   for (const part of (cwd ? tag.slice(0, cwd.index) : tag).split(" ")) {
@@ -64,6 +110,12 @@ export function parseTag(description: unknown): Tag | null {
       out.t3 = value;
     } else if (key === "build") {
       out.build = value;
+    } else if (key === "branch") {
+      out.branch = decoded(value);
+    } else if (key === "title") {
+      out.title = decoded(value);
+    } else if (key === "worktree") {
+      out.worktree = decoded(value);
     } else if (!out.host) {
       Object.assign(out, { host: key, sessionId: value || null });
     }
@@ -148,6 +200,9 @@ export const tagOf = (row: Identity): Tag => ({
   host: row.host,
   sessionId: row.session_id,
   build: row.build,
+  branch: null,
+  title: null,
+  worktree: null,
   cwd: row.cwd,
 });
 
@@ -163,4 +218,28 @@ export function sameSessionRow<T>(
 ): T | null {
   const same = rows.filter((row) => sameSession(read(row), tag));
   return same.find((row) => !!tag?.t3 && read(row)?.t3 === tag.t3) ?? same[0] ?? null;
+}
+
+/** The tag without the details only a hook on the session's own machine can read, for comparing registrations. */
+export const withoutDetails = (tag: string): string =>
+  tag.replace(/ (?:branch|title|worktree):[^ \]]*/g, "");
+
+/**
+ * `bare`, the tag a scan of the session's own record builds, with the branch, title and edit checkout of `known`, the
+ * tag a hook registered, when both name the same session; otherwise `bare`. The builds and launch directories may differ, and
+ * the scan may add the T3 thread a hook could not resolve.
+ */
+export function withDetailsOf(bare: string, known: string | undefined): string {
+  const a = parseTag(bare);
+  const b = parseTag(known);
+  const bareAt = bare.indexOf(" cwd:");
+  const knownAt = known?.indexOf(" cwd:") ?? -1;
+  if (!a || !b || bareAt < 0 || knownAt < 0 || !sameSession(a, b)) {
+    return bare;
+  }
+  // The launch path ends the tag and may hold anything, so only what precedes it holds details.
+  const details = (
+    known?.slice(0, knownAt).match(/ (?:branch|title|worktree):[^ \]]*/g) ?? []
+  ).join("");
+  return `${bare.slice(0, bareAt)}${details}${bare.slice(bareAt)}`;
 }

@@ -592,7 +592,7 @@ export const TOOLS: Tool[] = [
       "stop when fewer than limit messages return (default 20, capped at 1000), repeating only after a full page. " +
       "With mark_read:false or unread_only:false, this is a bounded preview, not a drain. " +
       "The CLI swarmail inbox --session discovers identity and drains without mailbox arguments. " +
-      "Swarmail is a trusted local service; session identity selects inboxes and is not authentication.",
+      "Session identity selects inboxes and is not authentication: whoever can reach the server can read any mailbox.",
     properties: {
       host: prop(
         "string",
@@ -815,6 +815,27 @@ export const TOOLS: Tool[] = [
         who = s.acting(p, a.agent_name);
       return s.idempotent("file_reservation_paths", who.id, a, () => s.reserve(p, who, a));
     },
+  },
+  {
+    name: "list_file_reservations",
+    description:
+      "Return every active exclusive reservation in a project as an array of {id, agent, path_pattern, " +
+      "reason, expires_ts}. Released and expired reservations are left out. The git guard on another machine " +
+      "calls it to refuse a commit or push that touches a path someone here reserved.",
+    properties: { project_key: PROJECT },
+    required: ["project_key"],
+    readOnly: true,
+    run: (s, a) =>
+      s
+        .activeReservations(s.project(a.project_key).id, nowUs())
+        .filter((r) => r.exclusive)
+        .map((r) => ({
+          id: r.id,
+          agent: r.agent,
+          path_pattern: r.path_pattern,
+          reason: r.reason,
+          expires_ts: iso(r.expires_ts),
+        })),
   },
   {
     name: "renew_file_reservations",

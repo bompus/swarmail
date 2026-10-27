@@ -270,15 +270,25 @@ export function whoRows(
       [agent.name, sessionId, t3].some(
         (id) => id && [room.agentName, room.hostSessionId, room.t3Thread].includes(id),
       );
+    // A session on another machine reports its branch and title in its tag; the server has no checkout to read them from.
+    const tagged: Location | null =
+      tag?.branch || tag?.title || tag?.worktree
+        ? {
+            repo: basename(project),
+            worktree: tag.worktree ?? tag.cwd ?? "",
+            branch: tag.branch,
+            title: tag.title,
+          }
+        : null;
     return {
       name: agent.name,
       location:
         agent.location === undefined
           ? location(project, state?.worktrees?.[project], thread?.title ?? null)
-          : agent.location,
+          : (agent.location ?? tagged),
       sessionId,
       t3,
-      title: thread?.title ?? agent.location?.title ?? null,
+      title: thread?.title ?? agent.location?.title ?? tag?.title ?? null,
       status: thread?.status ?? null,
       seen: thread?.last_seen_at ?? null,
       cwd: thread?.cwd ?? tag?.cwd ?? null,

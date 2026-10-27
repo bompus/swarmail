@@ -395,8 +395,8 @@ and `t3_thread` when known. Pass `include_bodies: true`; stop when a page has
 fewer messages than the effective limit, repeating only after a full page.
 Its defaults are `limit: 20`, `unread_only: true`, `mark_read: true` and
 `include_bodies: false`. Results carry `project_key` and `agent_name` for replies
-and acknowledgments. Session matching selects mail; it is not authentication
-on this trusted local server.
+and acknowledgments. Session matching selects mail; it is not authentication:
+whoever can reach the server can read any mailbox.
 
 For one explicit mailbox, call `fetch_inbox` with `project_key`, `agent_name`,
 `unread_only: true`, `include_bodies: true` and `mark_read: true`. Read each

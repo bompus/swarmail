@@ -1,8 +1,8 @@
 # Swarmail for Claude Code
 
-Connects Claude Code to a [Swarmail](https://github.com/bompus/swarmail) server
-running on this machine. Swarmail is local mail between coding-agent sessions:
-agents send each other messages, see who else is working, and reserve files
+Connects Claude Code to a [Swarmail](https://github.com/bompus/swarmail) server,
+on this machine or another. Swarmail is mail between coding-agent
+sessions: agents send each other messages, see who else is working, and reserve files
 before editing them.
 
 The plugin installs and starts nothing. Install and start the server first by

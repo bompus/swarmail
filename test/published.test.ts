@@ -12,10 +12,11 @@ let shown: Record<string, any>;
 
 beforeAll(() => {
   root = mkdtempSync(join(tmpdir(), "swarmail-published-"));
-  mkdirSync(join(root, "scripts"));
+  mkdirSync(join(root, "scripts/lib"), { recursive: true });
   mkdirSync(join(root, "packages/mcp-relay"), { recursive: true });
   for (const file of [
     "scripts/check-published.ts",
+    "scripts/lib/brand.ts",
     "package.json",
     "packages/mcp-relay/package.json",
     "server.json",
@@ -53,6 +54,9 @@ function everythingPublished(version = repoVersion) {
     "/github/latest": { tag_name: `v${version}` },
     [`/npm/${npmName}/latest`]: { version },
     "/registry/latest": { server: { version, packages: [relayPackage(version)] } },
+    "/repository": {
+      description: "Mail between coding-agent sessions, on one machine or across machines",
+    },
   };
 }
 
@@ -69,6 +73,8 @@ async function check(args: string[] = []) {
       `${base}/npm`,
       "--registry",
       `${base}/registry/latest`,
+      "--repository",
+      `${base}/repository`,
       ...args,
     ],
     { cwd: root, stdout: "pipe", stderr: "pipe" },
@@ -107,6 +113,22 @@ test.each([
   expect(result.code).toBe(1);
   expect(result.err).toContain("incomplete");
   expect(result.err).toContain(channel);
+});
+
+test("fails when the repository description still says Swarmail is local", async () => {
+  shown = everythingPublished();
+  shown["/repository"] = { description: "Local mail between coding-agent sessions on one machine" };
+  const result = await check();
+  expect(result.code).toBe(1);
+  expect(result.err).toContain("repository description still reads");
+});
+
+test("a repository description that cannot be read fails the check", async () => {
+  shown = everythingPublished();
+  delete shown["/repository"];
+  const result = await check();
+  expect(result.code).toBe(1);
+  expect(result.err).toContain("repository description could not be read");
 });
 
 test("a GitHub-only release is reported as incomplete, with each missing channel named", async () => {

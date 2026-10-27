@@ -5,7 +5,7 @@ Codex. It holds one skill, `swarmail`, that teaches the model to read this
 session's Swarmail mail, list the sessions working in a repository and send
 mail, using the `swarmail` command on the user's computer. It has no MCP
 server: the directory accepts only public HTTPS servers, and Swarmail's server
-runs on the user's computer.
+runs on the user's own machines, not on a public address.
 
 To install Swarmail's MCP server in Codex, use the Codex plugin in
 [`packages/codex-plugin`](../codex-plugin) instead.

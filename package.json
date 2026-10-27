@@ -2,7 +2,7 @@
   "name": "swarmail",
   "version": "0.7.0",
   "private": true,
-  "description": "Local mail, roster and file reservations for coding-agent sessions on one machine, served over MCP.",
+  "description": "Mail, roster and file reservations for coding-agent sessions, on one machine or across machines, served over MCP.",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -12,14 +12,14 @@
     "lint": "oxlint --deny-warnings .",
     "fmt": "bun fmt --no-script",
     "check:published": "bun scripts/check-published.ts",
-    "check": "bun scripts/check-release.ts && bun fmt --no-script --check && oxlint --deny-warnings . && bun run typecheck && bun run check:shell",
+    "check": "bun scripts/check-release.ts && bun scripts/check-public.ts && bun fmt --no-script --check && oxlint --deny-warnings . && bun run typecheck && bun run check:shell",
     "check:shell": "bun scripts/check-shell.ts"
   },
   "devDependencies": {
     "@types/bun": "1.4.4",
     "oxfmt": "0.74.0",
     "oxlint": "1.89.0",
-    "oxlint-tsgolint": "7.0.2004",
+    "oxlint-tsgolint": "7.0.2005",
     "typebox": "1.4.3",
     "typescript": "7.1.0-beta"
   },

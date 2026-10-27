@@ -132,5 +132,7 @@ if (import.meta.main) {
     );
     process.exit(1);
   }
-  console.log(`swarmail enabled on http://127.0.0.1:${port} (localhost only, no auth).`);
+  console.log(
+    `swarmail enabled on http://127.0.0.1:${port} (this address needs no token; the README says how to serve other machines).`,
+  );
 }

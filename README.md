@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.png">
-    <img src="docs/assets/banner-light.png" alt="swarmail: Local mail between coding-agent sessions on one machine" width="100%">
+    <img src="docs/assets/banner-light.png" alt="swarmail: Mail between coding-agent sessions, on one machine or across machines" width="100%">
   </picture>
 </h1>
 
@@ -20,11 +20,12 @@
   <a href="#waking-sessions">Wake on mail</a>
 </p>
 
-swarmail lets coding-agent sessions on one machine send each other mail. Each
-repository gets a roster of named agents, a threaded inbox with full-text
-search, and advisory file reservations. Agents reach it as an MCP server, and
-you reach it with the `swarmail` command. Opt in, and one machine can also serve
-sessions on others over a private network, such as Tailscale; see
+swarmail lets coding-agent sessions send each other mail, on one machine or
+across machines. Each repository gets a roster of named agents, a threaded
+inbox with full-text search, and advisory file reservations. Agents reach it as
+an MCP server, and you reach it with the `swarmail` command. It runs on one
+machine by default; opt in, and that machine also serves sessions on others
+over a private network, such as Tailscale. See
 [Using it from another machine](#using-it-from-another-machine).
 
 Find Swarmail on [Glama](https://glama.ai/mcp/servers/bompus/swarmail) and
@@ -65,11 +66,11 @@ Paste this into a session with the agent you use. It checks whether swarmail
 fits how you run agents and changes nothing until you choose.
 
 ```text
-I'm considering Swarmail (https://github.com/bompus/swarmail), local mail
-between coding-agent sessions on one machine, served over MCP. Read its
+I'm considering Swarmail (https://github.com/bompus/swarmail), mail between
+coding-agent sessions on one machine or across machines, served over MCP. Read its
 README and docs/usage.md, then look at how I run agents here: which hosts I
 use, their MCP and hook settings, and my OS. Tell me:
-1. Whether I run several agent sessions on this machine at once, and where
+1. Whether I run several agent sessions at once, on this machine or others, and where
    they could step on each other (shared checkouts, branches, services).
 2. Whether my hosts support MCP and hooks, and whether this is Linux with
    systemd, Windows, or something that needs the manual `swarmail serve`
@@ -318,10 +319,16 @@ waiting session, and the roster shows it waiting and then ended. That run
 called the server's HTTP interface from a script. It did not use the
 `swarmail` command, the hooks or a real agent session on Windows.
 
+Against a remote server, the git guard reads the exclusive reservations the hub
+holds (`list_file_reservations`) and refuses a commit or push that touches one
+held by another session; a hub it cannot reach is reported and the commit goes
+ahead. The register hook adds the session's branch and title to its tag, so
+`swarmail who` shows them for a remote session. A branch change or a new title
+appears after that session's next edit or session start, and a title only once the host has
+stored one.
+
 What does not carry over yet:
 
-- The server reads branch and session titles from its own machine, so a remote
-  session appears without a branch or title.
 - `swarmail who` shows a remote
   session as alive ("waiting for mail on the server") only while a wake hook or
   bridge of that session has a wait that began after its last end report, and as
@@ -355,10 +362,6 @@ What does not carry over yet:
   a project name, because it cannot list the server's projects.
 - A hub with `SWARMAIL_HOST` never drops projects whose checkout is gone, since
   it cannot tell a deleted checkout from one on another machine.
-- The git guard checks this machine's database and the names a session holds on
-  this machine's server, so file reservations held on the hub do not block a
-  commit or push made on another machine, and a session registered only with the
-  hub is never treated as the holder of a local reservation.
 - A hub started with `SWARMAIL_T3_LIFECYCLE` checks T3 threads against its own
   T3 database, so it hides remote T3 sessions and refuses their mail. Leave it
   unset on a hub that serves remote T3 sessions.

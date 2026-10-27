@@ -1,5 +1,5 @@
 [Unit]
-Description=Swarmail MCP coordination server (localhost)
+Description=Swarmail MCP coordination server
 
 [Service]
 # Built by scripts/build.ts. Settings are environment variables; see the README.
