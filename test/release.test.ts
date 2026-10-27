@@ -26,14 +26,21 @@ function fixture() {
     "packages/codex-plugin/relay.mjs",
     "server.json",
     "CONTRIBUTING.md",
+    "bunfig.toml",
   ]) {
     cpSync(new URL(`../${file}`, import.meta.url), join(root, file));
   }
   return root;
 }
 
+// Bun reads bunfig.toml from its working directory and Bun 1.4.2 stops on a string age, so the checker runs from a
+// directory with none and finds the fixture through its own path.
 function check(root: string) {
-  return Bun.spawnSync([process.execPath, "scripts/check-release.ts"], { cwd: root });
+  const elsewhere = mkdtempSync(join(tmpdir(), "swarmail-release-cwd-"));
+  fixtures.push(elsewhere);
+  return Bun.spawnSync([process.execPath, join(root, "scripts/check-release.ts")], {
+    cwd: elsewhere,
+  });
 }
 
 test("release check accepts aligned repository metadata", () => {
@@ -59,6 +66,18 @@ test.each<[string, (manifest: Manifest) => string]>([
   const result = check(root);
   expect(result.exitCode).toBe(1);
   expect(result.stderr.toString()).toContain("Release versions must match");
+});
+
+test("release check rejects a minimumReleaseAge that Bun 1.4.2 cannot read", () => {
+  const root = fixture();
+  const path = join(root, "bunfig.toml");
+  writeFileSync(
+    path,
+    readFileSync(path, "utf8").replace(/minimumReleaseAge = \d+/, 'minimumReleaseAge = "3d"'),
+  );
+  const result = check(root);
+  expect(result.exitCode).toBe(1);
+  expect(result.stderr.toString()).toContain("minimumReleaseAge as a number of seconds");
 });
 
 test.each(["claude-plugin", "codex-plugin"])(

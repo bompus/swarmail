@@ -35,6 +35,16 @@ if (registry.description.length > 100) {
   process.exit(1);
 }
 
+// package.json lets Bun 1.4.2 run this repository, and that version fails on a bunfig.toml that writes
+// minimumReleaseAge as a duration string such as "3d". Glama builds the container with it.
+const bunfig = Bun.TOML.parse(readFileSync(new URL("bunfig.toml", root), "utf8")) as {
+  install?: { minimumReleaseAge?: unknown };
+};
+if (typeof bunfig.install?.minimumReleaseAge !== "number") {
+  console.error("bunfig.toml must write install.minimumReleaseAge as a number of seconds");
+  process.exit(1);
+}
+
 // The Claude Code plugin ships its own copy of the relay, since a plugin can only run files inside
 // its folder.
 const relaySource = readFileSync(new URL("packages/mcp-relay/index.mjs", root), "utf8");
