@@ -33,8 +33,14 @@ function fixture() {
   return root;
 }
 
+// Bun reads bunfig.toml from its working directory and Bun 1.4.2 stops on a string age, so the checker runs from a
+// directory with none and finds the fixture through its own path.
 function check(root: string) {
-  return Bun.spawnSync([process.execPath, "scripts/check-release.ts"], { cwd: root });
+  const elsewhere = mkdtempSync(join(tmpdir(), "swarmail-release-cwd-"));
+  fixtures.push(elsewhere);
+  return Bun.spawnSync([process.execPath, join(root, "scripts/check-release.ts")], {
+    cwd: elsewhere,
+  });
 }
 
 test("release check accepts aligned repository metadata", () => {
