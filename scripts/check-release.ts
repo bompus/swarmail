@@ -41,9 +41,7 @@ const bunfig = Bun.TOML.parse(readFileSync(new URL("bunfig.toml", root), "utf8")
   install?: { minimumReleaseAge?: unknown };
 };
 if (typeof bunfig.install?.minimumReleaseAge !== "number") {
-  console.error(
-    "bunfig.toml must write install.minimumReleaseAge as a number of seconds, not a string",
-  );
+  console.error("bunfig.toml must write install.minimumReleaseAge as a number of seconds");
   process.exit(1);
 }
 
