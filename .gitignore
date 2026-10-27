@@ -3,3 +3,6 @@ node_modules
 __pycache__/
 .DS_Store
 .codegraph/
+
+# Bun install cache
+.bun/
