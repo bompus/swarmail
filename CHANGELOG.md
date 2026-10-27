@@ -11,7 +11,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   bridges and `swarmail canary` send the token to a non-loopback `SWARMAIL_URL`, `SWARMAIL_WAKE_URL` or bridge
   `swarmailUrl`; a bridge accepts such a URL only when the token file is named. The Claude Code mod cannot send it, so
   it does nothing for a non-loopback `SWARMAIL_WAKE_URL`. The extra listener speaks plain HTTP, so use it only on a
-  network that encrypts every peer. The mailbox schema moves from version 7 to 9, and a build that supports an
+  network that encrypts every peer, and treat the token as read access to every mailbox, the roster, project paths
+  and reservations on that server. A hub stops removing projects whose checkout is gone, and `swarmail overdue`
+  refuses to run against a remote server. The mailbox schema moves from version 7 to 9, and a build that supports an
   older schema refuses to open a mailbox at version 9.
 
 - Against a remote server, the `swarmail` command and the register hook name a project by the clone's `origin`
@@ -30,8 +32,13 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 - Against a remote server, the git guard reads the hub's exclusive file reservations through the new read-only tool
   `list_file_reservations` and refuses a commit or push that touches one held by another session; a hub it cannot
-  reach is reported and the commit goes ahead. The register hook adds `branch:` and `title:` to the session tag, so
-  `swarmail who` shows a remote session's branch and title.
+  reach is reported and the commit goes ahead. The register hook adds `branch:`, `title:` (cut at 120 characters) and `worktree:` (the edit
+  checkout) to the session tag, so `swarmail who` shows a remote session's branch, title and location.
+
+- Swarmail is described as usable on one machine or across machines, not as local only: the README, the package and
+  plugin descriptions, the MCP server instructions and tool text, the setup scripts' output, the banners and the social
+  preview. `bun run check` now also fails when the images, the package descriptions or the public text still say
+  otherwise (`scripts/check-public.ts`).
 
 - `bun run check` checks formatting with `bun fmt --no-script --check` instead of oxfmt, and `bun run fmt` writes with
   `bun fmt --no-script`. Both read the same `.oxfmtrc.json` and check the same files with no differences. Contributors
@@ -40,7 +47,7 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - `swarmail wake-auto-t3` logs `received SIGTERM; stopping` (or `SIGINT`) when it receives the signal, so a
   signalled stop no longer looks like a silent exit 0 in the journal.
 
-- The provider comparison covers T3 Code 0.1.1 and the reviewed nightly's terminal commands,
+- The provider comparison covers T3 Code 0.1.2 and the reviewed nightly's terminal commands,
   pull-request lookup limits and automatic-notice snooze behavior.
 
 - Automatic T3 wake supervision waits through ordinary backend outages without exhausting a restart
@@ -53,7 +60,7 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   or credential rotation configuration that still names `t3-v1-steer` now fails at startup with
   `target type t3-v1-steer was removed`; change its `target.type` to `t3-v2-queue`. The old bridge's saved state is
   bound to the `t3-v1-steer` destination, so the switched bridge refuses it with `saved mailbox binding differs`: stop
-  the old bridge, reconcile or discard its pending delivery as `docs/wake-bridges.md` describes for bridge state, then
+  the old bridge, reconcile its pending delivery as `docs/wake-bridges.md` describes for bridge state, then
   remove that journal before starting the `t3-v2-queue` bridge. The register hook, `who`, agent
   locations, automatic wake and `pr-sessions` read only `statev2.sqlite`. While it is missing, or T3 Code is still
   creating it, they find no T3 threads, and `pr-sessions` exits with an error.
@@ -62,8 +69,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   holds (HTTP 401), instead of retrying forever; a standalone bridge whose token was revoked or expired now exits. A
   401 for a token that rotation already replaced is still retried, since rotation writes the new header before revoking
   the old token. `docs/wake-bridges.md` also corrects how notices are recognized: T3 Code records every message a client
-  sends as `createdBy: "user"`, so a bridge owns only the notices whose ids it saved, and it leaves other queued
-  `Swarmail: ` messages alone.
+  sends as `createdBy: "user"`, so a bridge owns only the notices whose ids it saved, plus the `agent`-labelled ones older T3 releases recorded,
+  and it leaves other queued `Swarmail: ` messages alone.
 
 - `pr-sessions` shows which conversations T3 Code is watching a pull request for. Each link now has `watchingSince`:
   when T3 started watching that pull request for the conversation, or null when it is not watching (including after a
@@ -74,7 +81,7 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   with `T3CODE_HOME` set the register hook, `who`, agent locations and `pr-sessions` read the wrong database or none.
   They now resolve `T3CODE_HOME` the same way. An explicit `pr-sessions --t3-home` still wins.
 
-- The local T3 lifecycle reader no longer stops tracking after T3 Code deletes old history. T3 Code 0.1.1 preview and
+- The local T3 lifecycle reader no longer stops tracking after T3 Code deletes old history. Recent T3 Code preview and
   nightly builds delete events that a newer event of the same thread supersedes, which could remove the event the reader
   saved at its last reconciliation; every later reconciliation then reported `unavailable` and held wakes for good. A missing saved
   event now counts as a deletion when its event id appears nowhere else in the table. A different event at that
@@ -86,8 +93,7 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - The `swarmail` binary no longer loads a `.env` or `bunfig.toml` from the directory it runs in. Hooks and the git guard run
   inside other projects, so a project's `.env` could set `SWARMAIL_DB`, `SWARMAIL_URL`, `SWARMAIL_GUARD` or `XDG_*` and point
   them at another database, server or guard setting, and a `preload` in its `bunfig.toml` ran that project's code inside
-  swarmail. Settings now come only from the environment the binary is started with; a `BUN_OPTIONS` that names a
-  `--config` or `--preload` in that environment still applies. `bun scripts/build.ts --if-stale`
+  swarmail. Settings now come only from the environment the binary is started with. `bun scripts/build.ts --if-stale`
   now also rebuilds when the build script changes, so an installed binary picks this up.
 
 - Under T3 Code, agents are told not to retire themselves at a whole-session closeout. Where configured, closing the thread (local T3 lifecycle reconciliation) or a week idle (`SWARMAIL_RETIRE_DAYS`, default 7;
