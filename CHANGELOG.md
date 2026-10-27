@@ -2,6 +2,10 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- Bun 1.4.2, the oldest version `package.json` allows, can read `bunfig.toml` again. It had written `minimumReleaseAge` as `"3d"`, which only Bun 1.4.4 and later accept, so `bun install` failed on 1.4.2 with "Invalid Bunfig", including the Glama container build. `bun run check` now fails if the value is not a number of seconds.
+
 ## 0.7.0 - 2026-10-26
 
 - One machine can serve sessions on others. `SWARMAIL_HOST` adds a second listener on one non-loopback address, such
