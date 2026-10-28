@@ -1213,9 +1213,11 @@ test("the hourly sweep forgets old idempotency keys and long-ended registrations
 
 test("locations follow the edited checkout while messages keep their sender snapshot", async () => {
   const previousHome = process.env.HOME;
+  const previousT3 = process.env.T3CODE_HOME;
   process.env.HOME = join(dir, "location-home");
+  process.env.T3CODE_HOME = join(process.env.HOME, ".t3");
   try {
-    const t3dir = join(process.env.HOME, ".t3", "userdata");
+    const t3dir = join(process.env.T3CODE_HOME, "userdata");
     mkdirSync(t3dir, { recursive: true });
     const t3db = new Database(join(t3dir, "statev2.sqlite"), { create: true });
     createT3V2Tables(t3db);
@@ -1317,6 +1319,11 @@ test("locations follow the edited checkout while messages keep their sender snap
         .location.branch,
     ).toBeNull();
   } finally {
+    if (previousT3 === undefined) {
+      delete process.env.T3CODE_HOME;
+    } else {
+      process.env.T3CODE_HOME = previousT3;
+    }
     if (previousHome === undefined) {
       delete process.env.HOME;
     } else {

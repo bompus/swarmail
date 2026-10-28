@@ -189,6 +189,8 @@ test("the notice names a different project name on a first registration, not on 
       SWARMAIL_URL: `http://127.0.0.1:${server.port}/mcp/`,
       XDG_STATE_HOME: join(dir, "state"),
       HOME: dir,
+      T3CODE_HOME: join(dir, ".t3"),
+      SWARMAIL_UPDATE_TARGETS: "",
     };
     const run = async (input: unknown): Promise<any> => {
       const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
@@ -581,6 +583,8 @@ test("a new provider session in a T3 thread takes over the thread's name", async
       SWARMAIL_URL: mail.url,
       XDG_STATE_HOME: join(dir, "state"),
       HOME: dir,
+      T3CODE_HOME: join(dir, ".t3"),
+      SWARMAIL_UPDATE_TARGETS: "",
       GROK_SESSION_ID: "",
       DEVIN_PROJECT_DIR: "",
       CLAUDECODE: "",
@@ -1030,6 +1034,8 @@ test("a claude -p run registers on its first edit, not at start", async () => {
       SWARMAIL_URL: `http://127.0.0.1:${port}/mcp/`,
       XDG_STATE_HOME: join(dir, "state"),
       HOME: dir,
+      T3CODE_HOME: join(dir, ".t3"),
+      SWARMAIL_UPDATE_TARGETS: "",
     };
     const run = async (input: unknown): Promise<any> => {
       const proc = Bun.spawn(["bun", join(import.meta.dir, "../src/cli.ts"), "register"], {
