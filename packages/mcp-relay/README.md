@@ -38,9 +38,9 @@ It forwards each JSON-RPC message to `SWARMAIL_URL`
 For a server on another machine, follow the
 [remote server setup](https://github.com/bompus/swarmail#using-it-from-another-machine)
 first. Set `SWARMAIL_URL` to its full MCP endpoint, such as
-`http://<hub address>:18765/mcp/`, and
-`SWARMAIL_TOKEN_FILE` to a file whose first line is the token that server
-requires; the relay sends it as a bearer token and never reads the file for a
+`http://<hub address>:18765/mcp/`.
+Set `SWARMAIL_TOKEN_FILE` to a file whose first line is the token that server
+requires. The relay sends it as a bearer token and never reads the file for a
 `localhost`, `127.0.0.1` or `[::1]` URL.
 Hosts that support MCP over HTTP can skip the relay and use that URL directly,
 which is what `scripts/configure-mcp.ts` sets up.
