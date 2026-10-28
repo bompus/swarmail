@@ -2,10 +2,11 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.7.2 - 2026-10-28
 
 - The npm README now uses Swarmail's banner and badges, links to remote server setup with a full MCP endpoint,
   and dates its existing memory figures. The public-materials check rejects a missing or relative npm banner.
+- Developer instructions name Bun's formatter. Benchmark notes keep their tested revision without a current-version cutoff.
 
 ## 0.7.1 - 2026-10-27
 
