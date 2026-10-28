@@ -2,6 +2,10 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- Add the compact MCPRush badge beside Glama in the main and npm READMEs.
+
 ## 0.7.2 - 2026-10-28
 
 - The npm README now uses Swarmail's banner and badges, links to remote server setup with a full MCP endpoint,

@@ -11,6 +11,7 @@
   <a href="https://www.npmjs.com/package/swarmail-mcp"><img src="https://badgen.net/npm/v/swarmail-mcp" alt="Latest swarmail-mcp version on npm"></a>
   <a href="LICENSE"><img src="https://badgen.net/badge/license/MIT/blue" alt="MIT license"></a>
   <a href="https://glama.ai/mcp/servers/bompus/swarmail"><img src="https://glama.ai/mcp/servers/bompus/swarmail/badges/score.svg" alt="swarmail on Glama"></a>
+  <a href="https://mcprush.com/to/swarmail-mcp?ref=badge"><img src="https://mcprush.com/badge/swarmail-mcp/score.svg" alt="Swarmail MCP on MCPRush"></a>
 </p>
 
 <p align="center">
