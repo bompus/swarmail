@@ -63,7 +63,9 @@ export function publicProblems(root: string, paths = PUBLIC_PATHS): string[] {
   const npmReadme = "packages/mcp-relay/README.md";
   const npmPath = join(root, npmReadme);
   const npmText = existsSync(npmPath) ? readFileSync(npmPath, "utf8") : "";
-  if (!npmText.includes(`alt="swarmail: ${TAGLINE}"`)) {
+  const banner =
+    /<picture\b[\s\S]*?<\/picture>/.exec(npmText.replace(/<!--[\s\S]*?-->/g, ""))?.[0] ?? "";
+  if (!banner.includes(`alt="swarmail: ${TAGLINE}"`)) {
     problems.push(`${npmReadme}: banner alt text must read "swarmail: ${TAGLINE}"`);
   }
   for (const [attribute, image] of [
@@ -71,7 +73,7 @@ export function publicProblems(root: string, paths = PUBLIC_PATHS): string[] {
     ["srcset", "banner-dark.png"],
   ]) {
     const url = `https://raw.githubusercontent.com/bompus/swarmail/main/docs/assets/${image}`;
-    if (!npmText.includes(`${attribute}="${url}"`)) {
+    if (!banner.includes(`${attribute}="${url}"`)) {
       problems.push(`${npmReadme}: banner must use the hosted image ${url}`);
     }
   }

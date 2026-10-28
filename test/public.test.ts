@@ -95,6 +95,9 @@ test.each([
   npmBanner.replace("banner-light.png", "missing.png"),
   npmBanner.replace("banner-dark.png", "missing.png"),
   npmBanner.replace(TAGLINE, "Outdated description"),
+  npmBanner.replace(/<\/?picture>/g, ""),
+  `<!-- ${npmBanner} -->`,
+  `<picture><!-- ${npmBanner} --></picture>`,
 ])("rejects an npm README without a hosted banner: %s", (readme) => {
   const root = tree({ "packages/mcp-relay/README.md": readme });
   expect(
