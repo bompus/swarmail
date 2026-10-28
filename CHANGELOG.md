@@ -4,6 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Refresh the T3 Code comparison for linked-machine messaging, remote delegation,
+  agent-assisted linking and machine mentions, distinguishing the nightly Labs
+  beta from stable 0.1.3.
 - Add the compact MCPRush badge beside Glama in the main and npm READMEs.
 
 ## 0.7.2 - 2026-10-28
