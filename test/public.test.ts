@@ -7,6 +7,7 @@ import { publicProblems, readable } from "../scripts/check-public.ts";
 import { IMAGES, STALE_SCOPE, TAGLINE, assetText } from "../scripts/lib/brand.ts";
 
 const roots: string[] = [];
+const npmBanner = `<picture><source srcset="https://raw.githubusercontent.com/bompus/swarmail/main/docs/assets/banner-dark.png"><img src="https://raw.githubusercontent.com/bompus/swarmail/main/docs/assets/banner-light.png" alt="swarmail: ${TAGLINE}"></picture>`;
 afterEach(() => {
   for (const root of roots.splice(0)) {
     rmSync(root, { recursive: true });
@@ -29,6 +30,7 @@ function tree(files: Record<string, string> = {}) {
   );
   write("docs/assets/source.json", JSON.stringify({ ...assetText(), images }));
   write("README.md", `<img alt="swarmail: ${TAGLINE}">`);
+  write("packages/mcp-relay/README.md", npmBanner);
   for (const [path, text] of Object.entries(files)) {
     write(path, text);
   }
@@ -84,6 +86,28 @@ test("names a README banner whose alt text differs from the tagline", () => {
   expect(publicProblems(root, [])).toEqual([
     `README.md: banner alt text must read "swarmail: ${TAGLINE}"`,
   ]);
+});
+
+test.each([
+  "# swarmail-mcp",
+  `<img alt="swarmail: ${TAGLINE}">`,
+  `<picture><source srcset="../../docs/assets/banner-dark.png"><img src="../../docs/assets/banner-light.png" alt="swarmail: ${TAGLINE}"></picture>`,
+  npmBanner.replace("banner-light.png", "missing.png"),
+  npmBanner.replace("banner-dark.png", "missing.png"),
+  npmBanner.replace(TAGLINE, "Outdated description"),
+])("rejects an npm README without a hosted banner: %s", (readme) => {
+  const root = tree({ "packages/mcp-relay/README.md": readme });
+  expect(
+    publicProblems(root, []).some((problem) => problem.includes("packages/mcp-relay/README.md")),
+  ).toBe(true);
+});
+
+test("names a missing npm README", () => {
+  const root = tree();
+  rmSync(join(root, "packages/mcp-relay/README.md"));
+  expect(
+    publicProblems(root, []).some((problem) => problem.includes("packages/mcp-relay/README.md")),
+  ).toBe(true);
 });
 
 test("names rendered-asset text that differs from the tagline", () => {

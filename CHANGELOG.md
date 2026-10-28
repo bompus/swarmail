@@ -2,6 +2,11 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- The npm README now uses Swarmail's banner and badges, links to remote server setup with a full MCP endpoint,
+  and dates its existing memory figures. The public-materials check rejects a missing or relative npm banner.
+
 ## 0.7.1 - 2026-10-27
 
 - Bun 1.4.2, the oldest version `package.json` allows, can read `bunfig.toml` again. It had written `minimumReleaseAge` as `"3d"`, which only Bun 1.4.4 and later accept, so `bun install` failed on 1.4.2 with "Invalid Bunfig", including the Glama container build. `bun run check` now fails if the value is not a number of seconds.

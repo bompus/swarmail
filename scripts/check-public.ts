@@ -1,6 +1,6 @@
 // `bun run check` step: the public text must still describe what Swarmail does. It fails on wording from when Swarmail
-// served one machine only, on a README banner alt text that differs from the tagline, and on banners or a social
-// preview that were not drawn from the current tagline (scripts/render-assets.ts records what it drew).
+// served one machine only, on README banner alt text that differs from the tagline, on missing npm banner URLs,
+// and on images not drawn from the current tagline (scripts/render-assets.ts records what it drew).
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -59,6 +59,21 @@ export function publicProblems(root: string, paths = PUBLIC_PATHS): string[] {
   const readme = join(root, "README.md");
   if (existsSync(readme) && !readFileSync(readme, "utf8").includes(`alt="swarmail: ${TAGLINE}"`)) {
     problems.push(`README.md: banner alt text must read "swarmail: ${TAGLINE}"`);
+  }
+  const npmReadme = "packages/mcp-relay/README.md";
+  const npmPath = join(root, npmReadme);
+  const npmText = existsSync(npmPath) ? readFileSync(npmPath, "utf8") : "";
+  if (!npmText.includes(`alt="swarmail: ${TAGLINE}"`)) {
+    problems.push(`${npmReadme}: banner alt text must read "swarmail: ${TAGLINE}"`);
+  }
+  for (const [attribute, image] of [
+    ["src", "banner-light.png"],
+    ["srcset", "banner-dark.png"],
+  ]) {
+    const url = `https://raw.githubusercontent.com/bompus/swarmail/main/docs/assets/${image}`;
+    if (!npmText.includes(`${attribute}="${url}"`)) {
+      problems.push(`${npmReadme}: banner must use the hosted image ${url}`);
+    }
   }
   const rendered = join(root, ASSET_SOURCE);
   if (existsSync(rendered)) {
