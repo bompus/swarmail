@@ -133,6 +133,12 @@ fails until every folder in `packages/` is named in this section.
   [#16031](https://github.com/punkpeye/awesome-mcp-servers/pull/16031). It
   shows no version, so releases need no change. To change its description or
   tags, open a pull request there that edits that line.
+- [MCP Servers](https://mcpservers.org) (pending): submitted through the free
+  form at <https://mcpservers.org/submit> with the name, description and
+  repository URL from this repository and the MCP Registry name above. It
+  emails the submitter when the listing is approved. It is not known how to
+  change an approved listing, or whether it shows a version, so check both once
+  it is approved.
 - Claude Code plugin marketplace: this repository, through
   `.claude-plugin/marketplace.json` and the plugin in
   `packages/claude-plugin/`. People add it with
