@@ -315,7 +315,7 @@ All statements here are documented. None were tested.
 
 ## T3 Code
 
-- **Version boundary (read 2026-10-28).** Stable
+- **Version boundary (documented; read 2026-10-28).** Stable
   [0.1.3](https://github.com/pingdotgg/t3code/releases/tag/v0.1.3) was published
   on 2026-10-27 at 06:09 UTC, before the cross-environment changes below merged
   at about 21:04 UTC. Those changes are included in
@@ -324,7 +324,7 @@ All statements here are documented. None were tested.
   not a running-client test. The earlier messaging comparison used source
   through `v0.1.2-nightly.20261021.3486` and main documentation read on 2026-10-26;
   those capabilities have not all been verified in stable 0.1.3.
-- **Messaging (nightly source).** `t3_thread_send` reaches any thread in the
+- **Messaging (documented from nightly source).** `t3_thread_send` reaches any thread in the
   environment with `auto` (start an idle thread, steer an active turn, or queue
   behind it), `queue`, `steer` or `restart`, and repeats safely with the same
   `clientRequestId`. The target's runtime and interaction modes may not be
@@ -340,7 +340,7 @@ All statements here are documented. None were tested.
   support OAuth, such as Claude Code and Codex in a terminal, can use these tools
   through an MCP sign-in that lasts 30 days. Read only is the default, and
   Supervised or above can message threads.
-- **Linked machines (nightly; Labs beta, off by default).** Thread and project
+- **Linked machines (documented; nightly; Labs beta, off by default).** Thread and project
   tools accept `environmentId` to forward calls to a linked T3 environment,
   including messaging, reads and launches
   ([#16684](https://github.com/pingdotgg/t3code/pull/16684)).
