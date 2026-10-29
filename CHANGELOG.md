@@ -7,9 +7,6 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 - Refresh the T3 Code comparison for linked-machine messaging, remote delegation,
   agent-assisted linking and machine mentions, distinguishing the nightly Labs
   beta from stable 0.1.3.
-- MCP configuration accepts repeated `--client NAME` selections and API `clients` lists.
-  Select `codex-hub` for `.codex_hub/config.toml`; omitting selection keeps the seven default clients.
-  Unselected clients are not inspected, and existing server entries retain custom fields and disabled settings.
 - Add the compact MCPRush badge beside Glama in the main and npm READMEs.
 
 ## 0.7.2 - 2026-10-28
