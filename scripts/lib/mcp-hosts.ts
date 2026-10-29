@@ -15,6 +15,7 @@ const HOSTS: Array<[client: string, rel: string, format: McpFormat]> = [
   ["antigravity", ".gemini/config/mcp_config.json", "json"],
   ["devin", ".config/devin/mcp_config.json", "json"],
   ["opencode", ".config/opencode/opencode.json", "opencode"],
+  ["codex-hub", ".codex_hub/config.toml", "toml"],
 ];
 const WINDOWS_DEVIN_REL = "AppData/Roaming/devin/mcp_config.json";
 
@@ -22,8 +23,25 @@ const WINDOWS_DEVIN_REL = "AppData/Roaming/devin/mcp_config.json";
 export function mcpHosts(
   home: string,
   windows: boolean,
+  clients?: string[],
 ): Array<{ client: string; path: string; format: McpFormat }> {
-  return HOSTS.map(([client, rel, format]) => {
+  if (
+    clients !== undefined &&
+    (!Array.isArray(clients) ||
+      clients.length === 0 ||
+      new Set(clients).size !== clients.length ||
+      [...clients].some((client) => !HOSTS.some(([supported]) => supported === client)))
+  ) {
+    throw new Error(
+      "Invalid client selection; use a nonempty list of distinct supported clients: " +
+        HOSTS.map(([client]) => client).join(", "),
+    );
+  }
+  // Filter before OpenCode discovery or any other destination access.
+  const selected = HOSTS.filter(([client]) =>
+    clients === undefined ? client !== "codex-hub" : clients.includes(client),
+  );
+  return selected.map(([client, rel, format]) => {
     let path = join(home, client === "devin" && windows ? WINDOWS_DEVIN_REL : rel);
     if (client === "opencode" && present(path + "c")) {
       path += "c";
@@ -144,13 +162,28 @@ export function resolveWindowsHome(args: string[], home: string = homedir()): st
   return join("/mnt/c/Users", basename(home));
 }
 
-/** `[--dry-run] [--home DIR] [--windows-home[=DIR]]` plus whatever positionals remain. */
+/** Configuration flags plus whatever positionals remain; --client can repeat. */
 export function parseConfigureArgs(args: string[]): {
   dryRun: boolean;
   home: string;
   windowsHome: string | null;
   positional: string[];
+  clients?: string[];
 } {
+  const clients: string[] = [];
+  const rest: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] !== "--client") {
+      rest.push(args[i]!);
+      continue;
+    }
+    const client = args[++i];
+    if (!client || client.startsWith("-")) {
+      throw new Error("--client requires a client name");
+    }
+    clients.push(client);
+  }
+  args = rest;
   const homeIndex = args.indexOf("--home");
   const home = homeIndex === -1 ? homedir() : args[homeIndex + 1];
   if (!home) {
@@ -168,5 +201,6 @@ export function parseConfigureArgs(args: string[]): {
     home,
     windowsHome: resolveWindowsHome(args),
     positional,
+    clients: clients.length ? clients : undefined,
   };
 }

@@ -19,30 +19,6 @@ import {
 // The server's own name; tools appear to agents as `mcp__swarmail__<tool>` and the like.
 const serverName = "swarmail";
 const managedUrl = swarmailUrl({});
-// Replaces a `[mcp_servers.<name>]` table in place; appending would produce a
-// duplicate table header, which is invalid TOML.
-function replaceTomlSection(
-  original: string,
-  key: string,
-  serverName: string,
-  block: string,
-): string {
-  const header = new RegExp(`^\\s*\\[\\s*${key}\\s*\\.\\s*"?${serverName}"?\\s*\\]\\s*$`);
-  const lines = original.split("\n");
-  const start = lines.findIndex((line) => header.test(line));
-  if (start === -1) {
-    throw new Error("Managed entry has no replaceable table header: " + key + "." + serverName);
-  }
-  let end = lines.length;
-  for (let i = start + 1; i < lines.length; i++) {
-    if (/^\s*\[/.test(lines[i]!)) {
-      end = i;
-      break;
-    }
-  }
-  const replacement = block.trimEnd().split("\n");
-  return [...lines.slice(0, start), ...replacement, ...lines.slice(end)].join("\n");
-}
 
 export interface ServerEntry {
   command?: unknown;
@@ -61,14 +37,12 @@ interface HostConfig {
   servers: Record<string, ServerEntry | undefined>;
 }
 
-function rebuild(config: HostConfig, entry: Record<string, unknown>, replace = false): string {
+function rebuild(config: HostConfig, entry: Record<string, unknown>): string {
   const { format, original, settings, servers } = config;
   const key = serversKey(format);
   if (format === "toml") {
     const block = Bun.TOML.stringify({ [key]: { [serverName]: entry } });
-    return replace
-      ? replaceTomlSection(original, key, serverName, block)
-      : original + "\n" + block + "\n";
+    return original + "\n" + block + "\n";
   }
   return (
     JSON.stringify(withServers(settings, format, { ...servers, [serverName]: entry }), null, 2) +
@@ -76,7 +50,7 @@ function rebuild(config: HostConfig, entry: Record<string, unknown>, replace = f
   );
 }
 
-// All seven hosts support streamable HTTP, with a host-specific URL shape.
+// Hosts support streamable HTTP, with a host-specific URL shape.
 const managedEntry = (format: McpFormat, client: string): Record<string, unknown> =>
   format === "toml"
     ? { url: managedUrl, enabled: true }
@@ -102,8 +76,6 @@ function planHost(home: string, windows: boolean, [client, path, format]: Target
   const parse = mcpParser(format);
   const settings = object(parse(original.trim() ? original : format === "toml" ? "" : "{}"), path);
   const servers = serversOf(settings, format, path) as Record<string, ServerEntry | undefined>;
-  const isManaged = (server: ServerEntry | undefined): boolean =>
-    (server?.url ?? server?.serverUrl ?? server?.httpUrl) === managedUrl;
   const config: HostConfig = { format, original, settings, servers };
   const checkRoundTrip = (next: string, entry: Record<string, unknown>): void => {
     if (
@@ -121,25 +93,29 @@ function planHost(home: string, windows: boolean, [client, path, format]: Target
     if (existing.enabled === false || existing.disabled === true) {
       return { client, path, original, next: original, status: "preserved-disabled" };
     }
-    if (!isManaged(existing) || JSON.stringify(existing) === JSON.stringify(entry)) {
-      return { client, path, original, next: original, status: "preserved-existing" };
-    }
-    const updated = rebuild(config, entry, true);
-    checkRoundTrip(updated, entry);
-    return { client, path, original, next: updated, status: "updated" };
+    // Even a managed URL can have custom headers, timeouts or nested settings.
+    return { client, path, original, next: original, status: "preserved-existing" };
   }
 
-  const next = rebuild(config, entry, false);
+  const next = rebuild(config, entry);
   checkRoundTrip(next, entry);
   return { client, path, original, next, status: "added" };
 }
 
 export function configureSwarmailMcp(
   home: string = homedir(),
-  { dryRun = false, windows = false }: { dryRun?: boolean; windows?: boolean } = {},
+  {
+    dryRun = false,
+    windows = false,
+    clients,
+  }: {
+    dryRun?: boolean;
+    windows?: boolean;
+    clients?: string[];
+  } = {},
 ): McpResult[] {
   home = resolve(home);
-  const targets = mcpHosts(home, windows).map(({ client, path, format }): Target => [
+  const targets = mcpHosts(home, windows, clients).map(({ client, path, format }): Target => [
     client,
     path,
     format,
@@ -152,11 +128,13 @@ if (import.meta.main) {
   if (!["linux", "win32"].includes(process.platform) || process.getuid?.() === 0) {
     throw new Error("Run as your normal user, on Linux or Windows.");
   }
-  const { dryRun, home, windowsHome, positional } = parseConfigureArgs(process.argv.slice(2));
+  const { dryRun, home, windowsHome, positional, clients } = parseConfigureArgs(
+    process.argv.slice(2),
+  );
   if (positional.length > 0) {
     const help = positional.some((arg) => arg === "--help" || arg === "-h");
     (help ? console.log : console.error)(
-      "Usage: bun scripts/configure-mcp.ts [--dry-run] [--home DIR] [--windows-home[=DIR]]",
+      "Usage: bun scripts/configure-mcp.ts [--dry-run] [--home DIR] [--windows-home[=DIR]] [--client NAME ...]",
     );
     process.exit(help ? 0 : 64);
   }
@@ -164,6 +142,7 @@ if (import.meta.main) {
     JSON.stringify(
       configureSwarmailMcp(windowsHome ?? home, {
         dryRun,
+        clients,
         windows: windowsHome !== null || process.platform === "win32",
       }),
       null,

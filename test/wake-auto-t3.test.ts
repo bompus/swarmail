@@ -93,6 +93,7 @@ test("first read-only Codex tool registers a T3 mailbox, the next scan makes it 
     const env = {
       ...process.env,
       HOME: f.root,
+      T3CODE_HOME: join(f.root, ".t3"),
       XDG_STATE_HOME: join(f.root, "state"),
       SWARMAIL_URL: `http://127.0.0.1:${server.port}/mcp/`,
     };

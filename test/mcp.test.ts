@@ -54,6 +54,7 @@ afterEach(() => {
 test("registers all seven clients over HTTP, preserves settings and is byte-stable on repeat", () => {
   const { home } = fixture();
   installHosts(home);
+  const hub = write(home, ".codex_hub/config.toml", "not valid TOML");
   const codex = write(
     home,
     ".codex/config.toml",
@@ -71,6 +72,7 @@ test("registers all seven clients over HTTP, preserves settings and is byte-stab
     '{ // retained in backup\n"model":"keep", "mcp":{"timeout":5000,"servers":{"other":{"type":"remote","url":"https://example.com"}}},\n}',
   );
   const results = configureSwarmailMcp(home);
+  expect(readFileSync(hub, "utf8")).toBe("not valid TOML");
   expect(results).toHaveLength(7);
   expect(results.filter((r) => r.status === "added")).toHaveLength(7);
   expect(readFileSync(codex, "utf8")).toStartWith('# keep this comment\nmodel = "keep"');
@@ -136,7 +138,7 @@ test("retains an explicitly disabled or custom swarmail server verbatim", () => 
   expect(readFileSync(customPath, "utf8")).toBe(custom);
 });
 
-test("updates only the Swarmail entry and preserves project and secondary settings", () => {
+test("preserves extra fields in an existing managed entry and leaves other settings intact", () => {
   const { home } = fixture();
   const projects = { "/proj": { mcpServers: { other: { command: "keep" } } } };
   const claude = write(
@@ -156,11 +158,15 @@ test("updates only the Swarmail entry and preserves project and secondary settin
   });
   const settings = write(home, ".gemini/settings.json", secondary);
   const result = configureSwarmailMcp(home).find((r) => r.client === "claude");
-  expect(result!.status).toBe("updated");
+  expect(result!.status).toBe("preserved-existing");
   const parsed = JSON.parse(readFileSync(claude, "utf8"));
   expect(parsed.projects).toEqual(projects);
   expect(parsed.mcpServers.other).toEqual({ command: "keep" });
-  expect(parsed.mcpServers.swarmail).toEqual({ type: "http", url: managedUrl });
+  expect(parsed.mcpServers.swarmail).toEqual({
+    type: "http",
+    url: managedUrl,
+    startup_timeout_sec: 30,
+  });
   expect(readFileSync(settings, "utf8")).toBe(secondary);
 });
 
@@ -298,4 +304,114 @@ test("dry-run reports would-add without writing", () => {
   expect(results.filter((r) => r.status === "would-add")).toHaveLength(7);
   expect(existsSync(join(home, ".codex/config.toml"))).toBe(false);
   expect(existsSync(join(home, ".claude.json"))).toBe(false);
+});
+
+test("selects exactly four clients, including Codex Hub, and is byte-stable on repeat", () => {
+  const { home } = fixture();
+  installHosts(home);
+  mkdirSync(join(home, ".codex_hub"));
+  const untouched = write(home, ".cursor/mcp.json", "malformed but unselected");
+  const opencode = write(home, ".config/opencode/opencode.jsonc", '{"mcp":{"servers":{}}}');
+  const clients = ["codex", "grok", "opencode", "codex-hub"];
+  const preview = configureSwarmailMcp(home, { clients, dryRun: true });
+  expect(preview.map((r) => r.client).sort()).toEqual([...clients].sort());
+  expect(preview.every((r) => r.status === "would-add")).toBe(true);
+  expect(existsSync(join(home, ".codex_hub/config.toml"))).toBe(false);
+  const results = configureSwarmailMcp(home, { clients });
+  expect(results.map((r) => r.client).sort()).toEqual([...clients].sort());
+  expect(results.every((r) => r.status === "added")).toBe(true);
+  const hub = join(home, ".codex_hub/config.toml");
+  expect(Bun.TOML.parse(readFileSync(hub, "utf8"))).toEqual({
+    mcp_servers: { swarmail: { url: managedUrl, enabled: true } },
+  });
+  expect(results.find((r) => r.client === "opencode")!.path).toBe(opencode);
+  expect(JSON.parse(readFileSync(opencode, "utf8")).mcp.servers.swarmail).toEqual({
+    type: "remote",
+    url: managedUrl,
+  });
+  expect(readFileSync(untouched, "utf8")).toBe("malformed but unselected");
+  expect(existsSync(join(home, ".claude.json"))).toBe(false);
+  expect(readdirSync(join(home, ".config/devin"))).toEqual([]);
+  expect(readdirSync(join(home, ".gemini/config"))).toEqual([]);
+  const before = results.map((r) => readFileSync(r.path, "utf8"));
+  expect(
+    configureSwarmailMcp(home, { clients }).every((r) => r.status === "preserved-existing"),
+  ).toBe(true);
+  expect(results.map((r) => readFileSync(r.path, "utf8"))).toEqual(before);
+});
+
+test("does not discover OpenCode or read other clients when only Codex is selected", () => {
+  const { home } = fixture();
+  mkdirSync(join(home, ".codex"));
+  // Traversing this path would fail even before a config could be parsed.
+  const unselected = write(home, ".config", "not a directory");
+  const results = configureSwarmailMcp(home, { clients: ["codex"] });
+  expect(results.map((r) => [r.client, r.status])).toEqual([["codex", "added"]]);
+  expect(readFileSync(unselected, "utf8")).toBe("not a directory");
+});
+
+test.each(
+  [[], [""], ["unknown"], ["codex", "unknown"], ["codex", "codex"], Array<string>(1)].map(
+    (clients) => ({ clients }),
+  ),
+)("rejects invalid client selection before discovering any destination: %j", ({ clients }) => {
+  const { home } = fixture();
+  write(home, ".config", "not a directory");
+  mkdirSync(join(home, ".codex"));
+  expect(() => configureSwarmailMcp(home, { clients })).toThrow("client selection");
+  expect(existsSync(join(home, ".codex/config.toml"))).toBe(false);
+});
+
+test.each([
+  ['url = "' + managedUrl + '"\nenabled = false', "preserved-disabled"],
+  ['command = "custom"', "preserved-existing"],
+  [
+    'url = "' +
+      managedUrl +
+      '"\nstartup_timeout_sec = 30\n[mcp_servers.swarmail.env]\nKEEP = "yes"',
+    "preserved-existing",
+  ],
+])("preserves an existing selected Codex Hub entry verbatim: %s", (entry, status) => {
+  const { home } = fixture();
+  const contents = "# keep comment\n[mcp_servers.swarmail]\n" + entry + "\n";
+  const path = write(home, ".codex_hub/config.toml", contents);
+  expect(configureSwarmailMcp(home, { clients: ["codex-hub"] })[0]!.status).toBe(status);
+  expect(readFileSync(path, "utf8")).toBe(contents);
+  expect(readdirSync(dirname(path))).toEqual(["config.toml"]);
+});
+
+test("the CLI accepts repeated --client and rejects missing or unknown names before discovery", () => {
+  const { home } = fixture();
+  mkdirSync(join(home, ".codex"));
+  mkdirSync(join(home, ".codex_hub"));
+  write(home, ".config", "not a directory");
+  const script = Bun.fileURLToPath(new URL("../scripts/configure-mcp.ts", import.meta.url));
+  const run = (args: string[]) =>
+    Bun.spawnSync([process.execPath, script, "--home", home, ...args]);
+  for (const args of [
+    ["--client"],
+    ["--client", ""],
+    ["--client", "unknown"],
+    ["--client", "codex", "--client", "codex"],
+    ["--client", "--dry-run"],
+  ]) {
+    const result = run(args);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr.toString()).toContain("client");
+    expect(result.stderr.toString()).not.toContain("ENOTDIR");
+  }
+  const args = ["--client", "codex", "--client", "codex-hub"];
+  const preview = run([...args, "--dry-run"]);
+  expect(preview.exitCode).toBe(0);
+  expect(JSON.parse(preview.stdout.toString()).map((r: { status: string }) => r.status)).toEqual([
+    "would-add",
+    "would-add",
+  ]);
+  expect(existsSync(join(home, ".codex/config.toml"))).toBe(false);
+  const result = run(args);
+  expect(result.exitCode).toBe(0);
+  expect(JSON.parse(result.stdout.toString()).map((r: { client: string }) => r.client)).toEqual([
+    "codex",
+    "codex-hub",
+  ]);
 });
