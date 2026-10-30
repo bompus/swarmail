@@ -1,5 +1,6 @@
 // Authoritative app lifecycle is independent of activity and manual retirement.
 import { Database } from "bun:sqlite";
+import { statSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { noticeOwners } from "./wake-notices.ts";
 
@@ -153,10 +154,42 @@ function readSnapshot(
   }
 }
 
+/**
+ * A cheap, writer-independent change check: size, mtime, ctime and inode of the source database
+ * and its WAL. Any SQLite writer changes at least one of them on a commit; a missing file, a
+ * permission error or any other stat failure returns null, which forces the full read.
+ */
+type FileFingerprint = { value: string } | { missing: true } | null;
+
+function fileFingerprint(path: string): FileFingerprint {
+  try {
+    const stat = statSync(path, { bigint: true });
+    return { value: `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}` };
+  } catch (error) {
+    // A missing WAL is normal; any other stat failure forces the full read.
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? { missing: true } : null;
+  }
+}
+
+function sourceFingerprint(databasePath: string): string | null {
+  const database = fileFingerprint(databasePath);
+  if (database === null || "missing" in database) {
+    return null;
+  }
+  const wal = fileFingerprint(`${databasePath}-wal`);
+  if (wal === null) {
+    return null;
+  }
+  return `${database.value}|${"missing" in wal ? "none" : wal.value}`;
+}
+
 /** One configured local T3 V2 profile, shared by tools and wake boundaries. No timers or provider inference. */
 export class Lifecycle {
   private readonly db: Database;
   private readonly config: LifecycleConfig;
+  /** Fingerprint and agent thread set of the last successful read; null disables the skip. */
+  private fingerprint: string | null = null;
+  private fingerprintThreads = "";
   constructor(db: Database, config: LifecycleConfig) {
     this.db = db;
     this.config = config;
@@ -216,6 +249,17 @@ export class Lifecycle {
             )
             .all(this.config.profile)
             .map((row) => row.t3_thread);
+          // Read the fingerprint before the source, so a commit during the read is seen next time.
+          const fingerprint = sourceFingerprint(this.config.databasePath);
+          const threadsKey = JSON.stringify([...threads].sort());
+          if (
+            prior &&
+            this.fingerprint !== null &&
+            fingerprint === this.fingerprint &&
+            threadsKey === this.fingerprintThreads
+          ) {
+            return { status: "ready", changed: 0 };
+          }
           const verified = new Set(
             this.db
               .query<{ thread_id: string }, [string]>(
@@ -261,11 +305,15 @@ export class Lifecycle {
                 snapshot.eventId,
               );
           }
+          this.fingerprint = fingerprint;
+          this.fingerprintThreads = threadsKey;
           return { status: "ready", changed };
         })
         .immediate();
     } catch {
       // No source contents, paths or partial observations escape this boundary.
+      this.fingerprint = null;
+      this.fingerprintThreads = "";
       return { status: "unavailable", changed: 0 };
     }
   }
