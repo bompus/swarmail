@@ -93,12 +93,15 @@ an older result with the version it was measured on.
    `bun run check:published`. It stores no npm token: npm trusted publishing
    and the MCP registry's GitHub login both use the run's OpenID Connect
    identity.
-3. Watch the run. If it fails after a channel published, do not re-run the
-   whole workflow: npm refuses a version it already has. Publish what is
-   missing by hand from the tagged commit: `npm publish` in
-   `packages/mcp-relay/` (npm shows no provenance for a publish outside
-   Actions), `mcp-publisher login github` then `mcp-publisher publish` in the
-   repository root, and `gh release create`.
+3. Watch the run. If it stops part way, fix the cause on `main`, then run the
+   workflow again for the same tag: on GitHub, Actions, Release, Run workflow,
+   branch `main`, tag `vX.Y.Z`. Do not use "Re-run failed jobs": that runs the
+   workflow file from the tag's commit, which has none of the fix. The new run
+   skips an npm version npm already has and waits about 5 minutes for npm to
+   show it before the registry step. The MCP registry and GitHub refuse a
+   version they already have, so a run that stopped after one of them
+   published finishes the rest by hand: `mcp-publisher login github` then
+   `mcp-publisher publish` in the repository root, and `gh release create`.
 4. The workflow's last step is `bun run check:published`. It asks GitHub, npm
    and the MCP registry which version each shows as latest and exits 1 unless
    all three show `X.Y.Z`. Until it exits 0 the release is incomplete, whatever
