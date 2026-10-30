@@ -29,6 +29,13 @@ import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.ts";
 import { parseTag, sessionTag } from "../src/tag.ts";
 import { createServer } from "../src/server.ts";
 
+/**
+ * The stand-in servers below answer only JSON-RPC posts. Another process on this host probes new loopback listeners with
+ * `GET /`; parsing that as JSON throws, and the throw fails whichever test owns the server.
+ */
+const strayRequest = (req: Request) =>
+  req.method === "POST" ? null : new Response(null, { status: 404 });
+
 /** A port nothing listens on yet, for a server that starts later in the test. */
 function freePort() {
   const probe = Bun.serve({ port: 0, fetch: () => new Response() });
@@ -44,6 +51,10 @@ function fakeMail(handler: (name: string, args: any) => unknown) {
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       const msg = (await req.json()) as any;
       calls.push(msg.params);
       const value = await handler(msg.params.name, msg.params.arguments);
@@ -56,6 +67,17 @@ function fakeMail(handler: (name: string, args: any) => unknown) {
   });
   return { url: `http://127.0.0.1:${server.port}/mcp/`, calls, stop: () => server.stop(true) };
 }
+
+test("a stand-in mail server answers a stray GET without recording a call", async () => {
+  const mail = fakeMail(() => ({}));
+  try {
+    const stray = await fetch(new URL("/", mail.url));
+    expect(stray.status).toBe(404);
+    expect(mail.calls).toHaveLength(0);
+  } finally {
+    await mail.stop();
+  }
+});
 
 test("resolves a worktree to its primary checkout and skips bare or missing repositories", () => {
   const root = tmpdir();
@@ -152,6 +174,10 @@ test("the notice names a different project name on a first registration, not on 
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       const msg = (await req.json()) as any;
       const { name, arguments: args } = msg.params;
       const reply = (result: unknown) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
@@ -716,6 +742,10 @@ test("a registration the server refuses says so instead of blaming an unanswered
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       const msg = (await req.json()) as any;
       const reply = (result: unknown) => Response.json({ jsonrpc: "2.0", id: msg.id, result });
       if (msg.params.name === "list_agents") {
@@ -753,6 +783,10 @@ test("the hook registers under a fresh name when the server refuses the session'
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       const msg = (await req.json()) as any;
       const { name, arguments: args } = msg.params;
       calls.push([name, args.name]);
@@ -801,6 +835,10 @@ test("the hook does not take a name another session holds in the project", async
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       const msg = (await req.json()) as any;
       const { name, arguments: args } = msg.params;
       calls.push([name, args.name]);
@@ -1397,6 +1435,10 @@ test("SessionEnd tells the server the session ended, for a roster read from anot
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       calls.push(((await req.json()) as any).params);
       return Response.json({
         jsonrpc: "2.0",
