@@ -343,6 +343,23 @@ test("a WAL change is read again", () => {
   expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
 });
 
+test.skipIf(process.platform !== "linux" || process.getuid?.() === 0)(
+  "revoking WAL read permission invalidates the gate",
+  () => {
+    const f = fixture();
+    f.source.run("PRAGMA journal_mode=WAL");
+    f.transition(2, "settled");
+    expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+    const wal = `${f.config.databasePath}-wal`;
+    chmodSync(wal, 0o000);
+    try {
+      expect(f.lifecycle.reconcile()).toEqual({ status: "unavailable", changed: 0 });
+    } finally {
+      chmodSync(wal, 0o600);
+    }
+  },
+);
+
 test.skipIf(process.platform === "win32")("a missing source fails closed", () => {
   const f = fixture();
   f.transition(2, "settled");

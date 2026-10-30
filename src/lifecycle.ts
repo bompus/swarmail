@@ -154,6 +154,24 @@ function readSnapshot(
   }
 }
 
+type SidecarFingerprint = { value: string } | { missing: true } | null;
+
+/**
+ * Identity and access state of one source file: device, inode, mode and owner, plus the database's
+ * size and ctime when wanted. The WAL's content timestamps are left out because a commit changes
+ * them legitimately; `data_version` reports the commit. A missing file is reported separately; any
+ * other stat failure returns null and forces the full read.
+ */
+function sidecarFingerprint(path: string, content: boolean): SidecarFingerprint {
+  try {
+    const stat = statSync(path, { bigint: true });
+    const identity = `${stat.dev}:${stat.ino}:${stat.mode}:${stat.uid}:${stat.gid}`;
+    return { value: content ? `${identity}:${stat.size}:${stat.ctimeNs}` : identity };
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? { missing: true } : null;
+  }
+}
+
 /** One configured local T3 V2 profile, shared by tools and wake boundaries. No timers or provider inference. */
 export class Lifecycle {
   private readonly db: Database;
@@ -184,8 +202,10 @@ export class Lifecycle {
 
   /**
    * `PRAGMA data_version` changes when another connection commits, which is the engine's commit
-   * point. The inode and ctime check reopens the connection when the database is replaced. A dead
-   * connection, a stat or query error, or any other failure returns null and forces the full read.
+   * point. The database and its WAL sidecar are both fingerprinted, including their access modes,
+   * so a replacement or permission change on either reopens the connection and forces the full
+   * read. A missing WAL is normal; a dead connection, a stat or query error, or any other failure
+   * returns null and forces the full read.
    */
   private gateCheck(
     threads: string[],
@@ -194,8 +214,15 @@ export class Lifecycle {
       return null;
     }
     try {
-      const stat = statSync(this.config.databasePath, { bigint: true });
-      const identity = `${stat.dev}:${stat.ino}:${stat.ctimeNs}`;
+      const database = sidecarFingerprint(this.config.databasePath, true);
+      if (database === null || "missing" in database) {
+        return null;
+      }
+      const wal = sidecarFingerprint(`${this.config.databasePath}-wal`, false);
+      if (wal === null) {
+        return null;
+      }
+      const identity = `${database.value}|${"missing" in wal ? "none" : wal.value}`;
       if (!this.gate || this.gateIdentity !== identity) {
         this.gate?.close();
         this.gate = new Database(this.config.databasePath, { readonly: true, strict: true });
