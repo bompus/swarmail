@@ -1,5 +1,6 @@
 // Authoritative app lifecycle is independent of activity and manual retirement.
 import { Database } from "bun:sqlite";
+import { statSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { noticeOwners } from "./wake-notices.ts";
 
@@ -157,6 +158,17 @@ function readSnapshot(
 export class Lifecycle {
   private readonly db: Database;
   private readonly config: LifecycleConfig;
+  /**
+   * The engine-level commit check needs a persistent read-only connection. It is Linux-only: the
+   * handle behaviour on Windows is untested, so Windows and every other platform keep the full read.
+   */
+  private readonly gateEnabled = process.platform === "linux";
+  private gate?: Database;
+  private gateVersion: number | null = null;
+  private gateIdentity = "";
+  private gateThreads = "";
+  /** Successful source reads; tests use it to prove a skip did not read. */
+  private reads = 0;
   constructor(db: Database, config: LifecycleConfig) {
     this.db = db;
     this.config = config;
@@ -170,7 +182,50 @@ export class Lifecycle {
     }
   }
 
+  /**
+   * `PRAGMA data_version` changes when another connection commits, which is the engine's commit
+   * point. The inode and ctime check reopens the connection when the database is replaced. A dead
+   * connection, a stat or query error, or any other failure returns null and forces the full read.
+   */
+  private gateCheck(
+    threads: string[],
+  ): { skip: boolean; version: number | null; threads: string } | null {
+    if (!this.gateEnabled) {
+      return null;
+    }
+    try {
+      const stat = statSync(this.config.databasePath, { bigint: true });
+      const identity = `${stat.dev}:${stat.ino}:${stat.ctimeNs}`;
+      if (!this.gate || this.gateIdentity !== identity) {
+        this.gate?.close();
+        this.gate = new Database(this.config.databasePath, { readonly: true, strict: true });
+        this.gate.run("PRAGMA busy_timeout = 1000");
+        this.gateIdentity = identity;
+        this.gateVersion = null;
+        this.gateThreads = "";
+      }
+      const version = (this.gate.query("PRAGMA data_version").get() as { data_version: number })
+        .data_version;
+      const key = JSON.stringify([...threads].sort());
+      return {
+        skip: this.gateVersion === version && this.gateThreads === key,
+        version,
+        threads: key,
+      };
+    } catch {
+      this.gate?.close();
+      this.gate = undefined;
+      this.gateVersion = null;
+      this.gateThreads = "";
+      return null;
+    }
+  }
+
   reconcile(): Reconciliation {
+    // A tool wraps its work in an outer transaction. A skip inside one is safe: it writes nothing
+    // and reuses the last version recorded by a committed reconcile. A full read inside one must
+    // not record a new version, because the outer transaction can roll back the rows.
+    const cacheable = !this.db.inTransaction;
     // Bind before source access: unverified initial identities must never become deliverable.
     this.db
       .query(
@@ -216,6 +271,10 @@ export class Lifecycle {
             )
             .all(this.config.profile)
             .map((row) => row.t3_thread);
+          const gate = this.gateCheck(threads);
+          if (prior && gate?.skip) {
+            return { status: "ready", changed: 0 };
+          }
           const verified = new Set(
             this.db
               .query<{ thread_id: string }, [string]>(
@@ -225,6 +284,7 @@ export class Lifecycle {
               .map((row) => row.thread_id),
           );
           const snapshot = readSnapshot(this.config, prior, threads, verified);
+          this.reads += 1;
           let changed = 0;
           const get = this.db.query<{ state: State; revision: number }, [string, string]>(
             "SELECT state, revision FROM session_lifecycle WHERE profile = ? AND thread_id = ?",
@@ -261,11 +321,17 @@ export class Lifecycle {
                 snapshot.eventId,
               );
           }
+          if (cacheable && gate && gate.version !== null) {
+            this.gateVersion = gate.version;
+            this.gateThreads = gate.threads;
+          }
           return { status: "ready", changed };
         })
         .immediate();
     } catch {
       // No source contents, paths or partial observations escape this boundary.
+      this.gateVersion = null;
+      this.gateThreads = "";
       return { status: "unavailable", changed: 0 };
     }
   }
