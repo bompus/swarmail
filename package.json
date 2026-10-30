@@ -1,6 +1,6 @@
 {
   "name": "swarmail",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "private": true,
   "description": "Mail, roster and file reservations for coding-agent sessions, on one machine or across machines, served over MCP.",
   "license": "MIT",
