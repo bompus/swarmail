@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import { chmodSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { openDatabase } from "../src/db.ts";
 import { Lifecycle, sessionEligible, type LifecycleConfig } from "../src/lifecycle.ts";
@@ -297,6 +298,227 @@ test.each([
   expect(f.lifecycle.reconcile()).toEqual({ status: "unavailable", changed: 0 });
   expect(f.db.query("SELECT * FROM lifecycle_sources").get()).toEqual(cursor);
   expect(f.roster()).not.toContain("GreenCastle");
+});
+
+test.skipIf(process.platform !== "linux")(
+  "an unchanged source skips the read and keeps the last result",
+  () => {
+    const f = fixture();
+    f.lifecycle.reconcile();
+    const reads = (f.lifecycle as unknown as { reads: number }).reads;
+    expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 0 });
+    expect((f.lifecycle as unknown as { reads: number }).reads).toBe(reads);
+    f.transition(2, "settled");
+    expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+    expect((f.lifecycle as unknown as { reads: number }).reads).toBe(reads + 1);
+  },
+);
+
+test.skipIf(process.platform !== "linux")(
+  "a skip inside an outer transaction reuses the committed version",
+  () => {
+    const f = fixture();
+    f.lifecycle.reconcile();
+    const reads = (f.lifecycle as unknown as { reads: number }).reads;
+    f.db.transaction(() => {
+      expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 0 });
+    })();
+    expect((f.lifecycle as unknown as { reads: number }).reads).toBe(reads);
+  },
+);
+
+test("a changed source is read again", () => {
+  const f = fixture();
+  f.lifecycle.reconcile();
+  f.transition(2, "settled");
+  expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+  expect(f.roster()).toEqual(["BlueLake"]);
+});
+
+test("a WAL change is read again", () => {
+  const f = fixture();
+  f.source.run("PRAGMA journal_mode=WAL");
+  f.lifecycle.reconcile();
+  f.transition(2, "settled");
+  expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+});
+
+test.skipIf(process.platform !== "linux" || process.getuid?.() === 0)(
+  "revoking WAL read permission invalidates the gate",
+  () => {
+    const f = fixture();
+    f.source.run("PRAGMA journal_mode=WAL");
+    f.transition(2, "settled");
+    expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+    const wal = `${f.config.databasePath}-wal`;
+    chmodSync(wal, 0o000);
+    try {
+      expect(f.lifecycle.reconcile()).toEqual({ status: "unavailable", changed: 0 });
+    } finally {
+      chmodSync(wal, 0o600);
+    }
+  },
+);
+
+test.skipIf(process.platform !== "linux" || process.getuid?.() === 0)(
+  "a symlinked database fingerprints the target's WAL",
+  () => {
+    const f = fixture();
+    const target = `${f.prefix}-target.sqlite`;
+    f.source.close();
+    renameSync(f.config.databasePath, target);
+    symlinkSync(target, f.config.databasePath);
+    const source = new Database(target, { create: false });
+    source.run("PRAGMA journal_mode=WAL");
+    source.transaction(() => {
+      source.run("INSERT OR REPLACE INTO orchestration_events VALUES (2,'event-2')");
+      source.run("UPDATE orchestration_v2_projection_metadata SET last_sequence=2");
+      source
+        .query(
+          "UPDATE orchestration_v2_projection_threads SET payload_json=? WHERE thread_id='thread-one'",
+        )
+        .run(JSON.stringify({ settledAt: "2026-10-06T00:00:00Z", settledOverride: null }));
+    })();
+    expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+    const wal = `${target}-wal`;
+    chmodSync(wal, 0o000);
+    try {
+      expect(f.lifecycle.reconcile()).toEqual({ status: "unavailable", changed: 0 });
+    } finally {
+      chmodSync(wal, 0o600);
+      source.close();
+    }
+  },
+);
+
+test.skipIf(process.platform !== "linux" || process.getuid?.() === 0)(
+  "revoking shared-memory read permission invalidates the gate",
+  async () => {
+    const f = fixture();
+    f.source.run("PRAGMA journal_mode=WAL");
+    f.transition(2, "settled");
+    // An external connection keeps the WAL and shared-memory files open without giving this
+    // process a mapping the fresh read could reuse.
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `import { Database } from "bun:sqlite";
+         const db = new Database(process.argv[1]);
+         console.log("ready");
+         await new Promise((resolve) => {
+           process.stdin.resume();
+           process.stdin.once("end", resolve);
+         });
+         db.close();`,
+        f.config.databasePath,
+      ],
+      { stdin: "pipe", stdout: "pipe", stderr: "inherit" },
+    );
+    const reader = child.stdout.getReader();
+    let output = "";
+    while (!output.includes("ready")) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+      output += new TextDecoder().decode(value);
+    }
+    expect(output).toContain("ready");
+    f.source.close();
+    expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+    const shm = `${f.config.databasePath}-shm`;
+    chmodSync(shm, 0o000);
+    try {
+      expect(f.lifecycle.reconcile()).toEqual({ status: "unavailable", changed: 0 });
+    } finally {
+      chmodSync(shm, 0o600);
+      await child.stdin.end();
+      await child.exited;
+    }
+  },
+);
+
+test.skipIf(process.platform === "win32")("a missing source fails closed", () => {
+  const f = fixture();
+  f.transition(2, "settled");
+  expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+  rmSync(f.config.databasePath);
+  expect(f.lifecycle.reconcile()).toEqual({ status: "unavailable", changed: 0 });
+});
+
+test.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+  "a permission error fails closed",
+  () => {
+    const f = fixture();
+    f.transition(2, "settled");
+    expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+    chmodSync(f.config.databasePath, 0o000);
+    try {
+      expect(f.lifecycle.reconcile()).toEqual({ status: "unavailable", changed: 0 });
+    } finally {
+      chmodSync(f.config.databasePath, 0o600);
+    }
+  },
+);
+
+test.skipIf(process.platform === "win32")("a replaced source is read again", () => {
+  const f = fixture();
+  f.lifecycle.reconcile();
+  const replacement = `${f.prefix}-replacement.sqlite`;
+  const source = new Database(replacement, { create: true });
+  source.exec(`CREATE TABLE orchestration_v2_projection_metadata (projection_name TEXT PRIMARY KEY, schema_version INTEGER, last_sequence INTEGER);
+    INSERT INTO orchestration_v2_projection_metadata VALUES ('thread-projections',2,2);
+    CREATE TABLE orchestration_events (sequence INTEGER PRIMARY KEY,event_id TEXT UNIQUE);
+    INSERT INTO orchestration_events VALUES (1,'event-1');
+    INSERT INTO orchestration_events VALUES (2,'event-2');
+    CREATE TABLE orchestration_v2_projection_threads (thread_id TEXT PRIMARY KEY,archived_at TEXT,deleted_at TEXT,payload_json TEXT);
+    INSERT INTO orchestration_v2_projection_threads VALUES ('thread-one',NULL,NULL,'{"settledAt":"2026-10-06T00:00:00Z","settledOverride":null}');`);
+  source.close();
+  renameSync(replacement, f.config.databasePath);
+  expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+  expect(f.roster()).toEqual(["BlueLake"]);
+});
+
+test("a rolled-back admission does not cache the source", () => {
+  const f = fixture();
+  f.lifecycle.reconcile();
+  f.transition(2, "settled");
+  expect(() => f.send()).toThrow("settled");
+  expect(() => f.send()).toThrow("settled");
+});
+
+test.skipIf(process.platform !== "linux")(
+  "a dead gate connection falls back to the full read",
+  () => {
+    const f = fixture();
+    f.source.run("PRAGMA journal_mode=WAL");
+    f.lifecycle.reconcile();
+    (f.lifecycle as unknown as { gate?: Database }).gate?.close();
+    f.transition(2, "settled");
+    expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+  },
+);
+
+test("the gate is off outside Linux and the full read still holds", () => {
+  const f = fixture();
+  const platform = process.platform;
+  Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+  let lifecycle: Lifecycle;
+  try {
+    lifecycle = new Lifecycle(f.db, f.config);
+  } finally {
+    Object.defineProperty(process, "platform", { value: platform, configurable: true });
+  }
+  expect((lifecycle as unknown as { gateEnabled: boolean }).gateEnabled).toBe(false);
+  lifecycle.reconcile();
+  expect((lifecycle as unknown as { gate?: Database }).gate).toBeUndefined();
+  f.source.run("BEGIN EXCLUSIVE");
+  try {
+    expect(lifecycle.reconcile()).toEqual({ status: "unavailable", changed: 0 });
+  } finally {
+    f.source.run("ROLLBACK");
+  }
 });
 
 test("a saved anchor deleted by T3 history compaction does not stop tracking", () => {

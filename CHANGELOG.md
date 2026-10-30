@@ -4,6 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- On Linux, a lifecycle check uses SQLite's `data_version` to skip an unchanged source read;
+  Windows keeps the full read.
 - The git guard accepts a session's own name only in a project that session registered in;
   a same-named holder in another project is no longer exempt.
 - A lifecycle check reads only the two thread fields it uses from T3 Code's database instead of

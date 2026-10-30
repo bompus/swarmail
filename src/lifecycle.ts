@@ -1,5 +1,6 @@
 // Authoritative app lifecycle is independent of activity and manual retirement.
 import { Database } from "bun:sqlite";
+import { realpathSync, statSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { noticeOwners } from "./wake-notices.ts";
 
@@ -153,10 +154,39 @@ function readSnapshot(
   }
 }
 
+type SidecarFingerprint = { value: string } | { missing: true } | null;
+
+/**
+ * Identity and access state of one source file: device, inode, mode and owner, plus the database's
+ * size and ctime when wanted. The WAL's content timestamps are left out because a commit changes
+ * them legitimately; `data_version` reports the commit. A missing file is reported separately; any
+ * other stat failure returns null and forces the full read.
+ */
+function sidecarFingerprint(path: string, content: boolean): SidecarFingerprint {
+  try {
+    const stat = statSync(path, { bigint: true });
+    const identity = `${stat.dev}:${stat.ino}:${stat.mode}:${stat.uid}:${stat.gid}`;
+    return { value: content ? `${identity}:${stat.size}:${stat.ctimeNs}` : identity };
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ENOENT" ? { missing: true } : null;
+  }
+}
+
 /** One configured local T3 V2 profile, shared by tools and wake boundaries. No timers or provider inference. */
 export class Lifecycle {
   private readonly db: Database;
   private readonly config: LifecycleConfig;
+  /**
+   * The engine-level commit check needs a persistent read-only connection. It is Linux-only: the
+   * handle behaviour on Windows is untested, so Windows and every other platform keep the full read.
+   */
+  private readonly gateEnabled = process.platform === "linux";
+  private gate?: Database;
+  private gateVersion: number | null = null;
+  private gateIdentity = "";
+  private gateThreads = "";
+  /** Successful source reads; tests use it to prove a skip did not read. */
+  private reads = 0;
   constructor(db: Database, config: LifecycleConfig) {
     this.db = db;
     this.config = config;
@@ -170,7 +200,61 @@ export class Lifecycle {
     }
   }
 
+  /**
+   * `PRAGMA data_version` changes when another connection commits, which is the engine's commit
+   * point. The database and its WAL sidecar are both fingerprinted, including their access modes,
+   * so a replacement or permission change on either reopens the connection and forces the full
+   * read. A missing WAL is normal; a dead connection, a stat or query error, or any other failure
+   * returns null and forces the full read.
+   */
+  private gateCheck(
+    threads: string[],
+  ): { skip: boolean; version: number | null; threads: string } | null {
+    if (!this.gateEnabled) {
+      return null;
+    }
+    try {
+      const databasePath = realpathSync(this.config.databasePath);
+      const database = sidecarFingerprint(databasePath, true);
+      if (database === null || "missing" in database) {
+        return null;
+      }
+      const wal = sidecarFingerprint(`${databasePath}-wal`, false);
+      const shm = sidecarFingerprint(`${databasePath}-shm`, false);
+      if (wal === null || shm === null) {
+        return null;
+      }
+      const identity = `${database.value}|${"missing" in wal ? "none" : wal.value}|${"missing" in shm ? "none" : shm.value}`;
+      if (!this.gate || this.gateIdentity !== identity) {
+        this.gate?.close();
+        this.gate = new Database(databasePath, { readonly: true, strict: true });
+        this.gate.run("PRAGMA busy_timeout = 1000");
+        this.gateIdentity = identity;
+        this.gateVersion = null;
+        this.gateThreads = "";
+      }
+      const version = (this.gate.query("PRAGMA data_version").get() as { data_version: number })
+        .data_version;
+      const key = JSON.stringify([...threads].sort());
+      return {
+        skip: this.gateVersion === version && this.gateThreads === key,
+        version,
+        threads: key,
+      };
+    } catch {
+      this.gate?.close();
+      this.gate = undefined;
+      this.gateVersion = null;
+      this.gateThreads = "";
+      return null;
+    }
+  }
+
   reconcile(): Reconciliation {
+    // A tool wraps its work in an outer transaction. A skip inside one is safe: it writes nothing
+    // and reuses the last version recorded by a committed reconcile. A full read inside one must
+    // not record a new version, because the outer transaction can roll back the rows.
+    const cacheable = !this.db.inTransaction;
     // Bind before source access: unverified initial identities must never become deliverable.
     this.db
       .query(
@@ -216,6 +300,10 @@ export class Lifecycle {
             )
             .all(this.config.profile)
             .map((row) => row.t3_thread);
+          const gate = this.gateCheck(threads);
+          if (prior && gate?.skip) {
+            return { status: "ready", changed: 0 };
+          }
           const verified = new Set(
             this.db
               .query<{ thread_id: string }, [string]>(
@@ -225,6 +313,7 @@ export class Lifecycle {
               .map((row) => row.thread_id),
           );
           const snapshot = readSnapshot(this.config, prior, threads, verified);
+          this.reads += 1;
           let changed = 0;
           const get = this.db.query<{ state: State; revision: number }, [string, string]>(
             "SELECT state, revision FROM session_lifecycle WHERE profile = ? AND thread_id = ?",
@@ -261,11 +350,17 @@ export class Lifecycle {
                 snapshot.eventId,
               );
           }
+          if (cacheable && gate && gate.version !== null) {
+            this.gateVersion = gate.version;
+            this.gateThreads = gate.threads;
+          }
           return { status: "ready", changed };
         })
         .immediate();
     } catch {
       // No source contents, paths or partial observations escape this boundary.
+      this.gateVersion = null;
+      this.gateThreads = "";
       return { status: "unavailable", changed: 0 };
     }
   }
