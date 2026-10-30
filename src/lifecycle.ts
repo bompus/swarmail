@@ -1,6 +1,6 @@
 // Authoritative app lifecycle is independent of activity and manual retirement.
 import { Database } from "bun:sqlite";
-import { statSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { noticeOwners } from "./wake-notices.ts";
 
@@ -214,18 +214,20 @@ export class Lifecycle {
       return null;
     }
     try {
-      const database = sidecarFingerprint(this.config.databasePath, true);
+      const databasePath = realpathSync(this.config.databasePath);
+      const database = sidecarFingerprint(databasePath, true);
       if (database === null || "missing" in database) {
         return null;
       }
-      const wal = sidecarFingerprint(`${this.config.databasePath}-wal`, false);
-      if (wal === null) {
+      const wal = sidecarFingerprint(`${databasePath}-wal`, false);
+      const shm = sidecarFingerprint(`${databasePath}-shm`, false);
+      if (wal === null || shm === null) {
         return null;
       }
-      const identity = `${database.value}|${"missing" in wal ? "none" : wal.value}`;
+      const identity = `${database.value}|${"missing" in wal ? "none" : wal.value}|${"missing" in shm ? "none" : shm.value}`;
       if (!this.gate || this.gateIdentity !== identity) {
         this.gate?.close();
-        this.gate = new Database(this.config.databasePath, { readonly: true, strict: true });
+        this.gate = new Database(databasePath, { readonly: true, strict: true });
         this.gate.run("PRAGMA busy_timeout = 1000");
         this.gateIdentity = identity;
         this.gateVersion = null;

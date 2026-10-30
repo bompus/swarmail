@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { chmodSync, renameSync, rmSync } from "node:fs";
+import { chmodSync, renameSync, rmSync, symlinkSync } from "node:fs";
 import { join } from "node:path";
 import { openDatabase } from "../src/db.ts";
 import { Lifecycle, sessionEligible, type LifecycleConfig } from "../src/lifecycle.ts";
@@ -356,6 +356,85 @@ test.skipIf(process.platform !== "linux" || process.getuid?.() === 0)(
       expect(f.lifecycle.reconcile()).toEqual({ status: "unavailable", changed: 0 });
     } finally {
       chmodSync(wal, 0o600);
+    }
+  },
+);
+
+test.skipIf(process.platform !== "linux" || process.getuid?.() === 0)(
+  "a symlinked database fingerprints the target's WAL",
+  () => {
+    const f = fixture();
+    const target = `${f.prefix}-target.sqlite`;
+    f.source.close();
+    renameSync(f.config.databasePath, target);
+    symlinkSync(target, f.config.databasePath);
+    const source = new Database(target, { create: false });
+    source.run("PRAGMA journal_mode=WAL");
+    source.transaction(() => {
+      source.run("INSERT OR REPLACE INTO orchestration_events VALUES (2,'event-2')");
+      source.run("UPDATE orchestration_v2_projection_metadata SET last_sequence=2");
+      source
+        .query(
+          "UPDATE orchestration_v2_projection_threads SET payload_json=? WHERE thread_id='thread-one'",
+        )
+        .run(JSON.stringify({ settledAt: "2026-10-06T00:00:00Z", settledOverride: null }));
+    })();
+    expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+    const wal = `${target}-wal`;
+    chmodSync(wal, 0o000);
+    try {
+      expect(f.lifecycle.reconcile()).toEqual({ status: "unavailable", changed: 0 });
+    } finally {
+      chmodSync(wal, 0o600);
+      source.close();
+    }
+  },
+);
+
+test.skipIf(process.platform !== "linux" || process.getuid?.() === 0)(
+  "revoking shared-memory read permission invalidates the gate",
+  async () => {
+    const f = fixture();
+    f.source.run("PRAGMA journal_mode=WAL");
+    f.transition(2, "settled");
+    // An external connection keeps the WAL and shared-memory files open without giving this
+    // process a mapping the fresh read could reuse.
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        "-e",
+        `import { Database } from "bun:sqlite";
+         const db = new Database(process.argv[1]);
+         console.log("ready");
+         await new Promise((resolve) => {
+           process.stdin.resume();
+           process.stdin.once("end", resolve);
+         });
+         db.close();`,
+        f.config.databasePath,
+      ],
+      { stdin: "pipe", stdout: "pipe", stderr: "inherit" },
+    );
+    const reader = child.stdout.getReader();
+    let output = "";
+    while (!output.includes("ready")) {
+      const { value, done } = await reader.read();
+      if (done) {
+        break;
+      }
+      output += new TextDecoder().decode(value);
+    }
+    expect(output).toContain("ready");
+    f.source.close();
+    expect(f.lifecycle.reconcile()).toEqual({ status: "ready", changed: 1 });
+    const shm = `${f.config.databasePath}-shm`;
+    chmodSync(shm, 0o000);
+    try {
+      expect(f.lifecycle.reconcile()).toEqual({ status: "unavailable", changed: 0 });
+    } finally {
+      chmodSync(shm, 0o600);
+      await child.stdin.end();
+      await child.exited;
     }
   },
 );
