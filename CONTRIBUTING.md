@@ -82,19 +82,29 @@ an older result with the version it was measured on.
    `packages/mcp-relay/package.json` and both version fields in `server.json`
    to the same `X.Y.Z`. Rename the `Unreleased` heading in `CHANGELOG.md`
    to `X.Y.Z - YYYY-MM-DD`. `bun run check` rejects version drift.
-2. After it merges, tag the squash commit `vX.Y.Z`, push the tag, and publish
-   a GitHub release from it, marked latest, with that changelog section as its
-   notes.
-3. Publish the matching npm package
-   [`swarmail-mcp`](https://www.npmjs.com/package/swarmail-mcp) and MCP registry
-   metadata for each release. Run
-   `npm publish` in `packages/mcp-relay/` and `mcp-publisher publish` in the
-   repository root.
-4. Run `bun run check:published`. It asks GitHub, npm and the MCP registry
-   which version each shows as latest and exits 1 unless all three show
-   `X.Y.Z`. Until it exits 0 the release is incomplete, whatever is already on
-   GitHub: say so, and do not announce it. The script cannot read Glama or the
-   other listings; steps 5 and 6 cover them.
+2. After it merges, tag the squash commit `vX.Y.Z` and push the tag. The
+   [Release workflow](.github/workflows/release.yml) takes it from there. It
+   stops unless the tag matches the version in `package.json` and its commit is
+   on `main`, and runs `bun run check` and `bun test`. It then
+   publishes the npm package
+   [`swarmail-mcp`](https://www.npmjs.com/package/swarmail-mcp) with
+   provenance, publishes the MCP registry metadata, publishes a GitHub release
+   marked latest with the `CHANGELOG.md` section as its notes, and runs
+   `bun run check:published`. It stores no npm token: npm trusted publishing
+   and the MCP registry's GitHub login both use the run's OpenID Connect
+   identity.
+3. Watch the run. If it fails after a channel published, do not re-run the
+   whole workflow: npm refuses a version it already has. Publish what is
+   missing by hand from the tagged commit: `npm publish` in
+   `packages/mcp-relay/` (npm shows no provenance for a publish outside
+   Actions), `mcp-publisher login github` then `mcp-publisher publish` in the
+   repository root, and `gh release create`.
+4. The workflow's last step is `bun run check:published`. It asks GitHub, npm
+   and the MCP registry which version each shows as latest and exits 1 unless
+   all three show `X.Y.Z`. Until it exits 0 the release is incomplete, whatever
+   is already on GitHub: say so, and do not announce it. Run it yourself after
+   publishing by hand. The script cannot read Glama or the other listings;
+   steps 5 and 6 cover them.
 5. Check that Glama's admin Releases page lists `X.Y.Z`. With Auto-Release
    enabled, Glama builds and publishes it after the GitHub release. Its public
    listing and scores can update later. If Auto-Release is off, use the
@@ -107,6 +117,16 @@ an older result with the version it was measured on.
 6. Check every accepted listing in the next section. Update by hand any that
    still shows an older version or outdated details.
 
+The npm package must list the Release workflow as its trusted publisher, or the
+workflow's `npm publish` fails: on npmjs.com, open `swarmail-mcp`, Settings,
+Trusted Publisher, GitHub Actions, and enter owner `bompus`, repository
+`swarmail`, workflow filename `release.yml` and no environment. Under allowed
+actions, enable direct `npm publish`; a new configuration allows only
+`npm stage publish` until you do. A new configuration expires unless its first
+publish succeeds within two days, so create it just before the first tag, or
+delete and recreate it if it expired. This is a one-time setting on the npm
+account, so a pull request cannot make it.
+
 ## Listings
 
 Swarmail is listed in these places. When you list it somewhere new, add it
@@ -115,11 +135,11 @@ a listing not yet submitted, or pending until it is accepted. `bun run check`
 fails until every folder in `packages/` is named in this section.
 
 - [npm `swarmail-mcp`](https://www.npmjs.com/package/swarmail-mcp): details
-  come from `packages/mcp-relay/package.json` and its README. `npm publish`
-  updates it (step 3).
+  come from `packages/mcp-relay/package.json` and its README. The Release
+  workflow's `npm publish` updates it (step 2).
 - [MCP Registry `io.github.bompus/swarmail`](https://registry.modelcontextprotocol.io/v0.1/servers/io.github.bompus%2Fswarmail/versions/latest):
-  details come from `server.json`. `mcp-publisher publish` updates it
-  (step 3).
+  details come from `server.json`. The Release workflow's `mcp-publisher publish`
+  updates it (step 2).
 - [Glama](https://glama.ai/mcp/servers/bompus/swarmail): details come from the
   GitHub repository and `glama.json`. Auto-Release builds each release
   (step 5). Edit the build spec and details on the admin page.
