@@ -26,15 +26,9 @@ import {
 import type { Register, RegisterState } from "../src/registry.ts";
 import { t3StatePath, t3ThreadId, t3Threads } from "../src/t3-state.ts";
 import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.ts";
+import { strayRequest } from "./fixtures/stray-request.ts";
 import { parseTag, sessionTag } from "../src/tag.ts";
 import { createServer } from "../src/server.ts";
-
-/**
- * The stand-in servers below answer only JSON-RPC posts. Another process on this host probes new loopback listeners with
- * `GET /`; parsing that as JSON throws, and the throw fails whichever test owns the server.
- */
-const strayRequest = (req: Request) =>
-  req.method === "POST" ? null : new Response(null, { status: 404 });
 
 /** A port nothing listens on yet, for a server that starts later in the test. */
 function freePort() {

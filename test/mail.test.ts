@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { createServer } from "../src/server.ts";
 import { mail } from "../src/mail.ts";
 import { unreadQueues } from "../src/who.ts";
+import { strayRequest } from "./fixtures/stray-request.ts";
 
 const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "swarmail-mail-")));
 const repo = join(dir, "repo");
@@ -318,6 +319,10 @@ test("human sender labels use snapshots or one roster lookup and leave JSON and 
   const fixture = Bun.serve({
     port: 0,
     async fetch(request) {
+      const stray = strayRequest(request);
+      if (stray) {
+        return stray;
+      }
       const { params } = (await request.json()) as { params: { name: string } };
       let value;
       if (params.name === "list_agents") {

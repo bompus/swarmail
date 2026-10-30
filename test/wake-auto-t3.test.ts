@@ -27,6 +27,7 @@ import {
 import type { RegisterState } from "../src/registry.ts";
 import { testScratch } from "./fixtures/test-scratch.ts";
 import { addT3V2Thread, createT3V2Tables } from "./fixtures/t3-v2-state.ts";
+import { strayRequest } from "./fixtures/stray-request.ts";
 
 /** Settles a test server's pending response; the barriers below hold these. */
 type Resolve = (response: Response) => void;
@@ -80,6 +81,10 @@ test("first read-only Codex tool registers a T3 mailbox, the next scan makes it 
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       const message = (await req.json()) as any;
       const value = message.params.name === "list_agents" ? [] : { name: "BlueLake" };
       return Response.json({
@@ -171,6 +176,10 @@ test("enrollment and selection read only running, active Codex and Cursor thread
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       const message = (await req.json()) as any;
       calls.push(message.params);
       const value = message.params.name === "list_agents" ? [] : { name: "BlueLake" };
@@ -250,6 +259,10 @@ test("automatic enrollment registers with a server on another machine under the 
     hostname: "127.0.0.2",
     port: 0,
     async fetch(req) {
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       const message = (await req.json()) as any;
       calls.push({ auth: req.headers.get("authorization"), ...message.params });
       const value = message.params.name === "list_agents" ? [] : { name: "BlueLake" };
@@ -358,6 +371,10 @@ test("runtime enrollment registers a fresh read-only T3 session without native h
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       const message = (await req.json()) as any;
       calls.push(message.params);
       const value = message.params.name === "list_agents" ? [] : { name: "BlueLake" };
@@ -415,6 +432,10 @@ test("enrollment skips a running T3 row last seen before the registration window
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       const message = (await req.json()) as any;
       calls.push(message.params);
       const value = message.params.name === "list_agents" ? [] : { name: "BlueLake" };
@@ -486,6 +507,10 @@ for (const mode of [
       hostname: "127.0.0.1",
       port: 0,
       async fetch(req) {
+        const stray = strayRequest(req);
+        if (stray) {
+          return stray;
+        }
         const msg = (await req.json()) as any;
         if (msg.params.name === "register_agent") {
           attempts++;
@@ -671,6 +696,10 @@ test("SessionEnd before the first enrollment lock prevents a stale runtime snaps
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       const msg = (await req.json()) as any;
       return Response.json({
         jsonrpc: "2.0",
@@ -1763,8 +1792,11 @@ test("scan orderings reconcile verified closure and recovery while the T3 backen
               releaseScan = resolve;
             });
       }
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       expect(url.pathname).toBe("/lifecycle/reconcile");
-      expect(req.method).toBe("POST");
       expect(await req.text()).toBe("");
       requests++;
       return fetch(new URL(url.pathname, `http://127.0.0.1:${core.server.port}`), {
