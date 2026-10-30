@@ -4,6 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- A lifecycle check reads only the two thread fields it uses from T3 Code's database instead of
+  parsing every thread's stored JSON, cutting its CPU by about a quarter in a copy-server measurement.
 - MCP configuration accepts repeated `--client NAME` selections and API `clients` lists.
   Select `codex-hub` for `.codex_hub/config.toml`; omitting selection keeps the seven default clients.
   Unselected clients are not inspected, and existing server entries retain custom fields and disabled settings.

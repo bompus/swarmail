@@ -22,17 +22,38 @@ export const lifecycleEligible = (alias: string) => `(${alias}.lifecycle_profile
     AND l.thread_id = ${alias}.lifecycle_thread AND l.state = 'active'
 ))`;
 
-function stateOf(row: { archived_at: unknown; deleted_at: unknown; payload_json: string }): State {
-  const payload = JSON.parse(row.payload_json);
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+/**
+ * A thread row as readSnapshot selects it. SQLite reads the two payload fields: parsing every thread's whole payload
+ * here cost more than the query. `*_type` is SQLite's JSON type name ("null", "text", ...), or NULL when the field is
+ * missing or the payload is not a JSON object. A field is a string only when its type is "text".
+ */
+type ThreadRow = {
+  thread_id: string;
+  archived_at: unknown;
+  deleted_at: unknown;
+  payload_type: string | null;
+  settled_at_type: string | null;
+  settled_at: unknown;
+  settled_override_type: string | null;
+  settled_override: unknown;
+};
+
+/** The field's value, or undefined when it is missing or neither null nor a string. */
+const fieldOf = (type: string | null, value: unknown) =>
+  type === "null" ? null : type === "text" ? value : undefined;
+
+function stateOf(row: ThreadRow): State {
+  if (row.payload_type !== "object") {
     throw new Error("invalid thread projection");
   }
-  for (const value of [row.archived_at, row.deleted_at, payload.settledAt]) {
+  const settledAt = fieldOf(row.settled_at_type, row.settled_at);
+  const settledOverride = fieldOf(row.settled_override_type, row.settled_override);
+  for (const value of [row.archived_at, row.deleted_at, settledAt]) {
     if (value !== null && (typeof value !== "string" || !Number.isFinite(Date.parse(value)))) {
       throw new Error("unknown thread lifecycle schema");
     }
   }
-  if (![null, "active", "settled"].includes(payload.settledOverride)) {
+  if (![null, "active", "settled"].includes(settledOverride as string | null)) {
     throw new Error("unknown settlement override");
   }
   if (row.deleted_at !== null) {
@@ -41,7 +62,7 @@ function stateOf(row: { archived_at: unknown; deleted_at: unknown; payload_json:
   if (row.archived_at !== null) {
     return "archived";
   }
-  return payload.settledOverride === "settled" || payload.settledAt !== null ? "settled" : "active";
+  return settledOverride === "settled" || settledAt !== null ? "settled" : "active";
 }
 
 /** Read lifecycle, projection watermark and continuity anchors in one source transaction. */
@@ -94,13 +115,22 @@ function readSnapshot(
         throw new Error("missing history anchor");
       }
       const states = new Map<string, State>();
+      // Text that is not valid JSON, or is not text, reads as no payload: its row is invalid, as JSON.parse would find it.
+      // A key repeated in one object resolves to its first value here, its last in JSON.parse; T3 never writes one.
       const rows = source
-        .query<
-          { thread_id: string; archived_at: unknown; deleted_at: unknown; payload_json: string },
-          [string]
-        >(
-          `SELECT thread_id, archived_at, deleted_at, payload_json FROM orchestration_v2_projection_threads
-         WHERE thread_id IN (SELECT value FROM json_each(?))`,
+        .query<ThreadRow, [string]>(
+          `SELECT thread_id, archived_at, deleted_at,
+            json_type(payload) AS payload_type,
+            json_type(payload, '$.settledAt') AS settled_at_type,
+            json_extract(payload, '$.settledAt') AS settled_at,
+            json_type(payload, '$.settledOverride') AS settled_override_type,
+            json_extract(payload, '$.settledOverride') AS settled_override
+          FROM (
+            SELECT thread_id, archived_at, deleted_at,
+              CASE WHEN typeof(payload_json) = 'text' AND json_valid(payload_json) THEN payload_json END AS payload
+            FROM orchestration_v2_projection_threads
+            WHERE thread_id IN (SELECT value FROM json_each(?))
+          )`,
         )
         .all(JSON.stringify(threads));
       for (const row of rows) {

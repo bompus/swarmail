@@ -780,3 +780,133 @@ test("mutation replay precedes sender lifecycle closure; fresh mutations fail an
   ).toBeNull();
   expect((f.db.query("SELECT count(*) AS n FROM message_mutations").get() as Row).n).toBe(1);
 });
+
+/** What T3's thread row means, as the code read it when it parsed the whole payload in JavaScript. */
+function parsedState(archivedAt: unknown, deletedAt: unknown, payloadJson: unknown): string | null {
+  try {
+    const payload = JSON.parse(payloadJson as string);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return null;
+    }
+    for (const value of [archivedAt, deletedAt, payload.settledAt]) {
+      if (value !== null && (typeof value !== "string" || !Number.isFinite(Date.parse(value)))) {
+        return null;
+      }
+    }
+    if (![null, "active", "settled"].includes(payload.settledOverride)) {
+      return null;
+    }
+    if (deletedAt !== null) {
+      return "deleted";
+    }
+    if (archivedAt !== null) {
+      return "archived";
+    }
+    return payload.settledOverride === "settled" || payload.settledAt !== null
+      ? "settled"
+      : "active";
+  } catch {
+    return null;
+  }
+}
+
+const THEN = "2026-10-06T00:00:00Z";
+const projections: [string, { archived?: string; deleted?: string; payload: unknown }][] = [
+  ["open", { payload: { settledAt: null, settledOverride: null } }],
+  ["settled by time", { payload: { settledAt: THEN, settledOverride: null } }],
+  ["settled by override", { payload: { settledAt: null, settledOverride: "settled" } }],
+  ["reopened override", { payload: { settledAt: THEN, settledOverride: "active" } }],
+  ["archived", { archived: THEN, payload: { settledAt: null, settledOverride: null } }],
+  ["deleted", { deleted: THEN, payload: { settledAt: null, settledOverride: null } }],
+  [
+    "deleted and archived",
+    { archived: THEN, deleted: THEN, payload: { settledAt: THEN, settledOverride: "settled" } },
+  ],
+  [
+    "unrelated fields",
+    {
+      payload: {
+        settledAt: null,
+        settledOverride: null,
+        title: "é\u0000😀",
+        nested: { settledAt: THEN },
+        list: [1, 2, 3],
+      },
+    },
+  ],
+  ["only a nested settledAt", { payload: { nested: { settledAt: null }, settledOverride: null } }],
+  ["escaped key name", { payload: '{"settled\\u0041t":null,"settledOverride":null}' }],
+  ["padded with whitespace", { payload: ' \n{"settledAt":null,"settledOverride":null}\t' }],
+  ["settledAt missing", { payload: { settledOverride: null } }],
+  ["settledOverride missing", { payload: { settledAt: null } }],
+  ["settledAt not a date", { payload: { settledAt: "soon", settledOverride: null } }],
+  ["settledAt a number", { payload: { settledAt: 1, settledOverride: null } }],
+  ["settledAt a boolean", { payload: { settledAt: true, settledOverride: null } }],
+  ["settledAt an object", { payload: { settledAt: {}, settledOverride: null } }],
+  ["settledAt too large for a number", { payload: '{"settledAt":1e999,"settledOverride":null}' }],
+  ["settledOverride unknown", { payload: { settledAt: null, settledOverride: "unknown" } }],
+  ["settledOverride a number", { payload: { settledAt: null, settledOverride: 0 } }],
+  ["settledOverride an array", { payload: { settledAt: null, settledOverride: [] } }],
+  [
+    "archived_at not a date",
+    { archived: "later", payload: { settledAt: null, settledOverride: null } },
+  ],
+  ["deleted_at not a date", { deleted: "", payload: { settledAt: null, settledOverride: null } }],
+  ["truncated JSON", { payload: "{" }],
+  ["empty text", { payload: "" }],
+  ["trailing comma", { payload: '{"settledAt":null,"settledOverride":null,}' }],
+  ["unquoted key", { payload: '{settledAt:null,"settledOverride":null}' }],
+  ["JSON array", { payload: "[]" }],
+  ["JSON null", { payload: "null" }],
+  ["JSON number", { payload: "1" }],
+  ["JSON string", { payload: '"settledAt"' }],
+  ["SQL NULL", { payload: null }],
+  [
+    "BLOB holding JSON text",
+    { payload: new Uint8Array(Buffer.from('{"settledAt":null,"settledOverride":null}')) },
+  ],
+  ["integer", { payload: 7 }],
+];
+
+test.each(projections)(
+  "a thread row reads as it did when the whole payload was parsed: %s",
+  (_name, { archived, deleted, payload }) => {
+    const payloadJson =
+      typeof payload === "object" && !(payload instanceof Uint8Array) && payload !== null
+        ? JSON.stringify(payload)
+        : payload;
+    const expected = parsedState(archived ?? null, deleted ?? null, payloadJson);
+    for (const verified of [false, true]) {
+      const f = fixture();
+      if (!verified) {
+        // Registering recorded the thread's lifecycle, which makes it verified: an unreadable row then holds the
+        // whole profile. Without that record the row holds only its own thread.
+        f.db.run("DELETE FROM session_lifecycle");
+      }
+      f.source
+        .query(
+          "UPDATE orchestration_v2_projection_threads SET archived_at=?,deleted_at=?,payload_json=?",
+        )
+        .run(archived ?? null, deleted ?? null, payloadJson as string);
+      // A changed state arrives with a newer event, as T3 writes it.
+      f.source.run("INSERT INTO orchestration_events VALUES (2,'event-2')");
+      f.source.run("UPDATE orchestration_v2_projection_metadata SET last_sequence=2");
+      const result = f.lifecycle.reconcile();
+      const recorded = f.db
+        .query("SELECT state FROM session_lifecycle WHERE thread_id='thread-one'")
+        .get() as { state: string } | null;
+      if (expected === null) {
+        expect(result).toEqual(
+          verified ? { status: "unavailable", changed: 0 } : { status: "ready", changed: 0 },
+        );
+        expect(recorded?.state).toBe(verified ? "active" : undefined);
+      } else {
+        expect(result).toEqual({
+          status: "ready",
+          changed: verified && expected === "active" ? 0 : 1,
+        });
+        expect(recorded?.state).toBe(expected);
+      }
+    }
+  },
+);
