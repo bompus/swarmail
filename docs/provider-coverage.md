@@ -323,7 +323,8 @@ All statements here are documented. None were tested.
   not stable 0.1.3. Their merged source and documentation are the evidence here,
   not a running-client test. The earlier messaging comparison used source
   through `v0.1.2-nightly.20261021.3486` and main documentation read on 2026-10-26;
-  those capabilities have not all been verified in stable 0.1.3.
+  those capabilities have not all been verified in stable 0.1.3. Stable 0.1.4 and 0.1.5
+  were published on 2026-10-29, after this section was read, and have not been checked.
 - **Messaging (documented from nightly source).** `t3_thread_send` reaches any thread in the
   environment with `auto` (start an idle thread, steer an active turn, or queue
   behind it), `queue`, `steer` or `restart`, and repeats safely with the same

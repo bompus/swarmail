@@ -2,22 +2,23 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.8.0 - 2026-10-30
 
-- Releases publish `swarmail-mcp` to npm with provenance and the MCP registry entry from a GitHub Actions
+- Releases publish `swarmail-mcp` to npm with provenance, and the MCP registry entry, from a GitHub Actions
   workflow on a version tag, with no stored npm token.
-- On Linux, a lifecycle check uses SQLite's `data_version` to skip an unchanged source read;
-  Windows keeps the full read.
+- A lifecycle check does less work, so the server uses less CPU while sessions keep waiting. It reads only the
+  two thread fields it uses from T3 Code's database instead of parsing every thread's stored JSON, and on Linux
+  it skips the read when the database has not changed; Windows keeps the full read.
 - The git guard accepts a session's own name only in a project that session registered in;
   a same-named holder in another project is no longer exempt.
-- A lifecycle check reads only the two thread fields it uses from T3 Code's database instead of
-  parsing every thread's stored JSON, cutting its CPU by about a quarter in a copy-server measurement.
-- MCP configuration accepts repeated `--client NAME` selections and API `clients` lists.
-  Select `codex-hub` for `.codex_hub/config.toml`; omitting selection keeps the seven default clients.
-  Unselected clients are not inspected, and existing server entries retain custom fields and disabled settings.
-- Refresh the T3 Code comparison for linked-machine messaging, remote delegation,
-  agent-assisted linking and machine mentions, distinguishing the nightly Labs
-  beta from stable 0.1.3.
+- `scripts/configure-mcp.ts` takes repeated `--client NAME` options (`configureSwarmailMcp` takes a `clients`
+  list) and configures only those clients, without inspecting the others. Select `codex-hub` for
+  `.codex_hub/config.toml`; with no selection it configures the seven default clients. It also leaves an
+  existing `swarmail` entry as it is, even one with the managed URL, so custom headers, timeouts and nested
+  settings stay; 0.7.2 rewrote such an entry.
+- The T3 Code comparison (read 2026-10-28) covers linked-machine messaging, remote delegation,
+  agent-assisted linking and machine mentions. They are nightly Labs-beta features, not in stable 0.1.3;
+  stable 0.1.4 and 0.1.5 were not rechecked.
 - Add the compact MCPRush badge beside Glama in the main and npm READMEs.
 
 ## 0.7.2 - 2026-10-28
