@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, test } from "bun:test";
+import { afterAll, beforeAll, expect, mock, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
@@ -13,9 +13,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { nowUs, openDatabase } from "../src/db.ts";
 import { guard } from "../src/guard.ts";
+import * as proc from "../src/proc.ts";
 import type { HostProcess } from "../src/proc.ts";
 import { selfNames } from "../src/registry.ts";
 import { installSwarmailGuard } from "../scripts/install-guard.ts";
+
+const realProc = { ...proc };
+const fakeHost = { pid: 42, start: "7" } as HostProcess;
+// The guard finds the session through hostProcess(). Give it one host so the project tests do not
+// depend on the agent host running the suite.
+await mock.module("../src/proc.ts", () => ({ ...realProc, hostProcess: () => fakeHost }));
+afterAll(() => mock.module("../src/proc.ts", () => realProc));
 
 let dir: string, repo: string, dbPath: string, env: NodeJS.ProcessEnv;
 const git = (...args: string[]) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
@@ -167,6 +175,34 @@ test("a name registered in the guarded project is this session's", () => {
   );
   expect([...selfNames(env, host, repo)]).toEqual(["GreenLake"]);
   rmSync(join(state, "same-project.json"));
+});
+
+test("the guard blocks a same-named holder when the session registered in another project", () => {
+  const state = join(dir, "state", "swarmail-register");
+  rmSync(state, { recursive: true, force: true });
+  mkdirSync(state, { recursive: true });
+  writeFileSync(
+    join(state, "guard-other.json"),
+    JSON.stringify({ name: "GreenLake", projects: ["/other"], host: fakeHost }),
+  );
+  stage("src/guard-other.ts");
+  expect(guard("pre-commit", "", env, repo)).toBe(1);
+  git("reset", "-q");
+  rmSync(join(state, "guard-other.json"));
+});
+
+test("the guard accepts the holder's own name registered in the guarded project", () => {
+  const state = join(dir, "state", "swarmail-register");
+  rmSync(state, { recursive: true, force: true });
+  mkdirSync(state, { recursive: true });
+  writeFileSync(
+    join(state, "guard-own.json"),
+    JSON.stringify({ name: "GreenLake", projects: [repo], host: fakeHost }),
+  );
+  stage("src/guard-own.ts");
+  expect(guard("pre-commit", "", env, repo)).toBe(0);
+  git("reset", "-q");
+  rmSync(join(state, "guard-own.json"));
 });
 
 test("shared host processes never confer another session's reservation identity", () => {
