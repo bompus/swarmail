@@ -547,7 +547,17 @@ export function selfNames(
           (!explicit || (tag.host === explicit[0] && tag.sessionId === env[explicit[1]])),
       )
     ) {
-      names.add((project && nameIn(state, project)) || state.name);
+      // A project-qualified lookup is only the name registered in that project. Falling back to
+      // `state.name` would lend this session's identity to a project it never registered in, and
+      // the git guard would exempt a same-named holder there.
+      const name = project
+        ? state.projects.includes(project)
+          ? nameIn(state, project)
+          : null
+        : state.name;
+      if (name) {
+        names.add(name);
+      }
     }
   }
   return names;
