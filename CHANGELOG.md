@@ -4,6 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- Releases publish `swarmail-mcp` to npm with provenance and the MCP registry entry from a GitHub Actions
+  workflow on a version tag, with no stored npm token.
 - On Linux, a lifecycle check uses SQLite's `data_version` to skip an unchanged source read;
   Windows keeps the full read.
 - The git guard accepts a session's own name only in a project that session registered in;

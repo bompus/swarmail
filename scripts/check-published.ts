@@ -1,6 +1,7 @@
-// Run after publishing, never in CI: asks GitHub, npm and the MCP registry which version each shows as latest and exits 1
-// unless all three show the version in package.json. A release that exists only on GitHub is incomplete, so this is what
-// CONTRIBUTING.md "Releasing" step 4 requires before a release is called done.
+// Run after publishing (the release workflow's last step, or by hand after a manual publish; never in the regular CI):
+// asks GitHub, npm and the MCP registry which version each shows as latest and exits 1 unless all three show the version
+// in package.json. A release that exists only on GitHub is incomplete, so this is what CONTRIBUTING.md "Releasing"
+// step 4 requires before a release is called done.
 //   bun scripts/check-published.ts [--version X.Y.Z] [--github URL] [--npm BASE_URL] [--registry URL] [--repository URL]
 import { readFileSync } from "node:fs";
 import { STALE_SCOPE } from "./lib/brand.ts";
