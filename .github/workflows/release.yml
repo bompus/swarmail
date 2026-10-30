@@ -2,11 +2,21 @@ name: Release
 # Publishes a release when a version tag is pushed: the npm package `swarmail-mcp` through npm trusted publishing (no stored
 # token), the MCP registry entry through the registry's GitHub OIDC login, and the GitHub release. CONTRIBUTING.md "Releasing"
 # says how to cut one. npm must list this repository and workflow file as the package's trusted publisher.
+# Run by hand (Actions, Release, Run workflow, on main) with an existing tag to finish a release that stopped part way: a
+# tag's own copy of this file is the one from its commit, so a fix to this file reaches an old tag only this way.
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to release, such as v0.8.0
+        required: true
+        type: string
 permissions:
   contents: read
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 # One release at a time. A started publish is never cancelled, and tags pushed while one runs wait their turn
 # (queue: max) instead of replacing each other.
 concurrency:
@@ -17,26 +27,36 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.guard.outputs.sha }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.sha }}
           persist-credentials: false
       - name: The tag names the version in package.json and is on main
+        id: guard
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "Run this workflow on main, not on $GITHUB_REF" >&2
+            exit 1
+          fi
           version="$(jq -r .version package.json)"
-          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
-            echo "Tag $GITHUB_REF_NAME does not match version $version in package.json" >&2
+          if [ "$TAG" != "v$version" ]; then
+            echo "Tag $TAG does not match version $version in package.json" >&2
             exit 1
           fi
           # "behind" or "identical": the tagged commit is part of main's history, so only reviewed code is published.
-          status="$(gh api "repos/$GITHUB_REPOSITORY/compare/main...$GITHUB_SHA" --jq .status)"
+          sha="$(git rev-parse HEAD)"
+          status="$(gh api "repos/$GITHUB_REPOSITORY/compare/main...$sha" --jq .status)"
           if [ "$status" != "behind" ] && [ "$status" != "identical" ]; then
-            echo "Commit $GITHUB_SHA is not on main (compare status: $status)" >&2
+            echo "Commit $sha is not on main (compare status: $status)" >&2
             exit 1
           fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.4
@@ -68,6 +88,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.check.outputs.sha }} # the commit the check job validated, even if the tag moved since
           persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
@@ -99,7 +120,36 @@ jobs:
           fi
       - name: Publish swarmail-mcp to npm
         working-directory: packages/mcp-relay
-        run: npm publish --provenance --access public
+        run: |
+          set -euo pipefail
+          name="$(jq -r .name package.json)"
+          version="$(jq -r .version package.json)"
+          # Skip a version npm already has, so a run for a tag whose npm publish succeeded fills in only what is missing.
+          if timeout 30 npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "skip $name@$version (already published)"
+          else
+            npm publish --provenance --access public
+          fi
+      - name: Wait until npm shows the version
+        working-directory: packages/mcp-relay
+        run: |
+          set -euo pipefail
+          name="$(jq -r .name package.json)"
+          version="$(jq -r .version package.json)"
+          # npm publish can return before the version is readable, and the MCP registry reads it from npm when it
+          # validates the entry. Allow about 5 minutes, the limit codegraph's release workflow has proven.
+          deadline=$((SECONDS + 300))
+          while :; do
+            if timeout 30 npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "verified $name@$version"
+              exit 0
+            fi
+            [ "$SECONDS" -lt "$deadline" ] || break
+            echo "waiting for $name@$version to appear"
+            sleep 10
+          done
+          echo "::error::$name@$version never appeared on the npm registry"
+          exit 1
       - name: Install cosign
         uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
       - name: Download and verify mcp-publisher
@@ -122,8 +172,9 @@ jobs:
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           version="$(jq -r .version package.json)"
-          gh release create "$GITHUB_REF_NAME" --verify-tag --latest --title "Swarmail $version" --notes-file "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" --verify-tag --latest --title "Swarmail $version" --notes-file "$RUNNER_TEMP/notes.md"
       - name: Check that GitHub, npm and the MCP registry show the version
         run: bun run check:published
