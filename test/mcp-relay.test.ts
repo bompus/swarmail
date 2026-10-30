@@ -4,6 +4,7 @@ import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "../src/server.ts";
+import { strayRequest } from "./fixtures/stray-request.ts";
 
 const RELAY = join(import.meta.dir, "..", "packages", "mcp-relay", "index.mjs");
 let dir: string,
@@ -209,6 +210,10 @@ test("only a successful matching initialize changes the forwarded protocol", asy
     hostname: "127.0.0.1",
     port: 0,
     async fetch(req) {
+      const stray = strayRequest(req);
+      if (stray) {
+        return stray;
+      }
       headers.push(req.headers.get("MCP-Protocol-Version"));
       const msg = (await req.json()) as {
         id: number;
