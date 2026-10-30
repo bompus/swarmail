@@ -4,6 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- The git guard accepts a session's own name only in a project that session registered in;
+  a same-named holder in another project is no longer exempt.
 - A lifecycle check reads only the two thread fields it uses from T3 Code's database instead of
   parsing every thread's stored JSON, cutting its CPU by about a quarter in a copy-server measurement.
 - MCP configuration accepts repeated `--client NAME` selections and API `clients` lists.

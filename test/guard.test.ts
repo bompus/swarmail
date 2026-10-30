@@ -138,8 +138,35 @@ test("selfNames gives the name the session holds in the project asked about", ()
   const host = { pid: 42, start: "7" } as HostProcess;
   expect([...selfNames(env, host, "/fixture")]).toEqual(["GreenLake"]);
   expect([...selfNames(env, host, "/other")]).toEqual(["BlueHarbor"]);
+  expect([...selfNames(env, host, "/unregistered")]).toEqual([]);
   expect([...selfNames(env, host)]).toEqual(["GreenLake"]);
   rmSync(state, { recursive: true });
+});
+
+test("a name held in another project never exempts a same-named holder in the guarded project", () => {
+  const state = join(dir, "state", "swarmail-register");
+  mkdirSync(state, { recursive: true });
+  const host = { pid: 42, start: "7" } as HostProcess;
+  writeFileSync(
+    join(state, "other-only.json"),
+    JSON.stringify({ name: "GreenLake", projects: ["/other"], host }),
+  );
+  expect([...selfNames(env, host, repo)]).toEqual([]);
+  expect([...selfNames(env, host, "/other")]).toEqual(["GreenLake"]);
+  expect([...selfNames(env, host)]).toEqual(["GreenLake"]);
+  rmSync(join(state, "other-only.json"));
+});
+
+test("a name registered in the guarded project is this session's", () => {
+  const state = join(dir, "state", "swarmail-register");
+  mkdirSync(state, { recursive: true });
+  const host = { pid: 42, start: "7" } as HostProcess;
+  writeFileSync(
+    join(state, "same-project.json"),
+    JSON.stringify({ name: "GreenLake", projects: [repo], host }),
+  );
+  expect([...selfNames(env, host, repo)]).toEqual(["GreenLake"]);
+  rmSync(join(state, "same-project.json"));
 });
 
 test("shared host processes never confer another session's reservation identity", () => {
