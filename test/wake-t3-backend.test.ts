@@ -573,17 +573,19 @@ linuxTest("a T3 that answers 503 past the window fails with the original error",
   const before = f.snapshot();
   quietWarnings();
   const fetch = fetchMock(() => new Response("down", { status: 503 }));
+  // A controlled clock: the first failing poll starts the 150 ms window, the second is inside it, the third is past it.
+  let now = performance.now();
+  const clock = spyOn(performance, "now").mockImplementation(() => now);
+  cleanup.push(() => clock.mockRestore());
   const poll = followT3Backend(f.path, f, undefined, 150);
-  const started = performance.now();
-  let error: Error | undefined;
-  while (!error && performance.now() - started < 5000) {
-    error = await failure(poll());
-    await Bun.sleep(20);
-  }
+  expect(await poll()).toBeUndefined();
+  now += 100;
+  expect(await poll()).toBeUndefined();
+  now += 100;
+  const error = await failure(poll());
   expect(error).toBeInstanceOf(BridgeError);
   expect(error!.message).toBe("T3 session check failed; no credential issued");
-  expect(performance.now() - started).toBeGreaterThanOrEqual(150);
-  expect(fetch.mock.calls.length).toBeGreaterThan(2);
+  expect(fetch).toHaveBeenCalledTimes(3);
   expect(f.cli).toEqual([]);
   expect(f.snapshot()).toEqual(before);
 });
