@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { ReadinessGate } from "../src/readiness-gate.ts";
 import { openWakeState, peekUnreadMailboxes, type Pending } from "../src/wake-state.ts";
 import { t3NoticeAdapter } from "../src/wake-t3-notice.ts";
 import type { T3ControlProjection, WakeTarget } from "../src/wake-target.ts";
@@ -80,6 +81,7 @@ function fixture(swarmailUrl?: string) {
     providerTurns: [],
   };
   const received: any[] = [];
+  const requests: string[] = [];
   const receipts = new Map<string, boolean>();
   let loseReply: boolean | string = false;
   let endPromotionTarget = false;
@@ -91,6 +93,7 @@ function fixture(swarmailUrl?: string) {
     hostname: "127.0.0.1",
     port: 0,
     fetch(req, server) {
+      requests.push(`${req.method} ${new URL(req.url).pathname}`);
       if (new URL(req.url).pathname === "/ws") {
         return server.upgrade(req) ? undefined : new Response(null, { status: 400 });
       }
@@ -280,6 +283,8 @@ function fixture(swarmailUrl?: string) {
       snapshotResponse = response;
     },
     received,
+    requests,
+    target: config.target,
     queued,
     deliver,
     restart,
@@ -972,3 +977,41 @@ for (const race of ["lost reply", "source started", "target ended"]) {
     expect(f.state.acknowledged).toBe(1);
   });
 }
+
+test("a closed readiness gate holds a delivery without any request, then admits it exactly once", async () => {
+  const f = fixture();
+  const gate = new ReadinessGate();
+  f.target.ready = () => gate.ready();
+  // The restarting T3 would answer 404 to the projection; the closed gate never asks it.
+  const delivery = f.deliver(1, hint("repo-a"));
+  await Bun.sleep(150);
+  expect(f.requests).toEqual([]);
+  expect(f.received).toEqual([]);
+  gate.open();
+  await delivery;
+  expect(f.requests.length).toBeGreaterThan(0);
+  expect(f.received).toHaveLength(1);
+  expect(f.projection.runs).toHaveLength(1);
+  expect(f.projection.messages).toHaveLength(1);
+});
+
+test("a bridge stopped while the gate is closed ends the wait without a request and keeps its journaled command", async () => {
+  const f = fixture();
+  const gate = new ReadinessGate();
+  const stop = new AbortController();
+  f.target.ready = () => gate.ready(stop.signal);
+  f.state.savePending({
+    eventId: 1,
+    command: f.adapter().prepare({ eventId: 1, hint: hint("repo-a") }) as Pending["command"],
+  });
+  const waiting = rejected(
+    f.adapter().deliver(f.state.pending!, () => f.state.markAttempted(), stop.signal),
+  );
+  await Bun.sleep(50);
+  stop.abort();
+  const error = (await waiting) as { retryable?: boolean; message: string };
+  expect(error.retryable).toBe(true);
+  expect(f.requests).toEqual([]);
+  expect(f.received).toEqual([]);
+  expect(f.state.pending?.eventId).toBe(1);
+});

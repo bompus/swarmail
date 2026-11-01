@@ -9,6 +9,8 @@ export interface WakeTarget {
   id: string;
   authorizationFile: string;
   delivery?: "auto";
+  /** Resolves when the destination is verified; each request waits on it. Absent for a bridge that verifies nothing. */
+  ready?: () => Promise<void>;
 }
 
 export class BridgeError extends Error {
@@ -166,6 +168,7 @@ function headers(target: WakeTarget): Record<string, string> {
 }
 
 async function request(target: WakeTarget, path: string, body?: unknown): Promise<any> {
+  await target.ready?.();
   let response: Response;
   let sent: Record<string, string>;
   try {
@@ -259,6 +262,7 @@ async function dispatchV2(
   if (typeof ticket?.ticket !== "string") {
     throw new BridgeError("target did not issue a websocket ticket");
   }
+  await target.ready?.(); // The ticket opens a connection to the same destination, so it waits too.
   const url = new URL(target.url);
   url.protocol = "ws:";
   url.pathname = "/ws";

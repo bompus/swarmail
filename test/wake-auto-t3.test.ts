@@ -1566,6 +1566,186 @@ test("automatic supervisor waits out a T3 restart and follows its new port", asy
   expect(log.match(/swarmail wake-auto-t3: received SIGTERM; stopping/g)).toHaveLength(1);
 }, 30000);
 
+test("automatic supervisor holds bridge deliveries while the new T3 is unverified, then restarts its bridges on the new port", async () => {
+  const f = fixture();
+  const stateRoot = join(f.root, "state");
+  const expiresAt = new Date(Date.now() + 86400000).toISOString();
+  const seen = new Set();
+  let startingPort = 0;
+  let starting = false;
+  const t3 = () =>
+    Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(request) {
+        const path = new URL(request.url).pathname;
+        seen.add(`${this.port} ${path}`);
+        if (this.port === startingPort && starting) {
+          return new Response("starting", { status: 503 });
+        }
+        if (path === "/api/auth/session") {
+          return Response.json({
+            authenticated: true,
+            sessionMethod: "bearer-access-token",
+            expiresAt,
+            scopes: ["orchestration:operate"],
+          });
+        }
+        const id = path.split("/").at(path.endsWith("/bounded") ? -2 : -1);
+        return Response.json({
+          projection: {
+            thread: { id, settledAt: null, settledOverride: null },
+            runs: [],
+            messages: [],
+            runtimeRequests: [],
+          },
+        });
+      },
+    });
+  const waiting = new Set();
+  const mail = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      const path = new URL(request.url).pathname;
+      if (path === "/lifecycle/reconcile") {
+        return Response.json({ status: "ready", changed: 0 });
+      }
+      if (path === "/wait/status") {
+        return Response.json({ eligible: true });
+      }
+      const id = new URL(request.url).searchParams.get("session");
+      waiting.add(id);
+      return new Promise((resolve) => {
+        request.signal.addEventListener(
+          "abort",
+          () => {
+            waiting.delete(id);
+            resolve(new Response(null, { status: 204 }));
+          },
+          { once: true },
+        );
+      });
+    },
+  });
+  const baseDir = join(f.root, ".t3");
+  const config = {
+    swarmailUrl: `http://127.0.0.1:${mail.port}`,
+    target: { type: "t3-v2-queue", id: "t3-auto-wake", authorizationFile: join(f.root, "auth") },
+    rotation: {
+      verifyBackend: true,
+      baseDir,
+      executable: process.execPath,
+      version: "0.0.45-nightly.20260930.2481",
+    },
+    enrollAfter: "2099-01-01T00:00:00Z",
+  };
+  // Credential state saved before discovery recorded the port; it must still match.
+  const rotation = config.target.authorizationFile + ".rotation";
+  mkdirSync(rotation, { mode: 0o700 });
+  writeFileSync(
+    join(rotation, "state.json"),
+    JSON.stringify({
+      binding: JSON.stringify({
+        url: "http://127.0.0.1:1",
+        executable: realpathSync(process.execPath),
+        baseDir: realpathSync(baseDir),
+        version: config.rotation.version,
+        type: config.target.type,
+        id: config.target.id,
+        headerPath: config.target.authorizationFile,
+      }),
+      retired: [],
+    }),
+    { mode: 0o600 },
+  );
+  writeFileSync(
+    join(f.registry, "native-1.json"),
+    JSON.stringify({
+      name: "PortReceiver",
+      projects: ["/w/auto"],
+      wakeThread: "thread-1",
+      tags: { "/w/auto": "[t3:thread-1 codex:native-1 cwd:/w/auto]" },
+    }),
+  );
+  const configPath = join(f.root, "config.json");
+  writeFileSync(configPath, JSON.stringify(config));
+  const publish = (server: Bun.Server<undefined>) =>
+    writeFileSync(
+      join(baseDir, "userdata/server-runtime.json"),
+      JSON.stringify({ version: 1, pid: process.pid, port: server.port }),
+    );
+  const child = Bun.spawn(
+    [
+      process.execPath,
+      "--preload",
+      join(import.meta.dir, "fixtures/t3-auto-cli-preload.ts"),
+      join(import.meta.dir, "../src/cli.ts"),
+      "wake-auto-t3",
+      configPath,
+    ],
+    {
+      env: { ...process.env, XDG_STATE_HOME: stateRoot, AUTO_TEST_EXPIRES: expiresAt },
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+  );
+  const errors = new Response(child.stderr).text();
+  const until = async (predicate: () => unknown) => {
+    const deadline = Date.now() + 15000;
+    while (!predicate()) {
+      if (child.exitCode !== null) {
+        throw new Error(`supervisor exited ${child.exitCode}: ${await errors}`);
+      }
+      if (Date.now() > deadline) {
+        throw new Error("port-follow condition timed out");
+      }
+      await Bun.sleep(20);
+    }
+  };
+  const first = t3();
+  let second: Bun.Server<undefined> | undefined;
+  try {
+    publish(first);
+    await until(() => waiting.has("thread-1"));
+    expect(seen.has(`${first.port} /api/orchestration/threads/thread-1`)).toBe(true);
+    // T3 restarts on a new port and is still starting: its session check fails. The old port stays closed.
+    second = t3();
+    startingPort = second.port!;
+    starting = true;
+    publish(second);
+    await first.stop(true);
+    await until(() => seen.has(`${second!.port} /api/auth/session`));
+    await Bun.sleep(2500);
+    // Unverified: the bridge does not touch the new T3's thread endpoints, and nothing is quarantined.
+    expect(seen.has(`${second.port} /api/orchestration/threads/thread-1`)).toBe(false);
+    expect(child.exitCode).toBeNull();
+    starting = false;
+    await until(
+      () => seen.has(`${second!.port} /api/orchestration/threads/thread-1`) && waiting.size === 1,
+    );
+    child.kill("SIGTERM");
+    expect(await child.exited).toBe(0);
+  } finally {
+    if (child.exitCode === null) {
+      child.kill("SIGTERM");
+    }
+    await child.exited;
+    await errors;
+    await mail.stop(true);
+    await first.stop(true);
+    await second?.stop(true);
+    f.close();
+  }
+  const log = await errors;
+  expect(log).toContain("T3 session check got HTTP 503; retrying");
+  expect(log).toContain("swarmail wake-auto-t3: T3 backend unverified; holding bridge deliveries");
+  expect(log).toMatch(
+    /swarmail wake-auto-t3: T3 backend verified; bridge deliveries resumed after holding for \d+ s/,
+  );
+  expect(log).not.toContain("quarantined");
+}, 40000);
+
 test("automatic scans repeat only after a T3 commit, a registry write, a reopen or the rescan interval", () => {
   const f = fixture();
   const t3 = heldT3State(join(f.root, ".t3"));

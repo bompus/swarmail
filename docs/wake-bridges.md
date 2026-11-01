@@ -316,6 +316,16 @@ state use the existing locked renewal path when no eligible session transport
 retry has occurred. Listener absence alone does not disable that path. Once a
 clean session check has a transport failure, losing retry eligibility before
 verified readiness stops the follower without renewal.
+While the follower has no verified backend, the automatic supervisor holds its
+bridges: each waits before any request that carries the T3 credential, so none
+is sent to a listener the supervisor has not verified and none reaches a T3 that
+is still starting. A held bridge keeps its journaled command, counts no retry and
+is not quarantined; it continues when the next poll verifies the backend, and
+bridges on a backend URL that moved are stopped and started on the new one first.
+The supervisor logs when it starts and ends a hold, with how long it lasted. With
+no listener at all the hold has no time limit. A request already in flight when the
+hold begins finishes, and a T3 that moves to a new port between two polls is seen
+only at the next poll.
 It never enrolls a session, delivers mail, clears quarantine or changes a
 pending delivery journal. Consumers must adopt the module explicitly;
 installing swarmail does not restore a stopped reader.
