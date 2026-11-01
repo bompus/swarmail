@@ -1718,7 +1718,9 @@ test("automatic supervisor holds bridge deliveries while the new T3 is unverifie
     await until(() => seen.has(`${second!.port} /api/auth/session`));
     await Bun.sleep(2500);
     // Unverified: the bridge does not touch the new T3's thread endpoints, and nothing is quarantined.
-    expect(seen.has(`${second.port} /api/orchestration/threads/thread-1`)).toBe(false);
+    expect(
+      [...seen].filter((entry) => String(entry).startsWith(`${second!.port} /api/orchestration`)),
+    ).toEqual([]);
     expect(child.exitCode).toBeNull();
     starting = false;
     await until(

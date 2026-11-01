@@ -334,6 +334,7 @@ async function startBridge(
   gate: ReadinessGate,
 ): Promise<Bridge | null> {
   const stop = new AbortController();
+  const stopped = AbortSignal.any([signal, stop.signal]);
   const target: WakeTarget = {
     type: config.target.type,
     id,
@@ -341,7 +342,7 @@ async function startBridge(
     authorizationFile: config.target.authorizationFile,
     ...(config.target.delivery === "auto" ? { delivery: "auto" } : {}),
     // Every T3 request waits for the supervisor's verified backend, and for nothing once the bridge or supervisor stops.
-    ready: () => gate.ready(AbortSignal.any([signal, stop.signal])),
+    ready: () => gate.ready(stopped),
   };
   try {
     await checkT3Target(target);
@@ -593,6 +594,7 @@ async function superviseBridges(
         `swarmail wake-auto-t3: bridge ${id} quarantined: ${reason}; inspect its retained journal before retry`,
       );
     };
+    let holdLogged = false;
     let wanted = new Set<string>();
     const due = rescanDue(t3State, registry);
     while (!signal.aborted) {
@@ -602,6 +604,7 @@ async function superviseBridges(
       if (await reconcile()) {
         backend = await follow();
         if (!backend && gate.close()) {
+          holdLogged = true;
           console.error("swarmail wake-auto-t3: T3 backend unverified; holding bridge deliveries");
         }
       }
@@ -610,14 +613,17 @@ async function superviseBridges(
         continue;
       }
       if (backend.moved) {
-        // Bridges keep the URL they started with; restart them on the new port.
+        // Bridges keep the URL they started with; restart them on the new port. Hold them first: a bridge draining
+        // its last delivery would otherwise keep sending requests, and the credential, to the old address.
+        gate.close();
         await Promise.all([...bridges.values()].map(stopBridge));
         await quarantineFailed(bridges, quarantine);
         bridges.clear();
       }
       // After the stop above, so no bridge still on the old URL is released.
       const held = gate.open();
-      if (held !== undefined) {
+      if (held !== undefined && holdLogged) {
+        holdLogged = false;
         console.error(
           `swarmail wake-auto-t3: T3 backend verified; bridge deliveries resumed after holding for ${Math.round(held / 1000)} s`,
         );
