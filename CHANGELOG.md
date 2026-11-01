@@ -2,6 +2,13 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- `swarmail wake-auto-t3` waits up to two minutes when T3's session check gets an HTTP error or a refused
+  connection while T3 restarts, instead of exiting at once. It logs each retry, verifies the T3 listener again on
+  every poll and keeps reconciling meanwhile. An outage longer than that still stops it with the same error and
+  exit status 1.
+
 ## 0.8.0 - 2026-10-30
 
 - Releases publish `swarmail-mcp` to npm with provenance, and the MCP registry entry, from a GitHub Actions

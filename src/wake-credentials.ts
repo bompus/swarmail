@@ -210,6 +210,22 @@ export class T3SessionTransportUnavailable extends T3Unavailable {
   }
 }
 
+/**
+ * A session check that failed the way a restarting T3 does, raised only for a caller that asked to wait it out
+ * (`check.retry`). The caller polls again, which verifies the listener again, and calls `giveUp` for the error to
+ * raise once it has waited long enough.
+ */
+export class T3SessionRetry extends T3Unavailable {
+  readonly what: string;
+  readonly giveUp: () => never;
+  constructor(what: string, giveUp: () => never) {
+    super();
+    this.what = what;
+    this.giveUp = giveUp;
+    this.message = `T3 session check got ${what}; retrying`;
+  }
+}
+
 async function sessionCheck(
   url: string,
   value: string,
@@ -228,18 +244,26 @@ async function sessionCheck(
     });
   } catch (error) {
     checkBackendOperation(check); // Shutdown wins a race with the request timeout.
-    if (retryTransport) {
-      const code = error instanceof TypeError ? (error as NodeJS.ErrnoException).code : undefined;
-      const reason = timeout.aborted
-        ? "timeout"
-        : code === "ConnectionRefused"
-          ? "refused"
-          : code === "ECONNRESET"
-            ? "reset"
-            : undefined;
-      if (reason) {
-        throw new T3SessionTransportUnavailable(reason);
-      }
+    const code = error instanceof TypeError ? (error as NodeJS.ErrnoException).code : undefined;
+    const reason = timeout.aborted
+      ? "timeout"
+      : code === "ConnectionRefused"
+        ? "refused"
+        : code === "ECONNRESET"
+          ? "reset"
+          : undefined;
+    if (reason && retryTransport) {
+      throw new T3SessionTransportUnavailable(reason);
+    }
+    if (reason && check.retry) {
+      throw new T3SessionRetry(
+        reason === "refused"
+          ? "a refused connection"
+          : reason === "reset"
+            ? "a reset connection"
+            : "no answer in time",
+        () => sanitized(error),
+      );
     }
     return sanitized(error);
   }
@@ -248,7 +272,11 @@ async function sessionCheck(
     return false;
   }
   if (!response.ok) {
-    fail("T3 session check failed; no credential issued");
+    const failed = () => fail("T3 session check failed; no credential issued");
+    if (check.retry) {
+      throw new T3SessionRetry(`HTTP ${response.status}`, failed);
+    }
+    failed();
   }
   let result: {
     authenticated?: boolean;
@@ -260,8 +288,13 @@ async function sessionCheck(
     result = (await response.json()) as typeof result;
   } catch (error) {
     checkBackendOperation(check);
-    if (retryTransport && timeout.aborted) {
-      throw new T3SessionTransportUnavailable("timeout");
+    if (timeout.aborted) {
+      if (retryTransport) {
+        throw new T3SessionTransportUnavailable("timeout");
+      }
+      if (check.retry) {
+        throw new T3SessionRetry("no answer in time", () => sanitized(error));
+      }
     }
     return sanitized(error); // Malformed JSON and interrupted bodies remain fatal.
   }
@@ -313,8 +346,10 @@ function t3Client(config: Config, control: BackendCheck = {}) {
   const revoke = async (id: string) => {
     await cli(["revoke", id]);
   };
-  const check = (value: string, credential: Credential) =>
-    sessionCheck(url, value, credential, control);
+  // Waiting out a restarting T3 is only safe before a credential is issued; a candidate that cannot be checked
+  // follows the recovery path instead, so only the pre-issue check passes `wait`.
+  const check = (value: string, credential: Credential, wait = false) =>
+    sessionCheck(url, value, credential, wait ? control : { ...control, retry: false });
   return { cli, header, revoke, check };
 }
 
@@ -403,7 +438,7 @@ async function rotate(
   }
   if (state.current && Date.parse(state.current.expiresAt) > Date.now()) {
     if (
-      !(await check(existing!, state.current)) &&
+      !(await check(existing!, state.current, true)) &&
       Date.parse(state.current.expiresAt) > Date.now()
     ) {
       state.disabled = true;
