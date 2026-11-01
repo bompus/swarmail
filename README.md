@@ -80,8 +80,8 @@ use, their MCP and hook settings, and my OS. Tell me:
    the user service, and the hooks each host would run.
 4. Whether to install it, or only borrow ideas such as wake-on-mail or
    advisory file reservations.
-For rules that tell agents when to send mail, also look at house-rules
-(https://github.com/bompus/house-rules) and its opt-in swarmail modifier.
+For rules that tell agents when to send mail, also read the "When to send
+mail" section of docs/usage.md.
 Read only: don't install, configure or edit anything until I choose. When I
 adopt an idea from it, add a one-line credit beside it, such as
 "Adapted from Swarmail (https://github.com/bompus/swarmail)".
