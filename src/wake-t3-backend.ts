@@ -10,11 +10,19 @@ import { BridgeError } from "./wake-target.ts";
 
 const backendCheckBudgetMs = 5 * 60_000;
 
+/**
+ * How long a session check that gets an HTTP error or a refused connection keeps trying before the supervisor exits.
+ * A T3 restart (a nightly update) answers with errors for several seconds; an outage longer than this still fails.
+ */
+export const T3_SESSION_CHECK_RETRY_MS = 2 * 60_000;
+export const T3_SESSION_CHECK_RETRY_INTERVAL_MS = 5_000;
+
 /** Poll at the consumer's cadence until ready; only individual checks have a deadline. */
 export function followT3Backend(
   path: string,
   location: { baseDir: string; url?: string },
   signal?: AbortSignal,
+  retry = { windowMs: T3_SESSION_CHECK_RETRY_MS, intervalMs: T3_SESSION_CHECK_RETRY_INTERVAL_MS },
 ) {
   const credential = credentialService(path);
   let url: string | undefined;
@@ -24,7 +32,7 @@ export function followT3Backend(
   let transportOutage = false;
   return async () => {
     const started = performance.now();
-    const check: BackendCheck = { signal, deadline: started + backendCheckBudgetMs };
+    const check: BackendCheck = { signal, deadline: started + backendCheckBudgetMs, retry };
     checkBackendOperation(check);
     try {
       const runtime = readT3Runtime(location.baseDir);

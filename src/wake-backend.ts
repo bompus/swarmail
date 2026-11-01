@@ -24,6 +24,11 @@ export class T3Unavailable extends Error {
 export interface BackendCheck {
   signal?: AbortSignal;
   deadline?: number;
+  /**
+   * Opt in to waiting out a T3 that is restarting: a session check that gets an HTTP error or a measured
+   * connection failure repeats every `intervalMs` until `windowMs` has passed, then fails as it would without it.
+   */
+  retry?: { windowMs: number; intervalMs: number };
 }
 
 /** Never include a caller-supplied abort reason in a diagnostic. */

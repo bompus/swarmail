@@ -23,6 +23,7 @@ import {
   T3Unavailable,
   type BackendCheck,
 } from "./wake-backend.ts";
+import { pause } from "./wake-loop.ts";
 import { sameBinding } from "./wake-state.ts";
 
 interface Credential {
@@ -210,12 +211,53 @@ export class T3SessionTransportUnavailable extends T3Unavailable {
   }
 }
 
+/** A session check that failed in a way worth repeating while T3 restarts; `giveUp` raises the error to use when it stops. */
+class SessionRetry extends Error {
+  readonly what: string;
+  readonly giveUp: () => never;
+  constructor(what: string, giveUp: () => never) {
+    super(`T3 session check got ${what}`);
+    this.what = what;
+    this.giveUp = giveUp;
+  }
+}
+
 async function sessionCheck(
   url: string,
   value: string,
   credential: Credential,
   check: BackendCheck = {},
   retryTransport = false,
+): Promise<boolean> {
+  const started = performance.now();
+  const waitSignal = check.signal ?? new AbortController().signal;
+  for (;;) {
+    try {
+      return await sessionRequest(url, value, credential, check, retryTransport);
+    } catch (error) {
+      const { retry } = check;
+      if (!(error instanceof SessionRetry) || !retry) {
+        throw error;
+      }
+      const elapsed = performance.now() - started;
+      if (elapsed >= retry.windowMs) {
+        return error.giveUp();
+      }
+      console.warn(
+        `T3 session check got ${error.what}; retrying (${Math.round(elapsed / 1000)} s of ${Math.round(retry.windowMs / 1000)} s)`,
+      );
+      await pause(retry.intervalMs, waitSignal);
+      checkBackendOperation(check);
+    }
+  }
+}
+
+async function sessionRequest(
+  url: string,
+  value: string,
+  credential: Credential,
+  check: BackendCheck,
+  retryTransport: boolean,
 ): Promise<boolean> {
   const timeout = AbortSignal.timeout(backendTimeout(15000, check));
   const signal = check.signal ? AbortSignal.any([check.signal, timeout]) : timeout;
@@ -228,18 +270,26 @@ async function sessionCheck(
     });
   } catch (error) {
     checkBackendOperation(check); // Shutdown wins a race with the request timeout.
-    if (retryTransport) {
-      const code = error instanceof TypeError ? (error as NodeJS.ErrnoException).code : undefined;
-      const reason = timeout.aborted
-        ? "timeout"
-        : code === "ConnectionRefused"
-          ? "refused"
-          : code === "ECONNRESET"
-            ? "reset"
-            : undefined;
-      if (reason) {
-        throw new T3SessionTransportUnavailable(reason);
-      }
+    const code = error instanceof TypeError ? (error as NodeJS.ErrnoException).code : undefined;
+    const reason = timeout.aborted
+      ? "timeout"
+      : code === "ConnectionRefused"
+        ? "refused"
+        : code === "ECONNRESET"
+          ? "reset"
+          : undefined;
+    if (reason && retryTransport) {
+      throw new T3SessionTransportUnavailable(reason);
+    }
+    if (reason && check.retry) {
+      throw new SessionRetry(
+        reason === "refused"
+          ? "a refused connection"
+          : reason === "reset"
+            ? "a reset connection"
+            : "no answer in time",
+        () => sanitized(error),
+      );
     }
     return sanitized(error);
   }
@@ -248,7 +298,11 @@ async function sessionCheck(
     return false;
   }
   if (!response.ok) {
-    fail("T3 session check failed; no credential issued");
+    const failed = () => fail("T3 session check failed; no credential issued");
+    if (check.retry) {
+      throw new SessionRetry(`HTTP ${response.status}`, failed);
+    }
+    failed();
   }
   let result: {
     authenticated?: boolean;
@@ -260,8 +314,13 @@ async function sessionCheck(
     result = (await response.json()) as typeof result;
   } catch (error) {
     checkBackendOperation(check);
-    if (retryTransport && timeout.aborted) {
-      throw new T3SessionTransportUnavailable("timeout");
+    if (timeout.aborted) {
+      if (retryTransport) {
+        throw new T3SessionTransportUnavailable("timeout");
+      }
+      if (check.retry) {
+        throw new SessionRetry("no answer in time", () => sanitized(error));
+      }
     }
     return sanitized(error); // Malformed JSON and interrupted bodies remain fatal.
   }
