@@ -1016,23 +1016,28 @@ test("a bridge stopped while the gate is closed ends the wait without a request 
   expect(f.state.pending?.eventId).toBe(1);
 });
 
-test("a delivery held after it read the projection reads it again before dispatching, with the same journaled command", async () => {
-  const f = fixture();
-  let readyCalls = 0;
-  let epoch = 0;
-  // Two projection reads (the first plans the command, the second dispatches it), then the websocket ticket: the
-  // hold begins there, after the projection that the dispatch relies on was read.
-  f.target.ready = async () => {
-    if (++readyCalls === 3) {
-      epoch++;
-    }
-  };
-  f.target.epoch = () => epoch;
-  const error = (await rejected(f.deliver(1, hint("repo-a")))) as { retryable?: boolean };
-  expect(error.retryable).toBe(true);
-  expect(f.received).toEqual([]);
-  const journaled = f.state.pending!.command;
-  await f.deliver(1, hint("repo-a"));
-  expect(f.received).toHaveLength(1);
-  expect(f.received[0].messageId).toBe(journaled.messageId);
-});
+test.each([
+  ["while the second projection read is in flight", 2],
+  ["at the websocket ticket after it", 3],
+])(
+  "a delivery held %s reads the projection again before dispatching, with the same journaled command",
+  async (_name, holdAt) => {
+    const f = fixture();
+    let readyCalls = 0;
+    let epoch = 0;
+    // Request 1 and 2 read the projection (the first plans the command, the second dispatches it); 3 is the ticket.
+    f.target.ready = async () => {
+      if (++readyCalls === holdAt) {
+        epoch++;
+      }
+    };
+    f.target.epoch = () => epoch;
+    const error = (await rejected(f.deliver(1, hint("repo-a")))) as { retryable?: boolean };
+    expect(error.retryable).toBe(true);
+    expect(f.received).toEqual([]);
+    const journaled = f.state.pending!.command;
+    await f.deliver(1, hint("repo-a"));
+    expect(f.received).toHaveLength(1);
+    expect(f.received[0].messageId).toBe(journaled.messageId);
+  },
+);

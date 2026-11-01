@@ -674,24 +674,24 @@ linuxTest(
 );
 
 linuxTest(
-  "a published T3 process that has exited is unavailable at once, inside the cached window",
+  "the caller is told before a listener that is new or was unavailable is verified",
   async () => {
     const f = fixture();
     quietWarnings();
-    fetchMock(f.response);
+    let calls = 0;
+    const fetch = fetchMock(() =>
+      ++calls <= 2 ? new Response("starting", { status: 503 }) : f.response(),
+    );
     const verifying: string[] = [];
     const poll = followT3Backend(f.path, f, undefined, 60_000, () => verifying.push("verify"));
+    expect(await poll()).toBeUndefined(); // A listener not seen before.
+    expect(verifying).toHaveLength(1);
+    expect(await poll()).toBeUndefined(); // Still unavailable.
+    expect(verifying).toHaveLength(2);
     expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
-    expect(verifying).toHaveLength(1); // A listener not seen before is verified, so the caller is told first.
+    expect(verifying).toHaveLength(3); // Recovering from unavailable verifies again.
     expect(await poll()).toEqual({ url: f.url, moved: false, restarted: false });
-    expect(verifying).toHaveLength(1); // The cached result needs no verification.
-    const kill = spyOn(process, "kill").mockImplementation((() => {
-      throw Object.assign(new Error("no such process"), { code: "ESRCH" });
-    }) as typeof process.kill);
-    cleanup.push(() => kill.mockRestore());
-    expect(await poll()).toBeUndefined();
-    kill.mockRestore();
-    expect(await poll()).toEqual({ url: f.url, moved: false, restarted: false });
-    expect(verifying).toHaveLength(2); // Recovering from unavailable verifies again, with the caller told first.
+    expect(verifying).toHaveLength(3); // The cached result needs no verification.
+    expect(fetch).toHaveBeenCalledTimes(3);
   },
 );

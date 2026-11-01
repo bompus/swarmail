@@ -437,6 +437,8 @@ async function reconcileBridges(
   start: (id: string) => Promise<Bridge | null>,
   failures: Map<string, string>,
   quarantine: (id: string, reason: string) => void,
+  /** Runs once the bridges that are no longer wanted are stopped, before any new one starts. */
+  afterStops: () => void = () => {},
 ) {
   await quarantineFailed(bridges, quarantine);
   for (const [id, bridge] of bridges) {
@@ -447,6 +449,7 @@ async function reconcileBridges(
       bridges.delete(id);
     }
   }
+  afterStops();
   for (const id of wanted) {
     if (!bridges.has(id) && !failures.has(id)) {
       try {
@@ -645,8 +648,9 @@ async function superviseBridges(
       if (due()) {
         wanted = scanT3Threads(config, registry, t3State);
       }
-      // Bridges stay held until the ones that are no longer wanted are stopped and the new ones started, so a thread
-      // that went away during the hold cannot send a request and be quarantined on its error.
+      // Bridges stay held until the ones that are no longer wanted are stopped, so a thread that went away during the
+      // hold cannot send a request and be quarantined on its error. Starting new bridges (each preflighted) does not
+      // keep the healthy ones waiting.
       await reconcileBridges(
         bridges,
         wanted,
@@ -656,14 +660,16 @@ async function superviseBridges(
             : startBridge(config, backend.url, id, signal, gate),
         failures,
         quarantine,
+        () => {
+          const held = gate.open();
+          if (held !== undefined && holdLogged) {
+            holdLogged = false;
+            console.error(
+              `swarmail wake-auto-t3: T3 backend verified; bridge deliveries resumed after holding for ${Math.round(held / 1000)} s`,
+            );
+          }
+        },
       );
-      const held = gate.open();
-      if (held !== undefined && holdLogged) {
-        holdLogged = false;
-        console.error(
-          `swarmail wake-auto-t3: T3 backend verified; bridge deliveries resumed after holding for ${Math.round(held / 1000)} s`,
-        );
-      }
       // Bridges run in this process, so each subscription names the supervisor.
       const subscriptions = Object.fromEntries(
         [...bridges]

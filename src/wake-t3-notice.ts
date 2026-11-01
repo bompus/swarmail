@@ -181,6 +181,8 @@ export function t3NoticeAdapter(
       const save = () => state.savePending(pending);
       while (!signal.aborted) {
         await guard(signal);
+        // Taken before the projection is requested, so a hold that begins while it is in flight is seen at dispatch.
+        const epoch = target.epoch?.();
         const projection = await t3Projection(target);
         ensureT3Unsettled(projection.thread);
         if (
@@ -190,9 +192,8 @@ export function t3NoticeAdapter(
         ) {
           throw new BridgeError("T3 is waiting for an operator response", true);
         }
-        // Everything above was read while the backend was verified. A hold since then sends this delivery back
-        // to read the projection again, with the same journaled command.
-        const epoch = target.epoch?.();
+        // A hold since the projection was requested sends this delivery back to read it again, with the same
+        // journaled command.
         const dispatchGuard = async () => {
           await guard(signal);
           if (target.epoch?.() !== epoch) {
