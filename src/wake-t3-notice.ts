@@ -190,11 +190,21 @@ export function t3NoticeAdapter(
         ) {
           throw new BridgeError("T3 is waiting for an operator response", true);
         }
+        // Everything above was read while the backend was verified. A hold since then sends this delivery back
+        // to read the projection again, with the same journaled command.
+        const epoch = target.epoch?.();
+        const dispatchGuard = async () => {
+          await guard(signal);
+          if (target.epoch?.() !== epoch) {
+            throw new BridgeError(
+              "T3 backend was held; checking its state again before dispatch",
+              true,
+            );
+          }
+        };
         if (pending.command.type !== "t3.notice") {
           // Keep a previously journaled command's id and payload across rollout.
-          await t3V2Adapter.deliver(target, pending.command, attempted, signal, () =>
-            guard(signal),
-          );
+          await t3V2Adapter.deliver(target, pending.command, attempted, signal, dispatchGuard);
           if (typeof pending.command.messageId === "string") {
             state.saveContext({ messageId: pending.command.messageId });
           }
@@ -203,7 +213,7 @@ export function t3NoticeAdapter(
         if (notice.operation) {
           const operation = notice.operation;
           try {
-            await sendT3Command(target, operation, () => guard(signal));
+            await sendT3Command(target, operation, dispatchGuard);
           } catch (error) {
             await reconcileRejection(target, notice, operation, error);
             save();

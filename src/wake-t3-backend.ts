@@ -22,12 +22,23 @@ const backendCheckBudgetMs = 5 * 60_000;
  */
 export const T3_SESSION_CHECK_RETRY_MS = 2 * 60_000;
 
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
 /** Poll at the consumer's cadence until ready; only individual checks have a deadline. */
 export function followT3Backend(
   path: string,
   location: { baseDir: string; url?: string },
   signal?: AbortSignal,
   retryWindowMs = T3_SESSION_CHECK_RETRY_MS,
+  /** Called before a verification of a listener that is new or was unavailable begins, so a caller can hold its requests. */
+  onVerify?: () => void,
 ) {
   const credential = credentialService(path);
   let url: string | undefined;
@@ -42,10 +53,16 @@ export function followT3Backend(
     checkBackendOperation(check);
     try {
       const runtime = readT3Runtime(location.baseDir);
+      if (runtime && !processAlive(runtime.pid)) {
+        throw new T3Unavailable(); // A cached result must not outlive the T3 process that earned it.
+      }
       const listener = runtime ? `${runtime.url} ${runtime.pid}` : location.url;
       const same = url !== undefined && listener === published;
       if (!unavailable && same && started < nextCheck) {
         return { url: url!, moved: false, restarted: false };
+      }
+      if (!same || unavailable) {
+        onVerify?.();
       }
       const backend = await credential.backend(check);
       let checked = await credential.current(backend, check);

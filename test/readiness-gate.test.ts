@@ -118,3 +118,47 @@ test("a held request sends nothing, not even the authorization header, to the li
   await failure(checkT3Target({ ...target, ready: () => open.ready() }));
   expect(seen[0]).toEqual({ path: "/api/auth/session", authorization: "Bearer must-not-leave" });
 });
+
+test("a request is sent only when the gate is checked open with nothing awaited before the send", async () => {
+  const dir = mkdtempSync(join(scratch, "gate-"));
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+  const authorizationFile = join(dir, "authorization");
+  writeFileSync(authorizationFile, "Bearer must-not-leave", { mode: 0o600 });
+  chmodSync(authorizationFile, 0o600);
+  const events: string[] = [];
+  const listener = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch() {
+      events.push("request");
+      return new Response(null, { status: 404 });
+    },
+  });
+  cleanups.push(() => listener.stop(true));
+  // `ready()` resolves, but the gate closes before the continuation runs, as when a backend move is detected.
+  let checks = 0;
+  const target: WakeTarget = {
+    type: "t3-v2-queue",
+    id: "thread-1",
+    url: `http://127.0.0.1:${listener.port}`,
+    authorizationFile,
+    ready: async () => {
+      events.push("ready");
+    },
+    isReady: () => {
+      const open = ++checks > 2;
+      events.push(open ? "open" : "closed");
+      return open;
+    },
+  };
+  await failure(checkT3Target(target));
+  expect(events.slice(0, 7)).toEqual([
+    "ready",
+    "closed",
+    "ready",
+    "closed",
+    "ready",
+    "open",
+    "request",
+  ]);
+});

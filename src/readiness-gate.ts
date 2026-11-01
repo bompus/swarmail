@@ -10,10 +10,16 @@ import { BridgeError } from "./wake-target.ts";
 export class ReadinessGate {
   #open = false;
   #closedAt: number | undefined;
+  #epoch = 0;
   readonly #waiting = new Set<() => void>();
 
   get isOpen(): boolean {
     return this.#open;
+  }
+
+  /** How many times the gate has closed. A delivery that spans a change knows the backend was unverified meanwhile. */
+  get epoch(): number {
+    return this.#epoch;
   }
 
   /** Holds requests from now on. Returns whether this changed the gate (it was open). */
@@ -23,6 +29,7 @@ export class ReadinessGate {
     }
     this.#open = false;
     this.#closedAt = now;
+    this.#epoch++;
     return true;
   }
 

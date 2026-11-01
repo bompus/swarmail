@@ -672,3 +672,26 @@ linuxTest(
     expect(await failure(service.renew(backend))).toBeInstanceOf(BridgeError);
   },
 );
+
+linuxTest(
+  "a published T3 process that has exited is unavailable at once, inside the cached window",
+  async () => {
+    const f = fixture();
+    quietWarnings();
+    fetchMock(f.response);
+    const verifying: string[] = [];
+    const poll = followT3Backend(f.path, f, undefined, 60_000, () => verifying.push("verify"));
+    expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
+    expect(verifying).toHaveLength(1); // A listener not seen before is verified, so the caller is told first.
+    expect(await poll()).toEqual({ url: f.url, moved: false, restarted: false });
+    expect(verifying).toHaveLength(1); // The cached result needs no verification.
+    const kill = spyOn(process, "kill").mockImplementation((() => {
+      throw Object.assign(new Error("no such process"), { code: "ESRCH" });
+    }) as typeof process.kill);
+    cleanup.push(() => kill.mockRestore());
+    expect(await poll()).toBeUndefined();
+    kill.mockRestore();
+    expect(await poll()).toEqual({ url: f.url, moved: false, restarted: false });
+    expect(verifying).toHaveLength(2); // Recovering from unavailable verifies again, with the caller told first.
+  },
+);

@@ -319,14 +319,20 @@ verified readiness stops the follower without renewal.
 While the follower has no verified backend, the automatic supervisor holds its
 bridges: each waits before any request that carries the T3 credential, so none
 is sent to a listener the supervisor has not verified and none reaches a T3 that
-is still starting. A held bridge keeps its journaled command, counts no retry and
-is not quarantined; it continues when the next poll verifies the backend, and
-bridges on a backend URL that moved are stopped and started on the new one first.
-The supervisor logs when it starts and ends a hold, with how long it lasted. With
-no listener at all the hold has no time limit. While the Swarmail core is not ready
-the supervisor does not poll the backend, so the hold keeps its last state. A request already in flight when the
-hold begins finishes, and a T3 that moves to a new port between two polls is seen
-only at the next poll.
+is still starting. The hold begins when the follower starts verifying a listener
+it has not verified before, or one that was unavailable, and when it finds none;
+it ends after bridges that are no longer wanted are stopped and new ones started
+(bridges on a backend URL that moved are stopped first). A held bridge keeps its
+journaled command, counts no retry and is not quarantined. A delivery that was
+held after it read the T3 projection reads it again before dispatching the same
+command. The supervisor logs when a hold starts and ends, with how long it
+lasted. With no listener at all the hold has no time limit, and while the
+Swarmail core is not ready the supervisor does not poll the backend, so the hold
+keeps its last state. A request already past the gate when a hold begins
+finishes. Between polls the supervisor trusts its last verification of an
+unchanged listener for up to a minute; it notices at once that the T3 process
+has exited, but a different process that takes the port of a T3 that is still
+running is seen at the next verification.
 It never enrolls a session, delivers mail, clears quarantine or changes a
 pending delivery journal. Consumers must adopt the module explicitly;
 installing swarmail does not restore a stopped reader.

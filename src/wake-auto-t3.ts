@@ -335,17 +335,23 @@ async function startBridge(
 ): Promise<Bridge | null> {
   const stop = new AbortController();
   const stopped = AbortSignal.any([signal, stop.signal]);
-  const target: WakeTarget = {
+  const verified: WakeTarget = {
     type: config.target.type,
     id,
     url,
     authorizationFile: config.target.authorizationFile,
     ...(config.target.delivery === "auto" ? { delivery: "auto" } : {}),
     // Every T3 request waits for the supervisor's verified backend, and for nothing once the bridge or supervisor stops.
+  };
+  const target: WakeTarget = {
+    ...verified,
     ready: () => gate.ready(stopped),
+    isReady: () => gate.isOpen,
+    epoch: () => gate.epoch,
   };
   try {
-    await checkT3Target(target);
+    // The follower has just verified this URL, so the preflight does not wait on the gate (it is still closed).
+    await checkT3Target(verified);
   } catch (error) {
     if (error instanceof TargetAuthenticationError) {
       throw error;
@@ -560,9 +566,16 @@ async function superviseBridges(
   const registry = registryDir();
   mkdirSync(registry, { recursive: true });
   const { baseDir } = config.rotation;
-  const follow = followT3Backend(path, { baseDir, url: config.target.url }, signal);
   // Bridges send T3 requests only while the supervisor has a verified backend; a pending command waits in its journal.
   const gate = new ReadinessGate();
+  const follow = followT3Backend(
+    path,
+    { baseDir, url: config.target.url },
+    signal,
+    undefined,
+    // A changed or recovering listener is unverified until the follower says otherwise: hold before it starts checking.
+    () => gate.close(),
+  );
   const reconcile = lifecycleReconciliation(config.swarmailUrl, signal);
   const t3State = heldT3State(config.rotation.baseDir);
   try {
@@ -602,10 +615,16 @@ async function superviseBridges(
       // Reconcile before backend discovery: app closure still matters while T3 restarts.
       let backend: Awaited<ReturnType<typeof follow>>;
       if (await reconcile()) {
+        const wasOpen = gate.isOpen;
         backend = await follow();
-        if (!backend && gate.close()) {
-          holdLogged = true;
-          console.error("swarmail wake-auto-t3: T3 backend unverified; holding bridge deliveries");
+        if (!backend) {
+          gate.close();
+          if (wasOpen) {
+            holdLogged = true;
+            console.error(
+              "swarmail wake-auto-t3: T3 backend unverified; holding bridge deliveries",
+            );
+          }
         }
       }
       if (!backend) {
@@ -620,20 +639,14 @@ async function superviseBridges(
         await quarantineFailed(bridges, quarantine);
         bridges.clear();
       }
-      // After the stop above, so no bridge still on the old URL is released.
-      const held = gate.open();
-      if (held !== undefined && holdLogged) {
-        holdLogged = false;
-        console.error(
-          `swarmail wake-auto-t3: T3 backend verified; bridge deliveries resumed after holding for ${Math.round(held / 1000)} s`,
-        );
-      }
       if (backend.restarted) {
         t3State.close(); // T3 restarted; read its database afresh.
       }
       if (due()) {
         wanted = scanT3Threads(config, registry, t3State);
       }
+      // Bridges stay held until the ones that are no longer wanted are stopped and the new ones started, so a thread
+      // that went away during the hold cannot send a request and be quarantined on its error.
       await reconcileBridges(
         bridges,
         wanted,
@@ -644,6 +657,13 @@ async function superviseBridges(
         failures,
         quarantine,
       );
+      const held = gate.open();
+      if (held !== undefined && holdLogged) {
+        holdLogged = false;
+        console.error(
+          `swarmail wake-auto-t3: T3 backend verified; bridge deliveries resumed after holding for ${Math.round(held / 1000)} s`,
+        );
+      }
       // Bridges run in this process, so each subscription names the supervisor.
       const subscriptions = Object.fromEntries(
         [...bridges]
