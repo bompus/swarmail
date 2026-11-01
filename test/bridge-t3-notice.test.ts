@@ -1032,6 +1032,33 @@ test("a saved dispatch is held, not sent, once the thread has a run that cannot 
   expect(f.received[0].text).toBe(saved.text);
 });
 
+test("a saved dispatch whose message T3 already holds is replayed unchanged even when its run cannot be steered", async () => {
+  const f = fixture();
+  const command = savedDispatch(f, 1);
+  const saved = { ...command.operation };
+  // T3 admits the dispatch and the thread starts a run on a provider that cannot take steering; the reply is lost.
+  f.lose();
+  await rejected(
+    f
+      .adapter()
+      .deliver(f.state.pending!, () => f.state.markAttempted(), new AbortController().signal),
+  );
+  expect(f.projection.messages.filter((message) => message.id === saved.messageId)).toHaveLength(1);
+  const turns = f.projection.providerSessions![0]!.capabilities.turns;
+  turns.supportsActiveSteering = false;
+  turns.supportsInterrupt = false;
+  turns.supportsSteeringByInterruptRestart = false;
+  // The replay carries the same command id, so T3 answers with its stored receipt and nothing is sent twice.
+  await f
+    .adapter()
+    .deliver(f.state.pending!, () => f.state.markAttempted(), new AbortController().signal);
+  expect(f.received.map((received) => received.commandId)).toEqual([
+    saved.commandId,
+    saved.commandId,
+  ]);
+  expect(f.projection.messages.filter((message) => message.id === saved.messageId)).toHaveLength(1);
+});
+
 test("a closed readiness gate holds a delivery without any request, then admits it exactly once", async () => {
   const f = fixture();
   const gate = new ReadinessGate();

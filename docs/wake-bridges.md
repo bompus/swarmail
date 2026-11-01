@@ -327,7 +327,9 @@ journaled command, counts no retry and is not quarantined. A delivery that was
 held after it read the T3 projection reads it again before dispatching the same
 command, and a saved `message.dispatch` is checked against that fresh projection
 too: if the thread has since become busy with a run that cannot be steered, the
-delivery waits and retries instead of sending a command T3 would reject. A
+delivery waits and retries instead of sending a command T3 would reject (a
+dispatch whose message T3 already holds is replayed unchanged for its stored
+receipt). A
 bridge that is stopped starts no further T3 request, even one whose wait on the
 gate had already finished. The supervisor logs when a hold starts and ends, with how long it
 lasted. With no listener at all the hold has no time limit, and while the

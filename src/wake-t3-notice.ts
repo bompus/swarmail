@@ -213,9 +213,14 @@ export function t3NoticeAdapter(
         }
         if (notice.operation) {
           const operation = notice.operation;
-          if (operation.type === "message.dispatch") {
+          if (
+            operation.type === "message.dispatch" &&
+            !projection.messages.some((message) => message.id === operation.messageId)
+          ) {
             // Prepared when the thread could take it; the thread may have become busy since, and a dispatch sent to a
-            // run that cannot be steered is rejected for good. Hold it, unchanged, until it can be sent.
+            // run that cannot be steered is rejected for good. Hold it, unchanged, until it can be sent. A dispatch
+            // whose message T3 already holds was admitted and only its reply was lost: the replay, with the same
+            // command id, gets T3's stored receipt, so it is not held.
             t3SteeringRun(projection);
           }
           try {
