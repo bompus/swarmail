@@ -345,9 +345,7 @@ async function startBridge(
   };
   const target: WakeTarget = {
     ...verified,
-    ready: () => gate.ready(stopped),
-    isReady: () => gate.isOpen,
-    epoch: () => gate.epoch,
+    ...gate.admission(stopped),
   };
   try {
     // The follower has just verified this URL, so the preflight does not wait on the gate (it is still closed).

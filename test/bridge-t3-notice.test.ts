@@ -978,6 +978,60 @@ for (const race of ["lost reply", "source started", "target ended"]) {
   });
 }
 
+/** A saved `message.dispatch` operation, prepared while the thread was idle, ready to replay. */
+function savedDispatch(f: ReturnType<typeof fixture>, eventId: number) {
+  const command = f.adapter().prepare({ eventId, hint: hint("repo-a") }) as Record<string, any>;
+  command.operation = {
+    type: "message.dispatch",
+    commandId: crypto.randomUUID(),
+    threadId: "thread-notice",
+    messageId: command.messageId,
+    text: "Swarmail: run swarmail inbox --session.",
+    attachments: [],
+    createdBy: "agent",
+    creationSource: "server",
+    deliveryIntent: "steer",
+    dispatchMode: { type: "start_immediately" },
+  };
+  f.state.savePending({ eventId, command: command as Pending["command"] });
+  return command;
+}
+
+test("a saved dispatch is held, not sent, once the thread has a run that cannot be steered", async () => {
+  const f = fixture();
+  const command = savedDispatch(f, 1);
+  const saved = { ...command.operation };
+  // The thread became busy after the dispatch was prepared, and its provider cannot take steering.
+  f.projection.messages.push({
+    id: "busy-message",
+    text: "work",
+    createdBy: "user",
+    creationSource: "web",
+  });
+  f.projection.runs.push({ id: "busy-run", userMessageId: "busy-message", status: "running" });
+  const turns = f.projection.providerSessions![0]!.capabilities.turns;
+  turns.supportsActiveSteering = false;
+  turns.supportsInterrupt = false;
+  turns.supportsSteeringByInterruptRestart = false;
+  const error = (await rejected(
+    f
+      .adapter()
+      .deliver(f.state.pending!, () => f.state.markAttempted(), new AbortController().signal),
+  )) as { retryable?: boolean; message: string };
+  expect(error.retryable).toBe(true);
+  expect(error.message).toContain("cannot accept steering");
+  expect(f.received).toEqual([]);
+  // Once steering is possible again, the same saved command is sent with its ids and payload unchanged.
+  turns.supportsActiveSteering = true;
+  await f
+    .adapter()
+    .deliver(f.state.pending!, () => f.state.markAttempted(), new AbortController().signal);
+  expect(f.received).toHaveLength(1);
+  expect(f.received[0].commandId).toBe(saved.commandId);
+  expect(f.received[0].messageId).toBe(saved.messageId);
+  expect(f.received[0].text).toBe(saved.text);
+});
+
 test("a closed readiness gate holds a delivery without any request, then admits it exactly once", async () => {
   const f = fixture();
   const gate = new ReadinessGate();

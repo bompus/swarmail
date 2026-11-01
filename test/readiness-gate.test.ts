@@ -68,11 +68,54 @@ test("an abort while the gate is closed rejects the wait as retryable and leaves
   gate.open();
   await waiting;
   expect(other).toBe(true);
-  // An already-aborted signal rejects at once while closed, and not once the gate is open.
+  // An already-aborted signal rejects at once, whether the gate is closed or open.
   const closed = new ReadinessGate();
   expect(await failure(closed.ready(AbortSignal.abort()))).toBeInstanceOf(BridgeError);
   closed.open();
-  await closed.ready(AbortSignal.abort());
+  const whenOpen = await failure(closed.ready(AbortSignal.abort()));
+  expect(whenOpen).toBeInstanceOf(BridgeError);
+  expect((whenOpen as BridgeError).retryable).toBe(true);
+});
+
+test("a bridge stopped between the readiness wait and the send starts no request", async () => {
+  const dir = mkdtempSync(join(scratch, "gate-"));
+  cleanups.push(() => rmSync(dir, { recursive: true, force: true }));
+  const authorizationFile = join(dir, "authorization");
+  writeFileSync(authorizationFile, "Bearer must-not-leave", { mode: 0o600 });
+  chmodSync(authorizationFile, 0o600);
+  const seen: string[] = [];
+  const listener = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(req) {
+      seen.push(new URL(req.url).pathname);
+      return new Response(null, { status: 404 });
+    },
+  });
+  cleanups.push(() => listener.stop(true));
+  const gate = new ReadinessGate();
+  gate.open();
+  const stop = new AbortController();
+  const admission = gate.admission(stop.signal);
+  // The stop lands after the wait resolved and before the request continues.
+  const target: WakeTarget = {
+    type: "t3-v2-queue",
+    id: "thread-1",
+    url: `http://127.0.0.1:${listener.port}`,
+    authorizationFile,
+    ...admission,
+    ready: async () => {
+      await admission.ready();
+      stop.abort();
+    },
+  };
+  const outcome = await Promise.race([
+    failure(checkT3Target(target)),
+    Bun.sleep(1500).then(() => new Error("the request kept waiting")),
+  ]);
+  expect(outcome).toBeInstanceOf(BridgeError);
+  expect((outcome as BridgeError).retryable).toBe(true);
+  expect(seen).toEqual([]);
 });
 
 test("a held request sends nothing, not even the authorization header, to the listener on the old address", async () => {

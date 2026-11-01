@@ -213,6 +213,11 @@ export function t3NoticeAdapter(
         }
         if (notice.operation) {
           const operation = notice.operation;
+          if (operation.type === "message.dispatch") {
+            // Prepared when the thread could take it; the thread may have become busy since, and a dispatch sent to a
+            // run that cannot be steered is rejected for good. Hold it, unchanged, until it can be sent.
+            t3SteeringRun(projection);
+          }
           try {
             await sendT3Command(target, operation, dispatchGuard);
           } catch (error) {
