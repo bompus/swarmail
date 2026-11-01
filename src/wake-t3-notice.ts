@@ -64,6 +64,24 @@ async function currentHints(
   );
 }
 
+/**
+ * A saved steering dispatch was prepared when the thread could take it. The thread may have become busy since, and a
+ * steering dispatch sent to a run that cannot be steered is rejected for good, which quarantines the bridge. Hold it,
+ * unchanged, until it can be sent. Other commands do not need steering. A dispatch whose message the projection
+ * already holds was admitted and only its reply was lost: the replay, with the same command id, gets T3's stored
+ * receipt, so it is not held. (The projection is T3's bounded history, so a message that has aged out of it looks
+ * unadmitted and waits until the thread can be steered or is idle; that costs a delay, not a rejection.)
+ */
+function recheckSteering(command: Record<string, unknown>, projection: T3ControlProjection) {
+  if (
+    command.type === "message.dispatch" &&
+    command.deliveryIntent === "steer" &&
+    !projection.messages.some((message) => message.id === command.messageId)
+  ) {
+    t3SteeringRun(projection);
+  }
+}
+
 function prepareOperation(
   notice: Notice,
   queued: ReturnType<typeof queuedNotices>,
@@ -205,6 +223,7 @@ export function t3NoticeAdapter(
         };
         if (pending.command.type !== "t3.notice") {
           // Keep a previously journaled command's id and payload across rollout.
+          recheckSteering(pending.command, projection);
           await t3V2Adapter.deliver(target, pending.command, attempted, signal, dispatchGuard);
           if (typeof pending.command.messageId === "string") {
             state.saveContext({ messageId: pending.command.messageId });
@@ -213,16 +232,7 @@ export function t3NoticeAdapter(
         }
         if (notice.operation) {
           const operation = notice.operation;
-          if (
-            operation.type === "message.dispatch" &&
-            !projection.messages.some((message) => message.id === operation.messageId)
-          ) {
-            // Prepared when the thread could take it; the thread may have become busy since, and a dispatch sent to a
-            // run that cannot be steered is rejected for good. Hold it, unchanged, until it can be sent. A dispatch
-            // whose message T3 already holds was admitted and only its reply was lost: the replay, with the same
-            // command id, gets T3's stored receipt, so it is not held.
-            t3SteeringRun(projection);
-          }
+          recheckSteering(operation, projection);
           try {
             await sendT3Command(target, operation, dispatchGuard);
           } catch (error) {
