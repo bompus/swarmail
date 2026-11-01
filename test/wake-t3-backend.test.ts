@@ -674,7 +674,7 @@ linuxTest(
 );
 
 linuxTest(
-  "the caller is told before a listener that is new or was unavailable is verified",
+  "the caller is told before a listener that is new or was unavailable is verified, and when it stays unavailable",
   async () => {
     const f = fixture();
     quietWarnings();
@@ -684,14 +684,36 @@ linuxTest(
     );
     const verifying: string[] = [];
     const poll = followT3Backend(f.path, f, undefined, 60_000, () => verifying.push("verify"));
-    expect(await poll()).toBeUndefined(); // A listener not seen before.
-    expect(verifying).toHaveLength(1);
-    expect(await poll()).toBeUndefined(); // Still unavailable.
+    // A listener not seen before: told when verification starts, and again when it fails.
+    expect(await poll()).toBeUndefined();
     expect(verifying).toHaveLength(2);
+    expect(await poll()).toBeUndefined(); // Still unavailable: the same two.
+    expect(verifying).toHaveLength(4);
     expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
-    expect(verifying).toHaveLength(3); // Recovering from unavailable verifies again.
+    expect(verifying).toHaveLength(5); // Recovering from unavailable is told when verification starts.
     expect(await poll()).toEqual({ url: f.url, moved: false, restarted: false });
-    expect(verifying).toHaveLength(3); // The cached result needs no verification.
+    expect(verifying).toHaveLength(5); // The cached result needs no verification.
     expect(fetch).toHaveBeenCalledTimes(3);
+  },
+);
+
+linuxTest(
+  "the caller is told before a poll resolves unavailable, for example on an unreadable runtime file",
+  async () => {
+    const f = fixture();
+    quietWarnings();
+    fetchMock(f.response);
+    const events: string[] = [];
+    const poll = followT3Backend(f.path, f, undefined, 60_000, () => events.push("held"));
+    expect(await poll()).toBeDefined();
+    events.length = 0;
+    // T3 rewriting its runtime file during a restart: unreadable, so unavailable, though the result was cached.
+    writeFileSync(join(f.baseDir, "userdata/server-runtime.json"), "{");
+    const result = poll().then((value) => {
+      events.push("resolved");
+      return value;
+    });
+    expect(await result).toBeUndefined();
+    expect(events).toEqual(["held", "resolved"]);
   },
 );
