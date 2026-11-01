@@ -325,7 +325,16 @@ it ends after bridges that are no longer wanted are stopped, before new ones are
 started and checked (bridges on a backend URL that moved are stopped first). A held bridge keeps its
 journaled command, counts no retry and is not quarantined. A delivery that was
 held after it read the T3 projection reads it again before dispatching the same
-command. The supervisor logs when a hold starts and ends, with how long it
+command, and a saved `message.dispatch` is checked against that fresh projection
+too, and so is a steering dispatch saved by an older journal: if the thread has
+since become busy with a run that cannot be steered, the delivery waits and
+retries instead of sending a command T3 would reject. A dispatch whose message T3
+already holds is replayed unchanged for its stored receipt, and one that queues
+instead of steering is never held for this reason. T3's bounded history can
+forget an old message, in which case its replay waits until the thread can be
+steered or is idle. A
+bridge that is stopped starts no further T3 request, even one whose wait on the
+gate had already finished. The supervisor logs when a hold starts and ends, with how long it
 lasted. With no listener at all the hold has no time limit, and while the
 Swarmail core is not ready the supervisor does not poll the backend, so the hold
 keeps its last state. A request already past the gate when a hold begins

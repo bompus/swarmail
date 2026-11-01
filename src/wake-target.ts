@@ -175,9 +175,13 @@ function headers(target: WakeTarget): Record<string, string> {
 }
 
 async function request(target: WakeTarget, path: string, body?: unknown): Promise<any> {
-  do {
+  for (;;) {
     await target.ready?.();
-  } while (held(target)); // The gate can close between its release and this continuation.
+    if (!held(target)) {
+      break; // The gate can close between its release and this continuation; then wait again.
+    }
+    await Bun.sleep(0); // A wait that resolves while the destination is unverified must not spin the event loop.
+  }
   let response: Response;
   let sent: Record<string, string>;
   try {
@@ -272,9 +276,13 @@ async function dispatchV2(
     throw new BridgeError("target did not issue a websocket ticket");
   }
   // The ticket opens a connection to the same destination, so it waits too.
-  do {
+  for (;;) {
     await target.ready?.();
-  } while (held(target));
+    if (!held(target)) {
+      break;
+    }
+    await Bun.sleep(0);
+  }
   const url = new URL(target.url);
   url.protocol = "ws:";
   url.pathname = "/ws";

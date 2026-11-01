@@ -8,6 +8,10 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   so no credential, until the supervisor has verified the T3 listener again. It keeps its journaled command meanwhile
   and is no longer quarantined by an error from a T3 that is still starting. The log says when a hold starts and how
   long it lasted.
+- A saved steering `message.dispatch` that `swarmail wake-auto-t3` replays after a delay or a restart is checked
+  against the thread's current state first. If the thread has become busy with a run that cannot be steered, the notice waits
+  and retries instead of being sent and rejected, which quarantined the thread. A bridge that is being stopped no
+  longer starts one more T3 request.
 
 ## 0.8.1 - 2026-11-01
 

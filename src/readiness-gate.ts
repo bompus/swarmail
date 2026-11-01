@@ -50,8 +50,26 @@ export class ReadinessGate {
     return held;
   }
 
-  /** Resolves when the gate is open. An abort ends the wait with a retryable error, as a stopping bridge expects. */
+  /**
+   * The `WakeTarget` fields that make a bridge's requests wait on this gate and stop with `signal`: `ready` waits,
+   * and `isReady` is the final check made with nothing awaited before a request is sent.
+   */
+  admission(signal: AbortSignal) {
+    return {
+      ready: () => this.ready(signal),
+      isReady: () => this.#open && !signal.aborted,
+      epoch: () => this.#epoch,
+    };
+  }
+
+  /**
+   * Resolves when the gate is open. An abort, including one already made while the gate is open, ends the wait with a
+   * retryable error, as a stopping bridge expects: it starts no further request.
+   */
   ready(signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) {
+      return Promise.reject(new BridgeError("T3 readiness wait cancelled", true));
+    }
     if (this.#open) {
       return Promise.resolve();
     }

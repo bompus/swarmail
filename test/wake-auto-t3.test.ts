@@ -1566,13 +1566,14 @@ test("automatic supervisor waits out a T3 restart and follows its new port", asy
   expect(log.match(/swarmail wake-auto-t3: received SIGTERM; stopping/g)).toHaveLength(1);
 }, 30000);
 
-test("automatic supervisor holds bridge deliveries while the new T3 is unverified, then restarts its bridges on the new port", async () => {
+/** The supervisor against fake T3 servers and a fake Swarmail server, with one T3 thread bridged. */
+async function restartHarness() {
   const f = fixture();
   const stateRoot = join(f.root, "state");
   const expiresAt = new Date(Date.now() + 86400000).toISOString();
   const seen = new Set();
-  let startingPort = 0;
-  let starting = false;
+  const requests: string[] = [];
+  const hold = { port: 0, starting: false };
   const t3 = () =>
     Bun.serve({
       hostname: "127.0.0.1",
@@ -1580,7 +1581,8 @@ test("automatic supervisor holds bridge deliveries while the new T3 is unverifie
       fetch(request) {
         const path = new URL(request.url).pathname;
         seen.add(`${this.port} ${path}`);
-        if (this.port === startingPort && starting) {
+        requests.push(`${this.port} ${request.method} ${path}`);
+        if (this.port === hold.port && hold.starting) {
           return new Response("starting", { status: 503 });
         }
         if (path === "/api/auth/session") {
@@ -1603,6 +1605,8 @@ test("automatic supervisor holds bridge deliveries while the new T3 is unverifie
       },
     });
   const waiting = new Set();
+  const offers = new Set<(response: Response) => void>();
+  let statusChecks = 0;
   const mail = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -1612,15 +1616,18 @@ test("automatic supervisor holds bridge deliveries while the new T3 is unverifie
         return Response.json({ status: "ready", changed: 0 });
       }
       if (path === "/wait/status") {
+        statusChecks++;
         return Response.json({ eligible: true });
       }
       const id = new URL(request.url).searchParams.get("session");
       waiting.add(id);
-      return new Promise((resolve) => {
+      return new Promise<Response>((resolve) => {
+        offers.add(resolve);
         request.signal.addEventListener(
           "abort",
           () => {
             waiting.delete(id);
+            offers.delete(resolve);
             resolve(new Response(null, { status: 204 }));
           },
           { once: true },
@@ -1628,6 +1635,18 @@ test("automatic supervisor holds bridge deliveries while the new T3 is unverifie
       });
     },
   });
+  /** Answers the bridges' mail waits with one unread-mail offer, as if mail had just arrived. */
+  const release = () => {
+    for (const resolve of [...offers]) {
+      resolve(
+        new Response(
+          "Swarmail: 1 new message for PortReceiver in /w/auto from GoldMoose. Call fetch_inbox to read it.\n",
+          { headers: { "x-swarmail-event-id": "1" } },
+        ),
+      );
+    }
+    offers.clear();
+  };
   const baseDir = join(f.root, ".t3");
   const config = {
     swarmailUrl: `http://127.0.0.1:${mail.port}`,
@@ -1690,7 +1709,13 @@ test("automatic supervisor holds bridge deliveries while the new T3 is unverifie
       stderr: "pipe",
     },
   );
-  const errors = new Response(child.stderr).text();
+  let log = "";
+  const errors = (async () => {
+    for await (const chunk of child.stderr) {
+      log += new TextDecoder().decode(chunk);
+    }
+    return log;
+  })();
   const until = async (predicate: () => unknown) => {
     const deadline = Date.now() + 15000;
     while (!predicate()) {
@@ -1703,6 +1728,27 @@ test("automatic supervisor holds bridge deliveries while the new T3 is unverifie
       await Bun.sleep(20);
     }
   };
+  return {
+    f,
+    seen,
+    requests,
+    waiting,
+    hold,
+    t3,
+    mail,
+    release,
+    statusChecks: () => statusChecks,
+    publish,
+    child,
+    errors,
+    log: () => log,
+    until,
+  };
+}
+
+test("automatic supervisor holds bridge deliveries while the new T3 is unverified, then restarts its bridges on the new port", async () => {
+  const { f, seen, waiting, hold, t3, mail, publish, child, errors, until } =
+    await restartHarness();
   const first = t3();
   let second: Bun.Server<undefined> | undefined;
   try {
@@ -1711,8 +1757,8 @@ test("automatic supervisor holds bridge deliveries while the new T3 is unverifie
     expect(seen.has(`${first.port} /api/orchestration/threads/thread-1`)).toBe(true);
     // T3 restarts on a new port and is still starting: its session check fails. The old port stays closed.
     second = t3();
-    startingPort = second.port!;
-    starting = true;
+    hold.port = second.port!;
+    hold.starting = true;
     publish(second);
     await first.stop(true);
     await until(() => seen.has(`${second!.port} /api/auth/session`));
@@ -1722,7 +1768,7 @@ test("automatic supervisor holds bridge deliveries while the new T3 is unverifie
       [...seen].filter((entry) => String(entry).startsWith(`${second!.port} /api/orchestration`)),
     ).toEqual([]);
     expect(child.exitCode).toBeNull();
-    starting = false;
+    hold.starting = false;
     await until(
       () => seen.has(`${second!.port} /api/orchestration/threads/thread-1`) && waiting.size === 1,
     );
@@ -1746,6 +1792,71 @@ test("automatic supervisor holds bridge deliveries while the new T3 is unverifie
     /swarmail wake-auto-t3: T3 backend verified; bridge deliveries resumed after holding for \d+ s/,
   );
   expect(log).not.toContain("quarantined");
+}, 40000);
+
+test("a mail offer released while T3 is unverified reaches no listener, and stopping while held is clean", async () => {
+  const {
+    f,
+    seen,
+    requests,
+    waiting,
+    hold,
+    t3,
+    mail,
+    release,
+    statusChecks,
+    publish,
+    child,
+    errors,
+    log,
+    until,
+  } = await restartHarness();
+  const first = t3();
+  let second: Bun.Server<undefined> | undefined;
+  try {
+    publish(first);
+    await until(() => waiting.has("thread-1"));
+    expect(seen.has(`${first.port} /api/orchestration/threads/thread-1`)).toBe(true);
+    // T3 restarts on a new port that is still starting. The old listener stays up and counts what it receives.
+    second = t3();
+    hold.port = second.port!;
+    hold.starting = true;
+    publish(second);
+    await until(() => log().includes("T3 backend unverified; holding bridge deliveries"));
+    const before = requests.length;
+    const checksBefore = statusChecks();
+    // Mail arrives during the hold: the bridge journals the notice and tries to deliver it.
+    release();
+    await until(() => statusChecks() > checksBefore);
+    await Bun.sleep(800);
+    const sent = requests
+      .slice(before)
+      .filter((request) => !request.endsWith("GET /api/auth/session"));
+    expect(sent).toEqual([]); // Neither the old nor the new listener got a bridge request.
+    expect(child.exitCode).toBeNull();
+    // Stop while the delivery is held: it ends at once, with the journaled notice kept for the next run.
+    child.kill("SIGTERM");
+    const stopped = await Promise.race([
+      child.exited,
+      Bun.sleep(3000).then(() => {
+        throw new Error("stopping while held timed out");
+      }),
+    ]);
+    expect(stopped).toBe(0);
+  } finally {
+    if (child.exitCode === null) {
+      child.kill("SIGTERM");
+    }
+    await child.exited;
+    await errors;
+    await mail.stop(true);
+    await first.stop(true);
+    await second?.stop(true);
+    f.close();
+  }
+  const text = await errors;
+  expect(text).not.toContain("quarantined");
+  expect(text).toContain("received SIGTERM; stopping");
 }, 40000);
 
 test("automatic scans repeat only after a T3 commit, a registry write, a reopen or the rescan interval", () => {
