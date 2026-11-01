@@ -5,9 +5,11 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 ## 0.8.1 - 2026-11-01
 
 - `swarmail wake-auto-t3` waits up to two minutes while T3 restarts, instead of exiting at once, when T3's session
-  check gets an HTTP error or, while it renews its credential, a refused or reset connection or no answer in time.
-  It logs each retry, verifies the T3 listener again on every poll and keeps reconciling meanwhile. An outage
-  longer than that still stops it with the same error and exit status 1.
+  check of the credential it already holds gets an HTTP error other than a 401 rejection or, while that
+  credential is being renewed, a refused or reset connection or no answer in time. It logs each retry, verifies
+  the T3 listener again on every poll and keeps reconciling meanwhile. An outage longer than that still stops it
+  with the same error and exit status 1. A rejected credential, and the check of a newly issued one, still fail
+  at once.
 
 ## 0.8.0 - 2026-10-30
 
