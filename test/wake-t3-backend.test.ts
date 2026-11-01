@@ -11,12 +11,12 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import * as credentialModule from "../src/wake-credentials.ts";
-import { credentialService, T3SessionTransportUnavailable } from "../src/wake-credentials.ts";
 import {
-  followT3Backend,
-  T3_SESSION_CHECK_RETRY_INTERVAL_MS,
-  T3_SESSION_CHECK_RETRY_MS,
-} from "../src/wake-t3-backend.ts";
+  credentialService,
+  T3SessionRetry,
+  T3SessionTransportUnavailable,
+} from "../src/wake-credentials.ts";
+import { followT3Backend, T3_SESSION_CHECK_RETRY_MS } from "../src/wake-t3-backend.ts";
 import { verifyT3Backend } from "../src/wake-backend.ts";
 import { BridgeError } from "../src/wake-target.ts";
 import { testScratch } from "./fixtures/test-scratch.ts";
@@ -525,7 +525,6 @@ linuxTest(
   },
 );
 
-const shortRetry = { windowMs: 300, intervalMs: 20 };
 const failure = (run: Promise<unknown>) =>
   run.then(
     () => undefined,
@@ -536,14 +535,15 @@ function quietWarnings() {
   cleanup.push(() => warn.mockRestore());
   return warn;
 }
+const retrying = (what: string) =>
+  new RegExp(`^T3 session check got ${what}; retrying \\(\\d+ s of \\d+ s\\)$`);
 
-linuxTest("the session check is retried for two minutes, every few seconds", () => {
+linuxTest("the session check is retried for two minutes", () => {
   expect(T3_SESSION_CHECK_RETRY_MS).toBe(120_000);
-  expect(T3_SESSION_CHECK_RETRY_INTERVAL_MS).toBe(5_000);
 });
 
 linuxTest(
-  "a T3 restart that answers 503 for less than the window is waited out, logging each retry",
+  "a T3 restart that answers 503 for less than the window is waited out, one logged poll at a time",
   async () => {
     const f = fixture();
     const before = f.snapshot();
@@ -552,12 +552,17 @@ linuxTest(
     const fetch = fetchMock(() =>
       ++calls <= 4 ? new Response("starting", { status: 503 }) : f.response(),
     );
-    const poll = followT3Backend(f.path, f, undefined, shortRetry);
+    const poll = followT3Backend(f.path, f, undefined, 60_000);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      expect(await poll()).toBeUndefined();
+    }
     expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
     expect(fetch).toHaveBeenCalledTimes(5);
     const retries = warn.mock.calls.map((call) => String(call[0]));
     expect(retries).toHaveLength(4);
-    expect(retries[0]).toMatch(/^T3 session check got HTTP 503; retrying \(\d+ s of \d+ s\)$/);
+    for (const line of retries) {
+      expect(line).toMatch(retrying("HTTP 503"));
+    }
     expect(f.cli).toEqual([]);
     expect(f.snapshot()).toEqual(before);
   },
@@ -568,15 +573,32 @@ linuxTest("a T3 that answers 503 past the window fails with the original error",
   const before = f.snapshot();
   quietWarnings();
   const fetch = fetchMock(() => new Response("down", { status: 503 }));
-  const poll = followT3Backend(f.path, f, undefined, shortRetry);
+  const poll = followT3Backend(f.path, f, undefined, 150);
   const started = performance.now();
-  const error = await failure(poll());
+  let error: Error | undefined;
+  while (!error && performance.now() - started < 5000) {
+    error = await failure(poll());
+    await Bun.sleep(20);
+  }
   expect(error).toBeInstanceOf(BridgeError);
   expect(error!.message).toBe("T3 session check failed; no credential issued");
-  expect(performance.now() - started).toBeGreaterThanOrEqual(shortRetry.windowMs);
-  expect(fetch.mock.calls.length).toBeGreaterThan(3);
+  expect(performance.now() - started).toBeGreaterThanOrEqual(150);
+  expect(fetch.mock.calls.length).toBeGreaterThan(2);
   expect(f.cli).toEqual([]);
   expect(f.snapshot()).toEqual(before);
+});
+
+linuxTest("the listener is verified again before each retry sends the token", async () => {
+  const f = fixture();
+  quietWarnings();
+  const fetch = fetchMock(() => new Response("starting", { status: 503 }));
+  const poll = followT3Backend(f.path, f, undefined, 60_000);
+  expect(await poll()).toBeUndefined();
+  expect(fetch).toHaveBeenCalledTimes(1);
+  // A published pid that does not own the socket is listener absence: no request, no token.
+  f.publish(process.pid + 1000000);
+  expect(await poll()).toBeUndefined();
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
 
 linuxTest("a rejected credential (401) is not retried", async () => {
@@ -585,47 +607,47 @@ linuxTest("a rejected credential (401) is not retried", async () => {
   const service = credentialService(f.path);
   const backend = await service.backend();
   const fetch = fetchMock(() => new Response("no", { status: 401 }));
-  expect(await service.current(backend, { retry: shortRetry })).toBeUndefined();
+  expect(await service.current(backend, { retry: true })).toBeUndefined();
   expect(fetch).toHaveBeenCalledTimes(1);
   expect(warn).not.toHaveBeenCalled();
 });
 
 linuxTest(
-  "renewal's own session check waits out a refused connection inside the window and fails after it",
+  "renewal's pre-issue session check asks to be retried only when the caller opts in",
   async () => {
     const f = fixture();
     const before = f.snapshot();
-    const warn = quietWarnings();
     const service = credentialService(f.path);
     const backend = await service.backend();
-    let calls = 0;
-    const fetch = fetchMock(() =>
-      ++calls <= 3 ? Promise.reject(transport("ConnectionRefused")) : f.response(),
+    const fetch = fetchMock(() => Promise.reject(transport("ConnectionRefused")));
+    const retry = await failure(service.renew(backend, false, { retry: true }));
+    expect(retry).toBeInstanceOf(T3SessionRetry);
+    expect(retry!.message).toBe("T3 session check got a refused connection; retrying");
+    fetch.mockImplementation(() => new Response("starting", { status: 503 }));
+    expect(await failure(service.renew(backend, false, { retry: true }))).toBeInstanceOf(
+      T3SessionRetry,
     );
-    const renewed = await service.renew(backend, false, { retry: shortRetry });
-    expect(renewed.status).toBe("current");
-    expect(fetch).toHaveBeenCalledTimes(4);
-    expect(String(warn.mock.calls[0]![0])).toMatch(
-      /^T3 session check got a refused connection; retrying \(\d+ s of \d+ s\)$/,
-    );
-    fetch.mockImplementation(() => Promise.reject(transport("ConnectionRefused")));
-    expect(await failure(service.renew(backend, false, { retry: shortRetry }))).toBeInstanceOf(
-      BridgeError,
-    );
-    // Without a retry window the check still fails at once, as `wake-credentials` runs it.
-    fetch.mockClear();
-    expect(await failure(service.renew(backend))).toBeInstanceOf(BridgeError);
-    expect(fetch).toHaveBeenCalledTimes(1);
+    // Without the opt-in, as `wake-credentials` runs it, both fail at once with a BridgeError.
+    for (const answer of [
+      () => Promise.reject(transport("ConnectionRefused")),
+      () => new Response("starting", { status: 503 }),
+    ]) {
+      fetch.mockImplementation(answer);
+      const error = await failure(service.renew(backend));
+      expect(error).toBeInstanceOf(BridgeError);
+      expect(error).not.toBeInstanceOf(T3SessionRetry);
+    }
+    fetch.mockImplementation(f.response);
+    expect((await service.renew(backend, false, { retry: true })).status).toBe("current");
     expect(f.cli).toEqual([]);
     expect(f.snapshot()).toEqual(before);
   },
 );
 
 linuxTest(
-  "a response body that stalls past the request timeout is waited out in renewal too",
+  "a response body that stalls past the request timeout is retried in renewal",
   async () => {
     const f = fixture();
-    const warn = quietWarnings();
     const service = credentialService(f.path);
     const backend = await service.backend();
     let timer = new AbortController();
@@ -634,25 +656,17 @@ linuxTest(
       return timer.signal;
     });
     cleanup.push(() => timeout.mockRestore());
-    let calls = 0;
-    const fetch = fetchMock(() => {
-      if (++calls > 2) {
-        return f.response();
-      }
-      return Object.assign(new Response("{}"), {
+    fetchMock(() =>
+      Object.assign(new Response("{}"), {
         json: () => {
           timer.abort(new DOMException("synthetic", "TimeoutError"));
           return Promise.reject(new DOMException("synthetic", "TimeoutError"));
         },
-      });
-    });
-    expect((await service.renew(backend, false, { retry: shortRetry })).status).toBe("current");
-    expect(fetch).toHaveBeenCalledTimes(3);
-    expect(String(warn.mock.calls[0]![0])).toMatch(
-      /^T3 session check got no answer in time; retrying/,
+      }),
     );
-    // Without a retry window the stall stays fatal.
-    calls = 0;
+    const retry = await failure(service.renew(backend, false, { retry: true }));
+    expect(retry).toBeInstanceOf(T3SessionRetry);
+    expect(retry!.message).toBe("T3 session check got no answer in time; retrying");
     expect(await failure(service.renew(backend))).toBeInstanceOf(BridgeError);
   },
 );

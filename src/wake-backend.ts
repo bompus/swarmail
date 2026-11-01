@@ -25,10 +25,11 @@ export interface BackendCheck {
   signal?: AbortSignal;
   deadline?: number;
   /**
-   * Opt in to waiting out a T3 that is restarting: a session check that gets an HTTP error or a measured
-   * connection failure repeats every `intervalMs` until `windowMs` has passed, then fails as it would without it.
+   * Opt in to waiting out a restarting T3: a session check that gets an HTTP error, or in the locked renewal path a
+   * measured connection failure, throws `T3SessionRetry` instead of failing. The caller polls again and decides when
+   * to give up.
    */
-  retry?: { windowMs: number; intervalMs: number };
+  retry?: boolean;
 }
 
 /** Never include a caller-supplied abort reason in a diagnostic. */

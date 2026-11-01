@@ -5,24 +5,29 @@ import {
   T3Unavailable,
   type BackendCheck,
 } from "./wake-backend.ts";
-import { credentialService, T3SessionTransportUnavailable } from "./wake-credentials.ts";
+import {
+  credentialService,
+  T3SessionRetry,
+  T3SessionTransportUnavailable,
+} from "./wake-credentials.ts";
 import { BridgeError } from "./wake-target.ts";
 
 const backendCheckBudgetMs = 5 * 60_000;
 
 /**
- * How long a session check that gets an HTTP error or a refused connection keeps trying before the supervisor exits.
- * A T3 restart (a nightly update) answers with errors for several seconds; an outage longer than this still fails.
+ * How long a session check that gets an HTTP error or a refused connection keeps being retried, one poll at a time,
+ * before the supervisor exits. A T3 restart (a nightly update) answers with errors for several seconds; an outage
+ * longer than this still fails. Each poll verifies the T3 listener again, and the supervisor does its other work
+ * between polls.
  */
 export const T3_SESSION_CHECK_RETRY_MS = 2 * 60_000;
-export const T3_SESSION_CHECK_RETRY_INTERVAL_MS = 5_000;
 
 /** Poll at the consumer's cadence until ready; only individual checks have a deadline. */
 export function followT3Backend(
   path: string,
   location: { baseDir: string; url?: string },
   signal?: AbortSignal,
-  retry = { windowMs: T3_SESSION_CHECK_RETRY_MS, intervalMs: T3_SESSION_CHECK_RETRY_INTERVAL_MS },
+  retryWindowMs = T3_SESSION_CHECK_RETRY_MS,
 ) {
   const credential = credentialService(path);
   let url: string | undefined;
@@ -30,9 +35,10 @@ export function followT3Backend(
   let nextCheck = 0;
   let unavailable = false;
   let transportOutage = false;
+  let retrySince: number | undefined;
   return async () => {
     const started = performance.now();
-    const check: BackendCheck = { signal, deadline: started + backendCheckBudgetMs, retry };
+    const check: BackendCheck = { signal, deadline: started + backendCheckBudgetMs, retry: true };
     checkBackendOperation(check);
     try {
       const runtime = readT3Runtime(location.baseDir);
@@ -62,6 +68,7 @@ export function followT3Backend(
       nextCheck = performance.now() + 60_000;
       unavailable = false; // Only verified readiness closes an outage.
       transportOutage = false;
+      retrySince = undefined;
       return { url, moved, restarted };
     } catch (error) {
       checkBackendOperation(check);
@@ -70,6 +77,18 @@ export function followT3Backend(
           throw error;
         }
         throw new BridgeError("T3 backend check failed; reconcile configuration and owned state");
+      }
+      if (error instanceof T3SessionRetry) {
+        // Poll again: the listener is verified again first, and the supervisor's other work runs between polls.
+        const waited = performance.now() - (retrySince ??= performance.now());
+        if (waited >= retryWindowMs) {
+          return error.giveUp();
+        }
+        console.warn(
+          `${error.message} (${Math.round(waited / 1000)} s of ${Math.round(retryWindowMs / 1000)} s)`,
+        );
+        unavailable = true;
+        return undefined;
       }
       // Eligibility is established by a clean session check, not listener absence.
       if (error instanceof T3SessionTransportUnavailable) {

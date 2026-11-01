@@ -23,7 +23,6 @@ import {
   T3Unavailable,
   type BackendCheck,
 } from "./wake-backend.ts";
-import { pause } from "./wake-loop.ts";
 import { sameBinding } from "./wake-state.ts";
 
 interface Credential {
@@ -211,14 +210,19 @@ export class T3SessionTransportUnavailable extends T3Unavailable {
   }
 }
 
-/** A session check that failed in a way worth repeating while T3 restarts; `giveUp` raises the error to use when it stops. */
-class SessionRetry extends Error {
+/**
+ * A session check that failed the way a restarting T3 does, raised only for a caller that asked to wait it out
+ * (`check.retry`). The caller polls again, which verifies the listener again, and calls `giveUp` for the error to
+ * raise once it has waited long enough.
+ */
+export class T3SessionRetry extends T3Unavailable {
   readonly what: string;
   readonly giveUp: () => never;
   constructor(what: string, giveUp: () => never) {
-    super(`T3 session check got ${what}`);
+    super();
     this.what = what;
     this.giveUp = giveUp;
+    this.message = `T3 session check got ${what}; retrying`;
   }
 }
 
@@ -228,36 +232,6 @@ async function sessionCheck(
   credential: Credential,
   check: BackendCheck = {},
   retryTransport = false,
-): Promise<boolean> {
-  const started = performance.now();
-  const waitSignal = check.signal ?? new AbortController().signal;
-  for (;;) {
-    try {
-      return await sessionRequest(url, value, credential, check, retryTransport);
-    } catch (error) {
-      const { retry } = check;
-      if (!(error instanceof SessionRetry) || !retry) {
-        throw error;
-      }
-      const elapsed = performance.now() - started;
-      if (elapsed >= retry.windowMs) {
-        return error.giveUp();
-      }
-      console.warn(
-        `T3 session check got ${error.what}; retrying (${Math.round(elapsed / 1000)} s of ${Math.round(retry.windowMs / 1000)} s)`,
-      );
-      await pause(retry.intervalMs, waitSignal);
-      checkBackendOperation(check);
-    }
-  }
-}
-
-async function sessionRequest(
-  url: string,
-  value: string,
-  credential: Credential,
-  check: BackendCheck,
-  retryTransport: boolean,
 ): Promise<boolean> {
   const timeout = AbortSignal.timeout(backendTimeout(15000, check));
   const signal = check.signal ? AbortSignal.any([check.signal, timeout]) : timeout;
@@ -282,7 +256,7 @@ async function sessionRequest(
       throw new T3SessionTransportUnavailable(reason);
     }
     if (reason && check.retry) {
-      throw new SessionRetry(
+      throw new T3SessionRetry(
         reason === "refused"
           ? "a refused connection"
           : reason === "reset"
@@ -300,7 +274,7 @@ async function sessionRequest(
   if (!response.ok) {
     const failed = () => fail("T3 session check failed; no credential issued");
     if (check.retry) {
-      throw new SessionRetry(`HTTP ${response.status}`, failed);
+      throw new T3SessionRetry(`HTTP ${response.status}`, failed);
     }
     failed();
   }
@@ -319,7 +293,7 @@ async function sessionRequest(
         throw new T3SessionTransportUnavailable("timeout");
       }
       if (check.retry) {
-        throw new SessionRetry("no answer in time", () => sanitized(error));
+        throw new T3SessionRetry("no answer in time", () => sanitized(error));
       }
     }
     return sanitized(error); // Malformed JSON and interrupted bodies remain fatal.
@@ -372,8 +346,10 @@ function t3Client(config: Config, control: BackendCheck = {}) {
   const revoke = async (id: string) => {
     await cli(["revoke", id]);
   };
-  const check = (value: string, credential: Credential) =>
-    sessionCheck(url, value, credential, control);
+  // Waiting out a restarting T3 is only safe before a credential is issued; a candidate that cannot be checked
+  // follows the recovery path instead, so only the pre-issue check passes `wait`.
+  const check = (value: string, credential: Credential, wait = false) =>
+    sessionCheck(url, value, credential, wait ? control : { ...control, retry: false });
   return { cli, header, revoke, check };
 }
 
@@ -462,7 +438,7 @@ async function rotate(
   }
   if (state.current && Date.parse(state.current.expiresAt) > Date.now()) {
     if (
-      !(await check(existing!, state.current)) &&
+      !(await check(existing!, state.current, true)) &&
       Date.parse(state.current.expiresAt) > Date.now()
     ) {
       state.disabled = true;

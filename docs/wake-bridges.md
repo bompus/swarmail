@@ -305,9 +305,12 @@ bridges when the backend URL changes. It retains quarantines and pending command
 identities throughout the wait and reconnect.
 
 A session check that gets an HTTP error (a T3 that is starting answers with one),
-or, in the locked renewal path, a refused, reset or timed-out connection, is repeated
-every five seconds for two minutes and then stops the follower with the original
-error. Credential rejection, redirects, malformed responses and identity
+or, in the locked renewal path before a credential is issued, a refused, reset or
+timed-out connection, is not fatal at first. The follower returns `undefined` and
+logs the retry, so the supervisor keeps reconciling and persisting quarantines;
+every poll verifies the T3 listener again before the credential is sent. After
+two minutes of such failures the next failing poll stops the follower with the
+original error. Credential rejection, redirects, malformed responses and identity
 mismatches remain fatal at once. Missing or due credentials and unfinished rotation
 state use the existing locked renewal path when no eligible session transport
 retry has occurred. Listener absence alone does not disable that path. Once a
