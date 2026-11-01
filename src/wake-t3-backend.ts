@@ -28,6 +28,11 @@ export function followT3Backend(
   location: { baseDir: string; url?: string },
   signal?: AbortSignal,
   retryWindowMs = T3_SESSION_CHECK_RETRY_MS,
+  /**
+   * Called, with nothing awaited since the follower found out, when it starts verifying a listener that is new or was
+   * unavailable and when it finds the backend unavailable, so a caller can hold its requests before the poll resolves.
+   */
+  onVerify?: () => void,
 ) {
   const credential = credentialService(path);
   let url: string | undefined;
@@ -46,6 +51,9 @@ export function followT3Backend(
       const same = url !== undefined && listener === published;
       if (!unavailable && same && started < nextCheck) {
         return { url: url!, moved: false, restarted: false };
+      }
+      if (!same || unavailable) {
+        onVerify?.();
       }
       const backend = await credential.backend(check);
       let checked = await credential.current(backend, check);
@@ -78,6 +86,7 @@ export function followT3Backend(
         }
         throw new BridgeError("T3 backend check failed; reconcile configuration and owned state");
       }
+      onVerify?.(); // Any unavailable result holds the caller's requests before this poll resolves.
       if (error instanceof T3SessionRetry) {
         // Poll again: the listener is verified again first, and the supervisor's other work runs between polls.
         const waited = performance.now() - (retrySince ??= performance.now());

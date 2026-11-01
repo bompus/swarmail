@@ -2,6 +2,13 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## Unreleased
+
+- `swarmail wake-auto-t3` holds its bridges while it has no verified T3 backend. A bridge sends no T3 request, and
+  so no credential, until the supervisor has verified the T3 listener again. It keeps its journaled command meanwhile
+  and is no longer quarantined by an error from a T3 that is still starting. The log says when a hold starts and how
+  long it lasted.
+
 ## 0.8.1 - 2026-11-01
 
 - `swarmail wake-auto-t3` waits up to two minutes while T3 restarts, instead of exiting at once, when T3's session

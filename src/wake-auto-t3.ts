@@ -28,6 +28,7 @@ import {
 import { sessionTag, withDetailsOf } from "./tag.ts";
 import { openWakeState } from "./wake-state.ts";
 import { bridgeBinding, runBridge } from "./wake-bridge.ts";
+import { ReadinessGate } from "./readiness-gate.ts";
 import { followT3Backend } from "./wake-t3-backend.ts";
 import { pause } from "./wake-loop.ts";
 import { SESSION_RE } from "./wake.ts";
@@ -330,16 +331,27 @@ async function startBridge(
   url: string,
   id: string,
   signal: AbortSignal,
+  gate: ReadinessGate,
 ): Promise<Bridge | null> {
-  const target: WakeTarget = {
+  const stop = new AbortController();
+  const stopped = AbortSignal.any([signal, stop.signal]);
+  const verified: WakeTarget = {
     type: config.target.type,
     id,
     url,
     authorizationFile: config.target.authorizationFile,
     ...(config.target.delivery === "auto" ? { delivery: "auto" } : {}),
+    // Every T3 request waits for the supervisor's verified backend, and for nothing once the bridge or supervisor stops.
+  };
+  const target: WakeTarget = {
+    ...verified,
+    ready: () => gate.ready(stopped),
+    isReady: () => gate.isOpen,
+    epoch: () => gate.epoch,
   };
   try {
-    await checkT3Target(target);
+    // The follower has just verified this URL, so the preflight does not wait on the gate (it is still closed).
+    await checkT3Target(verified);
   } catch (error) {
     if (error instanceof TargetAuthenticationError) {
       throw error;
@@ -366,7 +378,6 @@ async function startBridge(
       state.close();
     }
   };
-  const stop = new AbortController();
   const bridge: Bridge = { stop, close, done: Promise.resolve() };
   const label = `swarmail wake-auto-t3: thread ${id}`;
   bridge.done = runBridge({ swarmailUrl: config.swarmailUrl, target }, state, stop, label)
@@ -426,6 +437,8 @@ async function reconcileBridges(
   start: (id: string) => Promise<Bridge | null>,
   failures: Map<string, string>,
   quarantine: (id: string, reason: string) => void,
+  /** Runs once the bridges that are no longer wanted are stopped, before any new one starts. */
+  afterStops: () => void = () => {},
 ) {
   await quarantineFailed(bridges, quarantine);
   for (const [id, bridge] of bridges) {
@@ -436,6 +449,7 @@ async function reconcileBridges(
       bridges.delete(id);
     }
   }
+  afterStops();
   for (const id of wanted) {
     if (!bridges.has(id) && !failures.has(id)) {
       try {
@@ -555,7 +569,16 @@ async function superviseBridges(
   const registry = registryDir();
   mkdirSync(registry, { recursive: true });
   const { baseDir } = config.rotation;
-  const follow = followT3Backend(path, { baseDir, url: config.target.url }, signal);
+  // Bridges send T3 requests only while the supervisor has a verified backend; a pending command waits in its journal.
+  const gate = new ReadinessGate();
+  const follow = followT3Backend(
+    path,
+    { baseDir, url: config.target.url },
+    signal,
+    undefined,
+    // A changed or recovering listener is unverified until the follower says otherwise: hold before it starts checking.
+    () => gate.close(),
+  );
   const reconcile = lifecycleReconciliation(config.swarmailUrl, signal);
   const t3State = heldT3State(config.rotation.baseDir);
   try {
@@ -587,18 +610,34 @@ async function superviseBridges(
         `swarmail wake-auto-t3: bridge ${id} quarantined: ${reason}; inspect its retained journal before retry`,
       );
     };
+    let holdLogged = false;
     let wanted = new Set<string>();
     const due = rescanDue(t3State, registry);
     while (!signal.aborted) {
       await quarantineFailed(bridges, quarantine);
       // Reconcile before backend discovery: app closure still matters while T3 restarts.
-      const backend = (await reconcile()) ? await follow() : undefined;
+      let backend: Awaited<ReturnType<typeof follow>>;
+      if (await reconcile()) {
+        const wasOpen = gate.isOpen;
+        backend = await follow();
+        if (!backend) {
+          gate.close();
+          if (wasOpen) {
+            holdLogged = true;
+            console.error(
+              "swarmail wake-auto-t3: T3 backend unverified; holding bridge deliveries",
+            );
+          }
+        }
+      }
       if (!backend) {
         await pause(2000, signal);
         continue;
       }
       if (backend.moved) {
-        // Bridges keep the URL they started with; restart them on the new port.
+        // Bridges keep the URL they started with; restart them on the new port. Hold them first: a bridge draining
+        // its last delivery would otherwise keep sending requests, and the credential, to the old address.
+        gate.close();
         await Promise.all([...bridges.values()].map(stopBridge));
         await quarantineFailed(bridges, quarantine);
         bridges.clear();
@@ -609,13 +648,27 @@ async function superviseBridges(
       if (due()) {
         wanted = scanT3Threads(config, registry, t3State);
       }
+      // Bridges stay held until the ones that are no longer wanted are stopped, so a thread that went away during the
+      // hold cannot send a request and be quarantined on its error. Starting new bridges (each preflighted) does not
+      // keep the healthy ones waiting.
       await reconcileBridges(
         bridges,
         wanted,
         (id) =>
-          signal.aborted ? Promise.resolve(null) : startBridge(config, backend.url, id, signal),
+          signal.aborted
+            ? Promise.resolve(null)
+            : startBridge(config, backend.url, id, signal, gate),
         failures,
         quarantine,
+        () => {
+          const held = gate.open();
+          if (held !== undefined && holdLogged) {
+            holdLogged = false;
+            console.error(
+              `swarmail wake-auto-t3: T3 backend verified; bridge deliveries resumed after holding for ${Math.round(held / 1000)} s`,
+            );
+          }
+        },
       );
       // Bridges run in this process, so each subscription names the supervisor.
       const subscriptions = Object.fromEntries(

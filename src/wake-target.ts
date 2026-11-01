@@ -9,7 +9,16 @@ export interface WakeTarget {
   id: string;
   authorizationFile: string;
   delivery?: "auto";
+  /** Resolves when the destination is verified; each request waits on it. Absent for a bridge that verifies nothing. */
+  ready?: () => Promise<void>;
+  /** Whether the destination is verified right now. Checked with no await before a request is sent. */
+  isReady?: () => boolean;
+  /** Changes whenever the destination stops being verified; a delivery compares it to see it was held. */
+  epoch?: () => number;
 }
+
+/** True when the destination was unverified again after `ready()` resolved. Evaluated in the caller, with no await between it and the send. */
+const held = (target: WakeTarget) => target.isReady?.() === false;
 
 export class BridgeError extends Error {
   readonly retryable: boolean;
@@ -166,6 +175,9 @@ function headers(target: WakeTarget): Record<string, string> {
 }
 
 async function request(target: WakeTarget, path: string, body?: unknown): Promise<any> {
+  do {
+    await target.ready?.();
+  } while (held(target)); // The gate can close between its release and this continuation.
   let response: Response;
   let sent: Record<string, string>;
   try {
@@ -259,6 +271,10 @@ async function dispatchV2(
   if (typeof ticket?.ticket !== "string") {
     throw new BridgeError("target did not issue a websocket ticket");
   }
+  // The ticket opens a connection to the same destination, so it waits too.
+  do {
+    await target.ready?.();
+  } while (held(target));
   const url = new URL(target.url);
   url.protocol = "ws:";
   url.pathname = "/ws";
