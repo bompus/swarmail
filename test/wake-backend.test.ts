@@ -2,7 +2,7 @@ import { afterEach, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import * as fs from "node:fs";
 import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   discoverT3Backend,
   T3IdentityPending,
@@ -233,9 +233,35 @@ test.skipIf(process.platform !== "linux")(
     );
     cleanups.pop()!();
     cleanups.pop()!();
-    // A descriptor that proves the database is open outweighs an error on any other descriptor, in either scan order.
+    // A descriptor that proves the database is open outweighs an inspection error on any other descriptor, whether
+    // that descriptor is scanned before the database's or after it.
     t3.hold();
-    expect(await verifyT3Backend(t3.config)).toBe(realpathSync(process.execPath));
+    const dir = `/proc/${process.pid}/fd`;
+    const databaseFd = Number(
+      fs.readdirSync(dir).find((fd) => {
+        try {
+          return basename(readlink(join(dir, fd))) === basename(t3.path);
+        } catch {
+          return false;
+        }
+      }),
+    );
+    expect(databaseFd).toBeGreaterThan(0);
+    for (const failing of [(fd: number) => fd < databaseFd, (fd: number) => fd > databaseFd]) {
+      let failed = 0;
+      const spy = spyOn(fs, "readlinkSync").mockImplementation(((path: string, ...rest: any[]) => {
+        if (String(path).startsWith(`${dir}/`) && failing(Number(basename(String(path))))) {
+          failed++;
+          throw Object.assign(new Error("EIO"), { code: "EIO" });
+        }
+        return (readlink as any)(path, ...rest);
+      }) as typeof fs.readlinkSync);
+      cleanups.push(() => spy.mockRestore());
+      expect(await verifyT3Backend(t3.config)).toBe(realpathSync(process.execPath));
+      // Before the database descriptor the error is raised and outweighed; after it the scan has already stopped.
+      expect(failed > 0).toBe(failing(databaseFd - 1));
+      cleanups.pop()!();
+    }
   },
 );
 
