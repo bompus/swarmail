@@ -16,7 +16,7 @@ import {
   T3SessionRetry,
   T3SessionTransportUnavailable,
 } from "../src/wake-credentials.ts";
-import { followT3Backend, T3_SESSION_CHECK_RETRY_MS } from "../src/wake-t3-backend.ts";
+import { followT3Backend, T3_RESTART_WAIT_MS } from "../src/wake-t3-backend.ts";
 import { verifyT3Backend } from "../src/wake-backend.ts";
 import { BridgeError } from "../src/wake-target.ts";
 import { testScratch } from "./fixtures/test-scratch.ts";
@@ -113,6 +113,8 @@ function fixture() {
     headerPath,
     rotation,
     server,
+    database,
+    databasePath: join(baseDir, "userdata/statev2.sqlite"),
   };
 }
 
@@ -539,7 +541,7 @@ const retrying = (what: string) =>
   new RegExp(`^T3 session check got ${what}; retrying \\(\\d+ s of \\d+ s\\)$`);
 
 linuxTest("the session check is retried for two minutes", () => {
-  expect(T3_SESSION_CHECK_RETRY_MS).toBe(120_000);
+  expect(T3_RESTART_WAIT_MS).toBe(120_000);
 });
 
 linuxTest(
@@ -717,3 +719,170 @@ linuxTest(
     expect(events).toEqual(["held", "resolved"]);
   },
 );
+
+/** T3 as it is while it updates: the listener is up, but it has not opened its database yet. */
+function mimicUpdate(f: ReturnType<typeof fixture>) {
+  f.database.close();
+  return () => {
+    const reopened = new Database(f.databasePath);
+    cleanup.push(() => reopened.close());
+    return reopened;
+  };
+}
+
+linuxTest(
+  "a T3 mid-update whose identity cannot be verified yet is waited out with the gate closed, then resumes",
+  async () => {
+    const f = fixture();
+    const warn = quietWarnings();
+    const fetch = fetchMock(f.response);
+    const before = f.snapshot();
+    const finishUpdate = mimicUpdate(f);
+    const told: string[] = [];
+    const poll = followT3Backend(f.path, f, undefined, 60_000, () => told.push("held"));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      expect(await poll()).toBeUndefined();
+    }
+    expect(told.length).toBeGreaterThanOrEqual(3); // Told before every poll that could not verify.
+    expect(fetch).not.toHaveBeenCalled(); // No credential request while the identity is pending.
+    const lines = warn.mock.calls.map((call) => String(call[0]));
+    expect(lines.filter((line) => line.includes("identity"))).toHaveLength(1); // One line when the wait starts.
+    finishUpdate();
+    expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
+    expect(f.cli).toEqual([]);
+    expect(f.snapshot()).toEqual(before);
+  },
+);
+
+linuxTest(
+  "an identity that stays unverifiable past the window exits as it did before",
+  async () => {
+    const f = fixture();
+    quietWarnings();
+    fetchMock(f.response);
+    mimicUpdate(f);
+    let now = performance.now();
+    const clock = spyOn(performance, "now").mockImplementation(() => now);
+    cleanup.push(() => clock.mockRestore());
+    const poll = followT3Backend(f.path, f, undefined, 150);
+    expect(await poll()).toBeUndefined(); // The first failure starts the window.
+    now += 100;
+    expect(await poll()).toBeUndefined();
+    now += 100;
+    const error = await failure(poll());
+    expect(error).toBeInstanceOf(BridgeError);
+    expect((error as BridgeError).retryable).toBe(false);
+    expect(error!.message).toContain(
+      "T3 backend identity unavailable or differs from configuration",
+    );
+    expect(error!.message).toContain("stop the timer and reconcile");
+  },
+);
+
+linuxTest("a verified different identity exits at once, with no wait", async () => {
+  const f = fixture();
+  const warn = quietWarnings();
+  fetchMock(f.response);
+  // The listener holds a database named like T3's, but not the configured file: a real mismatch.
+  renameSync(f.databasePath, f.databasePath + ".old");
+  new Database(f.databasePath).close();
+  const poll = followT3Backend(f.path, f, undefined, 60_000);
+  const error = await failure(poll());
+  expect(error).toBeInstanceOf(BridgeError);
+  expect(error!.message).toContain("stop the timer and reconcile");
+  expect(
+    warn.mock.calls.map((call) => String(call[0])).filter((line) => line.includes("identity")),
+  ).toEqual([]);
+});
+
+linuxTest(
+  "recovering from an identity wait reports a restart, so the held T3 database is reopened",
+  async () => {
+    const f = fixture();
+    quietWarnings();
+    fetchMock(f.response);
+    let now = performance.now();
+    const clock = spyOn(performance, "now").mockImplementation(() => now);
+    cleanup.push(() => clock.mockRestore());
+    const poll = followT3Backend(f.path, f, undefined, 60_000);
+    expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
+    expect(await poll()).toEqual({ url: f.url, moved: false, restarted: false }); // Cached, nothing happened.
+    // T3 replaces its database while its identity cannot be verified, on the same URL and with no runtime file change.
+    const finishUpdate = mimicUpdate(f);
+    now += 70_000;
+    expect(await poll()).toBeUndefined();
+    finishUpdate();
+    now += 1000;
+    expect(await poll()).toEqual({ url: f.url, moved: false, restarted: true });
+  },
+);
+
+linuxTest(
+  "the restart report survives another failure between an identity wait and recovery",
+  async () => {
+    const f = fixture();
+    quietWarnings();
+    let calls = 0;
+    let down = false;
+    fetchMock(() =>
+      down && ++calls <= 2 ? new Response("starting", { status: 503 }) : f.response(),
+    );
+    let now = performance.now();
+    const clock = spyOn(performance, "now").mockImplementation(() => now);
+    cleanup.push(() => clock.mockRestore());
+    const poll = followT3Backend(f.path, f, undefined, 60_000);
+    expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
+    const finishUpdate = mimicUpdate(f);
+    now += 70_000;
+    expect(await poll()).toBeUndefined(); // Identity pending.
+    finishUpdate();
+    down = true; // Then the session check fails for two polls, which ends the identity streak.
+    now += 1000;
+    expect(await poll()).toBeUndefined();
+    now += 1000;
+    expect(await poll()).toBeUndefined();
+    now += 1000;
+    expect(await poll()).toEqual({ url: f.url, moved: false, restarted: true });
+  },
+);
+
+linuxTest(
+  "a listener that flaps between pending and absent cannot dodge the identity window",
+  async () => {
+    const f = fixture();
+    quietWarnings();
+    fetchMock(f.response);
+    mimicUpdate(f);
+    let now = performance.now();
+    const clock = spyOn(performance, "now").mockImplementation(() => now);
+    cleanup.push(() => clock.mockRestore());
+    const poll = followT3Backend(f.path, f, undefined, 150);
+    expect(await poll()).toBeUndefined(); // Identity pending: the window starts.
+    f.publish(process.pid + 1000000); // The published process is gone: plain unavailable.
+    now += 100;
+    expect(await poll()).toBeUndefined();
+    f.publish(); // Back, still not verifiable, and the window has run out.
+    now += 100;
+    const error = await failure(poll());
+    expect(error).toBeInstanceOf(BridgeError);
+    expect(error!.message).toContain("stop the timer and reconcile");
+  },
+);
+
+linuxTest("each wait for an identity starts its own window", async () => {
+  const f = fixture();
+  quietWarnings();
+  fetchMock(f.response);
+  const finishUpdate = mimicUpdate(f);
+  let now = performance.now();
+  const clock = spyOn(performance, "now").mockImplementation(() => now);
+  cleanup.push(() => clock.mockRestore());
+  const poll = followT3Backend(f.path, f, undefined, 150);
+  expect(await poll()).toBeUndefined();
+  const reopened = finishUpdate();
+  expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
+  // A later update, long after the first wait began, is not charged for it.
+  reopened.close();
+  now += 70_000; // Past the follower's one-minute reuse of a verified listener.
+  expect(await poll()).toBeUndefined();
+});

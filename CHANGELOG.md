@@ -8,6 +8,13 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   so no credential, until the supervisor has verified the T3 listener again. It keeps its journaled command meanwhile
   and is no longer quarantined by an error from a T3 that is still starting. The log says when a hold starts and how
   long it lasted.
+- `swarmail wake-auto-t3` waits up to two minutes, instead of exiting at once, when it cannot yet verify the T3
+  listener's identity because T3 is updating itself: the listener's process is not visible, two processes share the
+  port, it exited while being checked, or it has not opened its database. Its bridges are held meanwhile, and the
+  log says once that the wait started. A listener that is verified to be something else (another user, executable
+  or database) still stops it at once, and so does one still unverifiable after two minutes, with the same message
+  and exit status. `swarmail wake-credentials`, which never waits, now exits 75 instead of 1 in those "not yet"
+  cases.
 - A saved steering `message.dispatch` that `swarmail wake-auto-t3` replays after a delay or a restart is checked
   against the thread's current state first. If the thread has become busy with a run that cannot be steered, the notice waits
   and retries instead of being sent and rejected, which quarantined the thread. A bridge that is being stopped no

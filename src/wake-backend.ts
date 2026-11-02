@@ -1,6 +1,6 @@
 // Linux-local preflight. This observes identity; it does not lock T3 against an upgrade.
-import { readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { readdirSync, readFileSync, readlinkSync, realpathSync, statSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { t3StatePath } from "./t3-state.ts";
 import { BridgeError } from "./wake-target.ts";
 
@@ -17,6 +17,21 @@ export interface Backend {
 export class T3Unavailable extends Error {
   constructor() {
     super("T3 backend unavailable; retrying");
+  }
+}
+
+/**
+ * The listener's identity cannot be verified yet, as while T3 updates itself: its process is not visible, two
+ * processes share the port, it has not opened its database, or it exited during the check. A caller may wait and
+ * check again; `giveUp()` raises the refusal to fail with once it has waited long enough. Nothing is sent to the
+ * listener meanwhile. A verified different identity is never pending.
+ */
+export class T3IdentityPending extends T3Unavailable {
+  readonly giveUp: () => never;
+  constructor(why: string) {
+    super();
+    this.message = `T3 backend identity not yet verifiable (${why}); retrying`;
+    this.giveUp = refuse;
   }
 }
 
@@ -66,6 +81,22 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
     if (process.platform !== "linux") {
       refuse();
     }
+    // Waiting is for a listener that is not up yet. A configuration that cannot match any listener, a missing
+    // database or a pinned executable that does not exist, is refused at once, whatever the owners look like.
+    const database = t3StatePath(config.baseDir);
+    const pending = (why: string): never => {
+      for (const required of [database, config.executable]) {
+        if (required === undefined) {
+          continue;
+        }
+        try {
+          statSync(required);
+        } catch {
+          refuse();
+        }
+      }
+      throw new T3IdentityPending(why);
+    };
     const url = new URL(config.url);
     const ipv6 = url.hostname === "[::1]";
     const port = url.port || "80";
@@ -79,8 +110,12 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
     });
     const [output, exit] = await Promise.all([new Response(child.stdout).text(), child.exited]);
     checkBackendOperation(check);
+    if (exit !== 0) {
+      refuse(); // A failing `ss` proves nothing about the listener, whatever it printed.
+    }
     const lines = output.trim().split("\n");
     const pids = new Set<string>();
+    let unseen = false;
     for (const line of lines) {
       const local = line.trim().split(/\s+/)[3] ?? "";
       if (!addresses.has(local.slice(0, local.lastIndexOf(":")))) {
@@ -88,21 +123,34 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
       }
       const owners = [...line.matchAll(/pid=(\d+),/g)];
       if (!owners.length) {
-        refuse();
+        unseen = true;
+        continue;
       }
       for (const owner of owners) {
         pids.add(owner[1]!);
       }
     }
-    if (exit !== 0 || pids.size > 1) {
-      refuse();
+    if (unseen || pids.size > 1) {
+      pending(unseen ? "listening process not visible" : "more than one process is listening");
     }
     if (pids.size === 0 || (config.pid !== undefined && !pids.has(String(config.pid)))) {
       throw new T3Unavailable();
     }
     const proc = `/proc/${[...pids][0]}`;
+    // The listener may exit while it is read, as when T3 restarts: a vanished entry is pending, not a mismatch.
+    const live = <T>(read: () => T): T => {
+      try {
+        return read();
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if (code === "ENOENT" || code === "ESRCH") {
+          pending("the listening process exited");
+        }
+        throw error;
+      }
+    };
     const started = () => {
-      const stat = readFileSync(join(proc, "stat"), "utf8");
+      const stat = live(() => readFileSync(join(proc, "stat"), "utf8"));
       return stat.slice(stat.lastIndexOf(") ") + 2).split(" ")[19];
     };
     const before = started();
@@ -112,26 +160,55 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
       return first.dev === second.dev && first.ino === second.ino;
     };
     const checkExecutable = () => {
-      if (
-        statSync(proc).uid !== process.getuid!() ||
-        (config.executable !== undefined && !sameFile(join(proc, "exe"), config.executable))
-      ) {
+      if (live(() => statSync(proc).uid) !== process.getuid!()) {
         refuse();
+      }
+      if (config.executable !== undefined) {
+        const running = live(() => statSync(join(proc, "exe"), { bigint: true }));
+        const wanted = statSync(config.executable, { bigint: true }); // Missing: a mismatch.
+        if (running.dev !== wanted.dev || running.ino !== wanted.ino) {
+          refuse();
+        }
       }
     };
     checkExecutable();
-    const database = t3StatePath(config.baseDir);
-    const openDatabase = readdirSync(join(proc, "fd")).some((fd) => {
+    // A listener that holds another database file named like T3's in T3's data directory is a different store; one
+    // that holds none is not up yet.
+    const others: string[] = [];
+    const openDatabase = live(() => readdirSync(join(proc, "fd"))).some((fd) => {
       try {
-        return sameFile(join(proc, "fd", fd), database);
+        const link = join(proc, "fd", fd);
+        if (sameFile(link, database)) {
+          return true;
+        }
+        const target = readlinkSync(link);
+        if (
+          basename(target).startsWith(basename(database)) &&
+          dirname(target) === realpathSync(dirname(database))
+        ) {
+          others.push(target);
+        }
       } catch {
-        return false; // Descriptors may close during the snapshot.
+        // Descriptors may close during the snapshot, and the database file may not exist.
       }
+      return false;
     });
     checkExecutable();
-    const executable = realpathSync(join(proc, "exe"));
-    if (!before || before !== started() || !openDatabase) {
-      refuse();
+    const executable = live(() => realpathSync(join(proc, "exe")));
+    if (!before || before !== started()) {
+      pending("the listening process changed");
+    }
+    if (!openDatabase) {
+      let databaseExists = true;
+      try {
+        statSync(database);
+      } catch {
+        databaseExists = false;
+      }
+      if (others.length > 0 || !databaseExists) {
+        refuse();
+      }
+      pending("its database is not open yet");
     }
     return executable;
   } catch (error) {

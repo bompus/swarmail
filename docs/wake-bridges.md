@@ -310,8 +310,24 @@ timed-out connection, is not fatal at first. The follower returns `undefined` an
 logs the retry, so the supervisor keeps reconciling and persisting quarantines;
 every poll verifies the T3 listener again before the credential is sent. After
 two minutes of such failures the next failing poll stops the follower with the
-original error. Credential rejection, redirects, malformed responses and identity
-mismatches remain fatal at once. Missing or due credentials and unfinished rotation
+original error. A listener whose identity cannot be verified yet is treated the
+same way, with its own two-minute window, counted from the first such failure
+until verified readiness (a listener that comes and goes in between does not
+restart it), and a single log line when the wait starts: its process is not visible, two processes share the port, it exited while
+being checked, or it has not opened T3's database (as while T3 updates itself).
+Nothing is sent to it meanwhile, and a failure still going after the window stops
+the follower with the usual identity message. The one-shot `swarmail wake-credentials` does not wait: a listener whose identity
+cannot be verified yet makes it exit 75 (temporary failure, as for a missing
+listener) instead of 1. Verified readiness after such a wait
+is reported as a restart even on the same URL, however other failures
+interleaved, so the supervisor reads T3's database afresh. A listener that is verified to be
+something else (another user, another executable, another database file in T3's
+data directory, or a data directory without a database) is a mismatch and stops
+the follower at once, and so is a configuration that cannot match any listener (a
+missing database file or a missing pinned executable) as soon as a listener is
+found whose identity would otherwise be pending. With no listener at all, the
+follower waits as it always has. Credential rejection, redirects,
+malformed responses and identity mismatches remain fatal at once. Missing or due credentials and unfinished rotation
 state use the existing locked renewal path when no eligible session transport
 retry has occurred. Listener absence alone does not disable that path. Once a
 clean session check has a transport failure, losing retry eligibility before
