@@ -101,13 +101,13 @@ test("an interactive host is not a print-mode run, whatever its values look like
   );
   expect(isPrintMode(claude, interactive)).toBe(false);
   // A flag must be a whole argument, not part of another one.
-  expect(isPrintMode(claude, argv("--print-timing", "x-p", "-nprod", "-dp", "-pn"))).toBe(false);
+  expect(isPrintMode(claude, argv("--print-timing", "x-p", "-nprod", "-dp", "-xp"))).toBe(false);
   // Text after `--` or after a text option is data.
   expect(isPrintMode(claude, argv("--", "--print"))).toBe(false);
   expect(isPrintMode(claude, argv("--system-prompt", "--print"))).toBe(false);
   expect(isPrintMode(claude, argv("--append-system-prompt", "-p", "--verbose"))).toBe(false);
   // Short flags clustered with -p count: `claude -pc`, `-cp`, `-pd`.
-  for (const cluster of ["-pc", "-cp", "-pd", "-cvp"]) {
+  for (const cluster of ["-pc", "-cp", "-pd", "-cvp", "-pn", "-pnprobe", "-pr"]) {
     expect(isPrintMode(claude, argv(cluster, "say ok"))).toBe(true);
   }
   // A flag before either still counts.
