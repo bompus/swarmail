@@ -348,8 +348,10 @@ All statements here are documented. None were tested.
   `SessionStart` hook). Codex sessions get it from
   [fa31b66b](https://github.com/pingdotgg/t3code/commit/fa31b66b) (2026-11-01,
   after stable 0.1.6, [#28604](https://github.com/pingdotgg/t3code/pull/28604)).
-  swarmail does not read it: it maps a session to its thread through T3's
-  database.
+  A Claude process that such a session starts inherits it too (a one-shot
+  `claude -p` run's hook saw its parent's value), so it names the thread that
+  started the process, not the session that is running. swarmail does not read
+  it: it maps a session to its thread through T3's database.
 - **Thread links (documented).** An agent mentions another thread by the `link`
   a T3 tool returns, `t3-thread://v2/<environmentId>/<threadId>`, which the
   environment that owns the thread builds
