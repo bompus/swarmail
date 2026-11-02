@@ -202,15 +202,16 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
       }
       return false;
     });
-    if (!openDatabase && inspectionError) {
-      throw inspectionError.error;
-    }
     checkExecutable();
     const executable = live(() => realpathSync(join(proc, "exe")));
     if (!before || before !== started()) {
       pending("the listening process changed");
     }
     if (!openDatabase) {
+      // Only now, with the same listener still present: the scan may have failed because it was exiting.
+      if (inspectionError) {
+        throw inspectionError.error;
+      }
       let databaseExists = true;
       try {
         statSync(database);

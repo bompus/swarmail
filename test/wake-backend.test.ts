@@ -209,6 +209,30 @@ test.skipIf(process.platform !== "linux")(
       expect(error).not.toBeInstanceOf(T3IdentityPending);
       expect((error as BridgeError).message).not.toContain(code);
     }
+    // A listener that exits while an unrelated descriptor fails to inspect is pending, not a refusal.
+    cleanups.pop()!();
+    let exited = false;
+    const stat = fs.statSync;
+    const failing = failWith("EIO");
+    failing.mockImplementation(((path: string) => {
+      if (String(path).startsWith(`/proc/${process.pid}/fd/`)) {
+        exited = true;
+        throw Object.assign(new Error("EIO"), { code: "EIO" });
+      }
+      return (readlink as any)(path);
+    }) as typeof fs.readlinkSync);
+    const statSpy = spyOn(fs, "statSync").mockImplementation(((path: string, ...rest: any[]) => {
+      if (exited && String(path) === `/proc/${process.pid}`) {
+        throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      }
+      return (stat as any)(path, ...rest);
+    }) as typeof fs.statSync);
+    cleanups.push(() => statSpy.mockRestore());
+    expect(await verifyT3Backend(t3.config).catch((e: unknown) => e)).toBeInstanceOf(
+      T3IdentityPending,
+    );
+    cleanups.pop()!();
+    cleanups.pop()!();
     // A descriptor that proves the database is open outweighs an error on any other descriptor, in either scan order.
     t3.hold();
     expect(await verifyT3Backend(t3.config)).toBe(realpathSync(process.execPath));
