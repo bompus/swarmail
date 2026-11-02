@@ -57,6 +57,50 @@ export function hostProcess(pid = process.ppid, read = readProcStat): HostProces
   return null;
 }
 
+/** `/proc/<pid>/cmdline`: the process's arguments. Null where there is no /proc or the process is gone. */
+function readProcArguments(pid: number): string[] | null {
+  if (process.platform === "win32") {
+    return null;
+  }
+  try {
+    return readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").slice(0, -1);
+  } catch {
+    return null;
+  }
+}
+
+// Claude Code accepts these only in print mode (`claude -p`), a one-shot run; its interactive sessions never pass them.
+const PRINT_MODE_FLAGS = new Set(["-p", "--print", "--no-session-persistence"]);
+// A cluster of short flags that includes -p, as in `-pc`, `-cp` or `-pn probe`. Only the boolean short flags (-c, -v,
+// -h) may sit before the p; -d (its value is optional) comes only after it, and -n or -r (which take a value) end the
+// cluster. So `-nprod` (--name prod) and `-dp` are not read as print.
+const CLUSTER = /^-[cvh]*p[cvhdp]*(?:[nr].*)?$/;
+// Options whose value is free text, which could spell a flag; the argument after one is data.
+const TEXT_OPTIONS = new Set(["--system-prompt", "--append-system-prompt"]);
+
+/**
+ * Whether the agent host runs once for a single prompt, judged by its arguments; false when they cannot be read.
+ * Arguments after `--` and the text after a text option are data, not flags.
+ */
+export function isPrintMode(
+  host: HostProcess | null,
+  read: (pid: number) => string[] | null = readProcArguments,
+): boolean {
+  const args = host === null ? null : read(host.pid);
+  if (!args) {
+    return false;
+  }
+  for (let index = 0; index < args.length && args[index] !== "--"; index++) {
+    if (PRINT_MODE_FLAGS.has(args[index]!) || CLUSTER.test(args[index]!)) {
+      return true;
+    }
+    if (TEXT_OPTIONS.has(args[index]!)) {
+      index++;
+    }
+  }
+  return false;
+}
+
 /** Identity of one exact process, including Bun/Swarmail children rather than only agent hosts. */
 export function processIdentity(pid: number): HostProcess | null {
   const stat = readProcStat(pid);
