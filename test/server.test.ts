@@ -31,7 +31,18 @@ afterAll(async () => {
   await server.stop(true);
   db.close();
   // Windows holds a just-closed SQLite file for a moment; retry instead of failing the whole file's cleanup.
-  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  for (let attempt = 1; ; attempt++) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      break;
+    } catch (error) {
+      const busy = ["EBUSY", "EPERM", "ENOTEMPTY"].includes((error as NodeJS.ErrnoException).code!);
+      if (!busy || attempt === 10) {
+        throw error;
+      }
+      await Bun.sleep(200);
+    }
+  }
 });
 
 let nextId = 0;
