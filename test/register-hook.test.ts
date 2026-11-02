@@ -7,6 +7,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   utimesSync,
   writeFileSync,
 } from "node:fs";
@@ -1106,6 +1107,70 @@ test("a claude -p run registers on its first edit, not at start", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 }, 30000);
+
+test.skipIf(process.platform === "win32")(
+  "a host run with print-mode arguments is not registered at start, whatever entrypoint T3 sets",
+  async () => {
+    const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-print-mode-")));
+    const server = createServer(join(dir, "mail.sqlite3"), 0);
+    const port = server.server.port;
+    try {
+      const repo = join(dir, "repo");
+      Bun.spawnSync(["git", "init", "-q", repo]);
+      const { CLAUDECODE, ...parent } = process.env;
+      const env = {
+        ...parent,
+        CLAUDE_CODE_ENTRYPOINT: "t3-code",
+        SWARMAIL_URL: `http://127.0.0.1:${port}/mcp/`,
+        XDG_STATE_HOME: join(dir, "state"),
+        HOME: dir,
+        T3CODE_HOME: join(dir, ".t3"),
+        SWARMAIL_UPDATE_TARGETS: "",
+      };
+      // The hook finds its host by process name, so the host here is bun under the name `claude`.
+      mkdirSync(join(dir, "bin"));
+      symlinkSync(process.execPath, join(dir, "bin/claude"));
+      writeFileSync(
+        join(dir, "host.ts"),
+        `const proc = Bun.spawn(["bun", ${JSON.stringify(join(import.meta.dir, "../src/cli.ts"))}, "register"], {
+          stdin: new Blob([process.env.HOOK_INPUT!]),
+          stdout: "inherit",
+        });
+        await proc.exited;`,
+      );
+      const run = async (hostArguments: string[], sessionId: string, event: string) => {
+        const input = {
+          session_id: sessionId,
+          cwd: repo,
+          hook_event_name: event,
+          transcript_path: join(dir, `.claude/projects/-repo/${sessionId}.jsonl`),
+        };
+        const proc = Bun.spawn([join(dir, "bin/claude"), join(dir, "host.ts"), ...hostArguments], {
+          env: { ...env, HOOK_INPUT: JSON.stringify(input) },
+          stdout: "pipe",
+        });
+        await proc.exited;
+        return (await new Response(proc.stdout).text()).trim();
+      };
+      const roster = () => server.db.query("SELECT name FROM agents").all();
+      // The control: an interactive-style host registers at start.
+      await run(["--input-format", "stream-json"], "interactive-1", "SessionStart");
+      expect(roster()).toHaveLength(1);
+      // Each print-mode flag skips the start registration and the roster stays as it was.
+      for (const [index, flag] of ["-p", "--print", "--no-session-persistence"].entries()) {
+        expect(
+          await run(["--model", "haiku", flag, "say ok"], `print-${index}`, "SessionStart"),
+        ).toBe("");
+        expect(roster()).toHaveLength(1);
+      }
+    } finally {
+      await server.server.stop(true);
+      server.db.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+  30000,
+);
 
 test("a session registers at start, keeps that one name through edits, restarts and hand registration", async () => {
   const dir = realpathSync.native(mkdtempSync(join(tmpdir(), "hook-start-")));

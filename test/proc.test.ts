@@ -4,7 +4,7 @@ import { once } from "node:events";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { hostAlive, hostProcess, processIdentity } from "../src/proc.ts";
+import { hostAlive, hostProcess, isPrintMode, processIdentity } from "../src/proc.ts";
 import { shortPath, windowsComm } from "../src/proc-win32.ts";
 
 const windows = process.platform === "win32";
@@ -75,4 +75,50 @@ test("the Cursor CLI's node.exe on Windows reads as cursor-agent, and other Node
   expect(windowsComm("node", () => String.raw`C:\Program Files\nodejs\node.exe`)).toBe("node");
   expect(windowsComm("node", () => undefined)).toBe("node");
   expect(windowsComm("claude", () => cursor)).toBe("claude");
+});
+
+const claude = { name: "claude", pid: 20, start: "2" };
+const argv =
+  (...args: string[]) =>
+  () => ["/home/u/.local/bin/claude", ...args];
+
+test("a Claude host run with a print-mode flag is a one-shot run", () => {
+  for (const flag of ["-p", "--print", "--no-session-persistence"]) {
+    expect(isPrintMode(claude, argv("--model", "haiku", flag, "say ok"))).toBe(true);
+  }
+});
+
+test("an interactive host is not a print-mode run, whatever its values look like", () => {
+  const interactive = argv(
+    "--output-format",
+    "stream-json",
+    "--input-format",
+    "stream-json",
+    "--verbose",
+    "--resume=-p",
+    "--allowedTools",
+    "mcp__t3-code__*",
+  );
+  expect(isPrintMode(claude, interactive)).toBe(false);
+  // A flag must be a whole argument, not part of another one.
+  expect(isPrintMode(claude, argv("--print-timing", "-pc", "x-p"))).toBe(false);
+  // Text after `--` or after a text option is data.
+  expect(isPrintMode(claude, argv("--", "--print"))).toBe(false);
+  expect(isPrintMode(claude, argv("--system-prompt", "--print"))).toBe(false);
+  expect(isPrintMode(claude, argv("--append-system-prompt", "-p", "--verbose"))).toBe(false);
+  // A flag before either still counts.
+  expect(isPrintMode(claude, argv("-p", "--system-prompt", "x"))).toBe(true);
+  expect(isPrintMode(claude, argv("--system-prompt", "x", "--print"))).toBe(true);
+});
+
+test("an unreadable command line, or no host, is not reported as a print-mode run", () => {
+  expect(isPrintMode(claude, () => null)).toBe(false);
+  expect(isPrintMode(claude, () => [])).toBe(false);
+  expect(isPrintMode(null, argv("-p"))).toBe(false);
+});
+
+test.skipIf(windows)("reads this process's own command line from /proc", () => {
+  expect(isPrintMode({ name: "bun", pid: process.pid, start: undefined })).toBe(
+    process.argv.includes("-p") || process.argv.includes("--print"),
+  );
 });

@@ -14,7 +14,7 @@ import { swarmailUrl } from "./client.ts";
 import { isLoopbackUrl, t3Home } from "./paths.ts";
 import { branch } from "./location.ts";
 import { nativeTitles } from "./native-titles.ts";
-import { hostProcess, sameHost } from "./proc.ts";
+import { hostProcess, isPrintMode, sameHost } from "./proc.ts";
 import { nameIn, openRegistry, sameServer, serverRegister, type Session } from "./registry.ts";
 import { sessionTag, SESSION_ENV } from "./tag.ts";
 import { t3StatePath, t3ThreadId, t3Threads } from "./t3-state.ts";
@@ -244,8 +244,13 @@ function main(input: HookInput): string {
   }
   const starting = event === "SessionStart";
   // A `claude -p` run is unattended and often read-only: it registers on its first edit, not at start, so a one-shot
-  // lookup does not add an agent to the roster.
-  if (starting && session.host === "claude" && process.env.CLAUDE_CODE_ENTRYPOINT === "sdk-cli") {
+  // lookup does not add an agent to the roster. Its arguments say so (T3 sets its own entrypoint on the runs it
+  // starts); where they cannot be read, the `sdk-cli` entrypoint stands in.
+  if (
+    starting &&
+    session.host === "claude" &&
+    (process.env.CLAUDE_CODE_ENTRYPOINT === "sdk-cli" || isPrintMode(hostProcess()))
+  ) {
     return "";
   }
   const dir = targetDir({ ...input, cwd: session.cwd });
