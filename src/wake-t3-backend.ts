@@ -47,6 +47,7 @@ export function followT3Backend(
   let retrySince: number | undefined;
   let pendingSince: number | undefined;
   let pendingLogged = false;
+  let identityWaited = false; // Set by an identity wait, cleared only by the next verified readiness.
   return async () => {
     const started = performance.now();
     const check: BackendCheck = { signal, deadline: started + backendCheckBudgetMs, retry: true };
@@ -78,7 +79,7 @@ export function followT3Backend(
       const moved = checked.url !== url;
       // A wait for the identity counts as a restart even on the same listener: T3 was updating and may have replaced
       // its database meanwhile, so the caller must open the new one.
-      const restarted = listener !== published || pendingSince !== undefined;
+      const restarted = listener !== published || identityWaited;
       url = checked.url;
       published = listener;
       nextCheck = performance.now() + 60_000;
@@ -87,6 +88,7 @@ export function followT3Backend(
       retrySince = undefined;
       pendingSince = undefined;
       pendingLogged = false;
+      identityWaited = false;
       return { url, moved, restarted };
     } catch (error) {
       checkBackendOperation(check);
@@ -99,6 +101,7 @@ export function followT3Backend(
       onVerify?.(); // Any unavailable result holds the caller's requests before this poll resolves.
       if (error instanceof T3IdentityPending) {
         // T3 is up but its identity is not verifiable yet, as while it updates. Wait, bounded; nothing is sent to it.
+        identityWaited = true;
         const waited = performance.now() - (pendingSince ??= performance.now());
         if (waited >= retryWindowMs) {
           return error.giveUp();

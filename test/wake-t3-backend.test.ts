@@ -816,6 +816,35 @@ linuxTest(
   },
 );
 
+linuxTest(
+  "the restart report survives another failure between an identity wait and recovery",
+  async () => {
+    const f = fixture();
+    quietWarnings();
+    let calls = 0;
+    let down = false;
+    fetchMock(() =>
+      down && ++calls <= 2 ? new Response("starting", { status: 503 }) : f.response(),
+    );
+    let now = performance.now();
+    const clock = spyOn(performance, "now").mockImplementation(() => now);
+    cleanup.push(() => clock.mockRestore());
+    const poll = followT3Backend(f.path, f, undefined, 60_000);
+    expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
+    const finishUpdate = mimicUpdate(f);
+    now += 70_000;
+    expect(await poll()).toBeUndefined(); // Identity pending.
+    finishUpdate();
+    down = true; // Then the session check fails for two polls, which ends the identity streak.
+    now += 1000;
+    expect(await poll()).toBeUndefined();
+    now += 1000;
+    expect(await poll()).toBeUndefined();
+    now += 1000;
+    expect(await poll()).toEqual({ url: f.url, moved: false, restarted: true });
+  },
+);
+
 linuxTest("each wait for an identity starts its own window", async () => {
   const f = fixture();
   quietWarnings();

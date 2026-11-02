@@ -316,11 +316,13 @@ a single log line when the wait starts: its process is not visible, two processe
 being checked, or it has not opened T3's database (as while T3 updates itself).
 Nothing is sent to it meanwhile, and a failure still going after the window stops
 the follower with the usual identity message. Verified readiness after such a wait
-is reported as a restart even on the same URL, so the supervisor reads T3's
-database afresh. A listener that is verified to be
+is reported as a restart even on the same URL, however other failures
+interleaved, so the supervisor reads T3's database afresh. A listener that is verified to be
 something else (another user, another executable, another database file in T3's
 data directory, or a data directory without a database) is a mismatch and stops
-the follower at once. Credential rejection, redirects,
+the follower at once, and so is a configuration that cannot match any listener (a
+missing database file or a missing pinned executable), whatever the owners of
+the port look like. Credential rejection, redirects,
 malformed responses and identity mismatches remain fatal at once. Missing or due credentials and unfinished rotation
 state use the existing locked renewal path when no eligible session transport
 retry has occurred. Listener absence alone does not disable that path. Once a

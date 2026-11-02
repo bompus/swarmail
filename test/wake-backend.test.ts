@@ -233,6 +233,18 @@ test.skipIf(process.platform !== "linux")(
       expect(missing).toBeInstanceOf(BridgeError);
       expect(missing).not.toBeInstanceOf(T3IdentityPending);
     }
+    // The same for a listener that has vanished, and for a pinned executable that does not exist.
+    fakeSockets((port) => sockets(port, 4194000));
+    const gone = await verifyT3Backend({ ...t3.config, baseDir: empty }).catch((e: unknown) => e);
+    expect(gone).toBeInstanceOf(BridgeError);
+    expect(gone).not.toBeInstanceOf(T3IdentityPending);
+    fakeSockets((port) => `LISTEN 0 128 127.0.0.1:${port} 0.0.0.0:*`);
+    const unpinned = await verifyT3Backend({
+      ...t3.config,
+      executable: join(t3.root, "removed-runtime"),
+    }).catch((e: unknown) => e);
+    expect(unpinned).toBeInstanceOf(BridgeError);
+    expect(unpinned).not.toBeInstanceOf(T3IdentityPending);
     // A failing `ss` is a refusal even when its partial output would otherwise read as pending.
     fakeSockets((port) => `LISTEN 0 128 127.0.0.1:${port} 0.0.0.0:*`, 1);
     const failed = await verifyT3Backend(t3.config).catch((e: unknown) => e);

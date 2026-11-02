@@ -81,6 +81,22 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
     if (process.platform !== "linux") {
       refuse();
     }
+    // Waiting is for a listener that is not up yet. A configuration that cannot match any listener, a missing
+    // database or a pinned executable that does not exist, is refused at once, whatever the owners look like.
+    const database = t3StatePath(config.baseDir);
+    const pending = (why: string): never => {
+      for (const required of [database, config.executable]) {
+        if (required === undefined) {
+          continue;
+        }
+        try {
+          statSync(required);
+        } catch {
+          refuse();
+        }
+      }
+      throw new T3IdentityPending(why);
+    };
     const url = new URL(config.url);
     const ipv6 = url.hostname === "[::1]";
     const port = url.port || "80";
@@ -115,15 +131,7 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
       }
     }
     if (unseen || pids.size > 1) {
-      // A missing database is a known configuration failure, whatever the owners look like.
-      try {
-        statSync(t3StatePath(config.baseDir));
-      } catch {
-        refuse();
-      }
-      throw new T3IdentityPending(
-        unseen ? "listening process not visible" : "more than one process is listening",
-      );
+      pending(unseen ? "listening process not visible" : "more than one process is listening");
     }
     if (pids.size === 0 || (config.pid !== undefined && !pids.has(String(config.pid)))) {
       throw new T3Unavailable();
@@ -136,7 +144,7 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
       } catch (error) {
         const code = (error as NodeJS.ErrnoException).code;
         if (code === "ENOENT" || code === "ESRCH") {
-          throw new T3IdentityPending("the listening process exited");
+          pending("the listening process exited");
         }
         throw error;
       }
@@ -164,7 +172,6 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
       }
     };
     checkExecutable();
-    const database = t3StatePath(config.baseDir);
     // A listener that holds another database file named like T3's in T3's data directory is a different store; one
     // that holds none is not up yet.
     const others: string[] = [];
@@ -189,7 +196,7 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
     checkExecutable();
     const executable = live(() => realpathSync(join(proc, "exe")));
     if (!before || before !== started()) {
-      throw new T3IdentityPending("the listening process changed");
+      pending("the listening process changed");
     }
     if (!openDatabase) {
       let databaseExists = true;
@@ -201,7 +208,7 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
       if (others.length > 0 || !databaseExists) {
         refuse();
       }
-      throw new T3IdentityPending("its database is not open yet");
+      pending("its database is not open yet");
     }
     return executable;
   } catch (error) {
