@@ -316,9 +316,10 @@ until verified readiness (a listener that comes and goes in between does not
 restart it), and a single log line when the wait starts: its process is not visible, two processes share the port, it exited while
 being checked, or it has not opened T3's database (as while T3 updates itself).
 Nothing is sent to it meanwhile, and a failure still going after the window stops
-the follower with the usual identity message. The one-shot `swarmail wake-credentials` does not wait: a listener whose identity
-cannot be verified yet makes it exit 75 (temporary failure, as for a missing
-listener) instead of 1. Verified readiness after such a wait
+the follower with the usual identity message. The one-shot `wakeCredentials` helper (see the reader primitives below) does not wait: a listener whose identity
+cannot be verified yet makes it return 75 (temporary failure, as for a missing
+listener) instead of 1. The extra-command interface ignores a command's return value, so a custom command
+passes it on, for example `process.exitCode = await wakeCredentials(args)`. Verified readiness after such a wait
 is reported as a restart even on the same URL, however other failures
 interleaved, so the supervisor reads T3's database afresh. A listener that is verified to be
 something else (another user, another executable, another database file in T3's
@@ -355,10 +356,11 @@ lasted. With no listener at all the hold has no time limit, and while the
 Swarmail core is not ready the supervisor does not poll the backend, so the hold
 keeps its last state. A request already past the gate when a hold begins
 finishes. Between polls the supervisor trusts its last verification of an
-unchanged listener for up to a minute, so a different process that takes the
-port of a T3 that has exited or is still running is seen at the next
-verification; the gate closes when the follower finds the listener changed or
-gone, not before.
+unchanged listener for a minute, and starting bridges (each preflight can take
+up to 15 seconds) can delay the next verification, so a different process that
+takes the port of a T3 that has exited or is still running is seen at the next
+verification, which can come more than a minute after the last; the gate closes
+when the follower finds the listener changed or gone, not before.
 It never enrolls a session, delivers mail, clears quarantine or changes a
 pending delivery journal. Consumers must adopt the module explicitly;
 installing swarmail does not restore a stopped reader.
