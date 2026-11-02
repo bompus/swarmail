@@ -63,5 +63,7 @@ jobs:
       - run: bun run check
       # Windows runners take about 1.7 times as long as Linux, which puts
       # several tests near Bun's 5-second default. Tests that set their own
-      # timeout keep it.
-      - run: bun test --timeout 20000
+      # timeout keep it. A hosted runner can also stall: on 2026-11-02 one run
+      # took 2.3 times as long overall and tests that normally take
+      # milliseconds took 7 to 25 seconds, so the limit leaves room for that.
+      - run: bun test --timeout 60000

@@ -30,7 +30,8 @@ beforeAll(() => {
 afterAll(async () => {
   await server.stop(true);
   db.close();
-  rmSync(dir, { recursive: true, force: true });
+  // Windows holds a just-closed SQLite file for a moment; retry instead of failing the whole file's cleanup.
+  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
 
 let nextId = 0;
@@ -270,137 +271,138 @@ test("a repeated idempotency key replays the first send; reusing it for another 
   expect(messageCount()).toBe(before + 1);
 });
 
-test("durable message retries preserve identity across restart orderings", async () => {
-  const events = ["retry", "conflict", "ack", "restart"];
-  const sequences: string[][] = [[]];
-  for (let depth = 0; depth < 2; depth++) {
-    for (const prefix of sequences.filter((sequence) => sequence.length === depth)) {
-      for (const event of events) {
-        sequences.push([...prefix, event]);
+// One test per tool: each opens a fresh database for every ordering, which is what takes seconds on a Windows runner.
+for (const tool of ["send_message", "reply_message"]) {
+  test(`durable message retries preserve identity across restart orderings (${tool})`, async () => {
+    const events = ["retry", "conflict", "ack", "restart"];
+    const sequences: string[][] = [[]];
+    for (let depth = 0; depth < 2; depth++) {
+      for (const prefix of sequences.filter((sequence) => sequence.length === depth)) {
+        for (const event of events) {
+          sequences.push([...prefix, event]);
+        }
       }
     }
-  }
-  const violations: string[] = [];
-  let trial = 0;
-  const cases = ["send_message", "reply_message"].flatMap((tool) =>
-    sequences.map((sequence) => ({ tool, sequence })),
-  );
-  for (const { tool, sequence } of cases) {
-    const path = join(dir, `retry-${trial++}.sqlite3`);
-    let runtime = createServer(path, 0, { retireIdleDays: 0 });
-    const invoke = async (name: string, args: Record<string, unknown>): Promise<any> => {
-      const response = await fetch(`http://127.0.0.1:${runtime.server.port}/mcp/`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: 1,
-          method: "tools/call",
-          params: { name, arguments: args },
-        }),
-      });
-      const result = ((await response.json()) as any).result;
-      const value = JSON.parse(result.content[0].text);
-      if (result.isError) {
-        throw Object.assign(new Error(value.error.message), value.error);
-      }
-      return value;
-    };
-    const restart = () => {
-      void runtime.server.stop(true);
-      runtime.db.close();
-      runtime = createServer(path, 0, { retireIdleDays: 0 });
-    };
-    try {
-      for (const name of ["BlueLake", "GreenCastle"]) {
-        await invoke("register_agent", { project_key: P, program: "test", model: "m", name });
-      }
-      const send = {
-        project_key: P,
-        sender_name: "BlueLake",
-        to: ["GreenCastle"],
-        subject: "Once",
-        body_md: "body",
-        ack_required: true,
-      };
-      const original = tool === "reply_message" ? await invoke("send_message", send) : null;
-      const args = {
-        ...(tool === "send_message"
-          ? send
-          : {
-              project_key: P,
-              message_id: original.id,
-              sender_name: "GreenCastle",
-              body_md: "answer",
-            }),
-        idempotency_key: "durable-key",
-      };
-      const expected = await invoke(tool, args);
-      const key = runtime.db
-        .query("SELECT tool,agent_id,key,fingerprint,created_ts FROM idempotency_keys")
-        .get();
-      const message = runtime.db.query("SELECT * FROM messages WHERE id=?").get(expected.id);
-      const receiver = tool === "send_message" ? "GreenCastle" : "BlueLake";
-      let acknowledged = false;
-      restart();
-      const check = async () => {
-        expect(await invoke(tool, args)).toEqual({
-          ...expected,
-          delivery: { ...expected.delivery, historical: true },
-          idempotent_replay: true,
+    const violations: string[] = [];
+    let trial = 0;
+    for (const sequence of sequences) {
+      const path = join(dir, `retry-${tool}-${trial++}.sqlite3`);
+      let runtime = createServer(path, 0, { retireIdleDays: 0 });
+      const invoke = async (name: string, args: Record<string, unknown>): Promise<any> => {
+        const response = await fetch(`http://127.0.0.1:${runtime.server.port}/mcp/`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name, arguments: args },
+          }),
         });
-        expect(
-          runtime.db.query<{ n: number }, []>("SELECT count(*) AS n FROM messages").get()!.n,
-        ).toBe(original ? 2 : 1);
-        expect(
-          runtime.db.query<{ n: number }, []>("SELECT count(*) AS n FROM message_recipients").get()!
-            .n,
-        ).toBe(original ? 2 : 1);
-        expect(
-          runtime.db
-            .query("SELECT tool,agent_id,key,fingerprint,created_ts FROM idempotency_keys")
-            .all(),
-        ).toEqual([key]);
-        expect(runtime.db.query("SELECT * FROM messages WHERE id=?").get(expected.id)).toEqual(
-          message,
-        );
-        const receipt = await invoke("get_message_delivery_receipt", {
+        const result = ((await response.json()) as any).result;
+        const value = JSON.parse(result.content[0].text);
+        if (result.isError) {
+          throw Object.assign(new Error(value.error.message), value.error);
+        }
+        return value;
+      };
+      const restart = () => {
+        void runtime.server.stop(true);
+        runtime.db.close();
+        runtime = createServer(path, 0, { retireIdleDays: 0 });
+      };
+      try {
+        for (const name of ["BlueLake", "GreenCastle"]) {
+          await invoke("register_agent", { project_key: P, program: "test", model: "m", name });
+        }
+        const send = {
           project_key: P,
-          message_id: expected.id,
-        });
-        expect(receipt.recipients[0].acknowledged).toBe(acknowledged);
-      };
-      await check();
-      for (const event of sequence) {
-        if (event === "restart") {
-          restart();
-        } else if (event === "ack") {
-          await invoke("acknowledge_message", {
+          sender_name: "BlueLake",
+          to: ["GreenCastle"],
+          subject: "Once",
+          body_md: "body",
+          ack_required: true,
+        };
+        const original = tool === "reply_message" ? await invoke("send_message", send) : null;
+        const args = {
+          ...(tool === "send_message"
+            ? send
+            : {
+                project_key: P,
+                message_id: original.id,
+                sender_name: "GreenCastle",
+                body_md: "answer",
+              }),
+          idempotency_key: "durable-key",
+        };
+        const expected = await invoke(tool, args);
+        const key = runtime.db
+          .query("SELECT tool,agent_id,key,fingerprint,created_ts FROM idempotency_keys")
+          .get();
+        const message = runtime.db.query("SELECT * FROM messages WHERE id=?").get(expected.id);
+        const receiver = tool === "send_message" ? "GreenCastle" : "BlueLake";
+        let acknowledged = false;
+        restart();
+        const check = async () => {
+          expect(await invoke(tool, args)).toEqual({
+            ...expected,
+            delivery: { ...expected.delivery, historical: true },
+            idempotent_replay: true,
+          });
+          expect(
+            runtime.db.query<{ n: number }, []>("SELECT count(*) AS n FROM messages").get()!.n,
+          ).toBe(original ? 2 : 1);
+          expect(
+            runtime.db
+              .query<{ n: number }, []>("SELECT count(*) AS n FROM message_recipients")
+              .get()!.n,
+          ).toBe(original ? 2 : 1);
+          expect(
+            runtime.db
+              .query("SELECT tool,agent_id,key,fingerprint,created_ts FROM idempotency_keys")
+              .all(),
+          ).toEqual([key]);
+          expect(runtime.db.query("SELECT * FROM messages WHERE id=?").get(expected.id)).toEqual(
+            message,
+          );
+          const receipt = await invoke("get_message_delivery_receipt", {
             project_key: P,
-            agent_name: receiver,
             message_id: expected.id,
           });
-          acknowledged = true;
-        } else if (event === "conflict") {
-          expect(invoke(tool, { ...args, body_md: "different" })).rejects.toMatchObject({
-            type: "IDEMPOTENCY_KEY_CONFLICT",
-          });
-        } else {
-          await invoke(tool, args);
-        }
+          expect(receipt.recipients[0].acknowledged).toBe(acknowledged);
+        };
         await check();
+        for (const event of sequence) {
+          if (event === "restart") {
+            restart();
+          } else if (event === "ack") {
+            await invoke("acknowledge_message", {
+              project_key: P,
+              agent_name: receiver,
+              message_id: expected.id,
+            });
+            acknowledged = true;
+          } else if (event === "conflict") {
+            expect(invoke(tool, { ...args, body_md: "different" })).rejects.toMatchObject({
+              type: "IDEMPOTENCY_KEY_CONFLICT",
+            });
+          } else {
+            await invoke(tool, args);
+          }
+          await check();
+        }
+      } catch (error) {
+        violations.push(
+          `${tool}: ${sequence.join(" -> ") || "initial reopen"}: ${(error as Error).message}`,
+        );
+      } finally {
+        await runtime.server.stop(true);
+        runtime.db.close();
       }
-    } catch (error) {
-      violations.push(
-        `${tool}: ${sequence.join(" -> ") || "initial reopen"}: ${(error as Error).message}`,
-      );
-    } finally {
-      await runtime.server.stop(true);
-      runtime.db.close();
     }
-  }
-  expect(violations).toEqual([]);
-}, 30_000);
+    expect(violations).toEqual([]);
+  }, 30_000);
+}
 
 test("broadcast stays rejected and a retired agent receives nothing", async () => {
   expect(
