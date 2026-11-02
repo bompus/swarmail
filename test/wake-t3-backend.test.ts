@@ -807,7 +807,7 @@ linuxTest(
     const poll = followT3Backend(f.path, f, undefined, 60_000);
     expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
     expect(await poll()).toEqual({ url: f.url, moved: false, restarted: false }); // Cached, nothing happened.
-    // T3 replaces its database while its identity cannot be verified, on the same URL and with no runtime file change.
+    // T3 closes and reopens its database while its identity cannot be verified, on the same URL and with no runtime file change.
     const finishUpdate = mimicUpdate(f);
     now += 70_000;
     expect(await poll()).toBeUndefined();

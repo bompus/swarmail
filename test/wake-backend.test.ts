@@ -1,5 +1,6 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { Database } from "bun:sqlite";
+import * as fs from "node:fs";
 import { mkdirSync, mkdtempSync, realpathSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -176,6 +177,38 @@ test.skipIf(process.platform !== "linux")(
     expect((refusal as BridgeError).message).toContain("stop the timer and reconcile");
     t3.hold();
     expect(await verifyT3Backend(t3.config)).toBe(realpathSync(process.execPath));
+  },
+);
+
+test.skipIf(process.platform !== "linux")(
+  "a descriptor that closes during the scan is pending; any other inspection error is a refusal",
+  async () => {
+    const t3 = listener();
+    const readlink = fs.readlinkSync;
+    const failWith = (code: string) => {
+      const spy = spyOn(fs, "readlinkSync").mockImplementation(((path: string, ...rest: any[]) => {
+        if (String(path).startsWith(`/proc/${process.pid}/fd/`)) {
+          throw Object.assign(new Error(code), { code });
+        }
+        return (readlink as any)(path, ...rest);
+      }) as typeof fs.readlinkSync);
+      cleanups.push(() => spy.mockRestore());
+      return spy;
+    };
+    // Every descriptor vanishing mid-scan reads as a listener that has not opened its database yet.
+    failWith("ENOENT");
+    expect(await verifyT3Backend(t3.config).catch((e: unknown) => e)).toBeInstanceOf(
+      T3IdentityPending,
+    );
+    // An error that is not a vanished descriptor must not read as "not open yet".
+    for (const code of ["EIO", "EACCES", "EMFILE"]) {
+      cleanups.pop()!();
+      failWith(code);
+      const error = await verifyT3Backend(t3.config).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(BridgeError);
+      expect(error).not.toBeInstanceOf(T3IdentityPending);
+      expect((error as BridgeError).message).not.toContain(code);
+    }
   },
 );
 

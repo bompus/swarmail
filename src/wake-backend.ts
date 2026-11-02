@@ -138,12 +138,15 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
     }
     const proc = `/proc/${[...pids][0]}`;
     // The listener may exit while it is read, as when T3 restarts: a vanished entry is pending, not a mismatch.
+    const vanished = (error: unknown) => {
+      const code = (error as NodeJS.ErrnoException).code;
+      return code === "ENOENT" || code === "ESRCH";
+    };
     const live = <T>(read: () => T): T => {
       try {
         return read();
       } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code === "ENOENT" || code === "ESRCH") {
+        if (vanished(error)) {
           pending("the listening process exited");
         }
         throw error;
@@ -188,8 +191,12 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
         ) {
           others.push(target);
         }
-      } catch {
-        // Descriptors may close during the snapshot, and the database file may not exist.
+      } catch (error) {
+        // Descriptors may close during the snapshot, and the database file may not exist. Any other error
+        // reaches the refusal below instead of reading as "not open yet".
+        if (!vanished(error)) {
+          throw error;
+        }
       }
       return false;
     });
