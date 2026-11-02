@@ -71,6 +71,9 @@ function readProcArguments(pid: number): string[] | null {
 
 // Claude Code accepts these only in print mode (`claude -p`), a one-shot run; its interactive sessions never pass them.
 const PRINT_MODE_FLAGS = new Set(["-p", "--print", "--no-session-persistence"]);
+// A cluster of short flags that includes -p, as in `-pc` or `-cp`. Only the boolean short flags (-c, -v, -h) may sit
+// before the p and -d (its value is optional) only after it, so `-nprod` (--name prod) and `-dp` are not read as print.
+const CLUSTER = /^-[cvh]*p[cvhdp]*$/;
 // Options whose value is free text, which could spell a flag; the argument after one is data.
 const TEXT_OPTIONS = new Set(["--system-prompt", "--append-system-prompt"]);
 
@@ -87,7 +90,7 @@ export function isPrintMode(
     return false;
   }
   for (let index = 0; index < args.length && args[index] !== "--"; index++) {
-    if (PRINT_MODE_FLAGS.has(args[index]!)) {
+    if (PRINT_MODE_FLAGS.has(args[index]!) || CLUSTER.test(args[index]!)) {
       return true;
     }
     if (TEXT_OPTIONS.has(args[index]!)) {
