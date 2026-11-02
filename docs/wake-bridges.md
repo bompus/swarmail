@@ -316,7 +316,7 @@ until verified readiness (a listener that comes and goes in between does not
 restart it), and a single log line when the wait starts: its process is not visible, two processes share the port, it exited while
 being checked, or it has not opened T3's database (as while T3 updates itself).
 Nothing is sent to it meanwhile, and a failure still going after the window stops
-the follower with the usual identity message. The one-shot `swarmail wake-credentials` does not wait: a listener whose identity
+the follower with the usual identity message. The one-shot `wakeCredentials` helper (see the reader primitives below) does not wait: a listener whose identity
 cannot be verified yet makes it exit 75 (temporary failure, as for a missing
 listener) instead of 1. Verified readiness after such a wait
 is reported as a restart even on the same URL, however other failures
