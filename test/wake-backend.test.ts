@@ -107,6 +107,8 @@ test.skipIf(process.platform !== "linux")(
 );
 
 const cleanups: (() => unknown)[] = [];
+/** A pid that has just exited, so its /proc entry is gone. */
+const exitedPid = Bun.spawnSync(["true"]).pid;
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) {
     await cleanup();
@@ -234,7 +236,7 @@ test.skipIf(process.platform !== "linux")(
       expect(missing).not.toBeInstanceOf(T3IdentityPending);
     }
     // The same for a listener that has vanished, and for a pinned executable that does not exist.
-    fakeSockets((port) => sockets(port, 4194000));
+    fakeSockets((port) => sockets(port, exitedPid));
     const gone = await verifyT3Backend({ ...t3.config, baseDir: empty }).catch((e: unknown) => e);
     expect(gone).toBeInstanceOf(BridgeError);
     expect(gone).not.toBeInstanceOf(T3IdentityPending);
@@ -251,7 +253,7 @@ test.skipIf(process.platform !== "linux")(
     expect(failed).toBeInstanceOf(BridgeError);
     expect(failed).not.toBeInstanceOf(T3IdentityPending);
     // A pid that is gone by the time its /proc entry is read.
-    fakeSockets((port) => sockets(port, 4194000));
+    fakeSockets((port) => sockets(port, exitedPid));
     expect(await verifyT3Backend(t3.config).catch((e: unknown) => e)).toBeInstanceOf(
       T3IdentityPending,
     );

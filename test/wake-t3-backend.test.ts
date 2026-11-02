@@ -735,7 +735,7 @@ linuxTest(
   async () => {
     const f = fixture();
     const warn = quietWarnings();
-    fetchMock(f.response);
+    const fetch = fetchMock(f.response);
     const before = f.snapshot();
     const finishUpdate = mimicUpdate(f);
     const told: string[] = [];
@@ -744,6 +744,7 @@ linuxTest(
       expect(await poll()).toBeUndefined();
     }
     expect(told.length).toBeGreaterThanOrEqual(3); // Told before every poll that could not verify.
+    expect(fetch).not.toHaveBeenCalled(); // No credential request while the identity is pending.
     const lines = warn.mock.calls.map((call) => String(call[0]));
     expect(lines.filter((line) => line.includes("identity"))).toHaveLength(1); // One line when the wait starts.
     finishUpdate();
@@ -842,6 +843,29 @@ linuxTest(
     expect(await poll()).toBeUndefined();
     now += 1000;
     expect(await poll()).toEqual({ url: f.url, moved: false, restarted: true });
+  },
+);
+
+linuxTest(
+  "a listener that flaps between pending and absent cannot dodge the identity window",
+  async () => {
+    const f = fixture();
+    quietWarnings();
+    fetchMock(f.response);
+    mimicUpdate(f);
+    let now = performance.now();
+    const clock = spyOn(performance, "now").mockImplementation(() => now);
+    cleanup.push(() => clock.mockRestore());
+    const poll = followT3Backend(f.path, f, undefined, 150);
+    expect(await poll()).toBeUndefined(); // Identity pending: the window starts.
+    f.publish(process.pid + 1000000); // The published process is gone: plain unavailable.
+    now += 100;
+    expect(await poll()).toBeUndefined();
+    f.publish(); // Back, still not verifiable, and the window has run out.
+    now += 100;
+    const error = await failure(poll());
+    expect(error).toBeInstanceOf(BridgeError);
+    expect(error!.message).toContain("stop the timer and reconcile");
   },
 );
 

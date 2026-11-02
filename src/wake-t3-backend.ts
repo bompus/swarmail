@@ -115,8 +115,6 @@ export function followT3Backend(
         unavailable = true;
         return undefined;
       }
-      pendingSince = undefined; // A wait that another failure broke does not count against the next one.
-      pendingLogged = false;
       if (error instanceof T3SessionRetry) {
         // Poll again: the listener is verified again first, and the supervisor's other work runs between polls.
         const waited = performance.now() - (retrySince ??= performance.now());
