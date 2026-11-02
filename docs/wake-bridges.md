@@ -310,8 +310,16 @@ timed-out connection, is not fatal at first. The follower returns `undefined` an
 logs the retry, so the supervisor keeps reconciling and persisting quarantines;
 every poll verifies the T3 listener again before the credential is sent. After
 two minutes of such failures the next failing poll stops the follower with the
-original error. Credential rejection, redirects, malformed responses and identity
-mismatches remain fatal at once. Missing or due credentials and unfinished rotation
+original error. A listener whose identity cannot be verified yet is treated the
+same way, with its own two-minute window and a single log line when the wait
+starts: its process is not visible, two processes share the port, it exited while
+being checked, or it has not opened T3's database (as while T3 updates itself).
+Nothing is sent to it meanwhile, and a failure still going after the window stops
+the follower with the usual identity message. A listener that is verified to be
+something else (another user, another executable, another database file in T3's
+data directory, or a data directory without a database) is a mismatch and stops
+the follower at once. Credential rejection, redirects,
+malformed responses and identity mismatches remain fatal at once. Missing or due credentials and unfinished rotation
 state use the existing locked renewal path when no eligible session transport
 retry has occurred. Listener absence alone does not disable that path. Once a
 clean session check has a transport failure, losing retry eligibility before
