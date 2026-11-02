@@ -209,6 +209,9 @@ test.skipIf(process.platform !== "linux")(
       expect(error).not.toBeInstanceOf(T3IdentityPending);
       expect((error as BridgeError).message).not.toContain(code);
     }
+    // A descriptor that proves the database is open outweighs an error on any other descriptor, in either scan order.
+    t3.hold();
+    expect(await verifyT3Backend(t3.config)).toBe(realpathSync(process.execPath));
   },
 );
 

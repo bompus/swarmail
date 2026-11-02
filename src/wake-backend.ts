@@ -178,6 +178,7 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
     // A listener that holds another database file named like T3's in T3's data directory is a different store; one
     // that holds none is not up yet.
     const others: string[] = [];
+    let inspectionError: { error: unknown } | undefined;
     const openDatabase = live(() => readdirSync(join(proc, "fd"))).some((fd) => {
       try {
         const link = join(proc, "fd", fd);
@@ -192,14 +193,18 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
           others.push(target);
         }
       } catch (error) {
-        // Descriptors may close during the snapshot, and the database file may not exist. Any other error
-        // reaches the refusal below instead of reading as "not open yet".
+        // Descriptors may close during the snapshot, and the database file may not exist. Any other error is
+        // kept and scanning goes on: a descriptor that proves the database is open outweighs it, and without one
+        // it is a refusal below, not "not open yet".
         if (!vanished(error)) {
-          throw error;
+          inspectionError ??= { error };
         }
       }
       return false;
     });
+    if (!openDatabase && inspectionError) {
+      throw inspectionError.error;
+    }
     checkExecutable();
     const executable = live(() => realpathSync(join(proc, "exe")));
     if (!before || before !== started()) {
