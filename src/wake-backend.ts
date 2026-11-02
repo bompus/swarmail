@@ -94,6 +94,9 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
     });
     const [output, exit] = await Promise.all([new Response(child.stdout).text(), child.exited]);
     checkBackendOperation(check);
+    if (exit !== 0) {
+      refuse(); // A failing `ss` proves nothing about the listener, whatever it printed.
+    }
     const lines = output.trim().split("\n");
     const pids = new Set<string>();
     for (const line of lines) {
@@ -108,9 +111,6 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
       for (const owner of owners) {
         pids.add(owner[1]!);
       }
-    }
-    if (exit !== 0) {
-      refuse();
     }
     if (pids.size > 1) {
       throw new T3IdentityPending("more than one process is listening");

@@ -138,12 +138,12 @@ function listener() {
 }
 
 /** Makes the `ss` call report `lines`, leaving every other subprocess alone. */
-function fakeSockets(lines: (port: number) => string) {
+function fakeSockets(lines: (port: number) => string, exit = 0) {
   const spawn = Bun.spawn;
   const spy = spyOn(Bun, "spawn").mockImplementation(((command: any, options: any) => {
     if (Array.isArray(command) && command[0] === "ss") {
       const port = Number(String(command.at(-1)).replace(/\D/g, ""));
-      return { stdout: new Response(lines(port)).body, exited: Promise.resolve(0) };
+      return { stdout: new Response(lines(port)).body, exited: Promise.resolve(exit) };
     }
     return spawn(command, options);
   }) as typeof Bun.spawn);
@@ -219,6 +219,11 @@ test.skipIf(process.platform !== "linux")(
     expect(await verifyT3Backend(t3.config).catch((e: unknown) => e)).toBeInstanceOf(
       T3IdentityPending,
     );
+    // A failing `ss` is a refusal even when its partial output would otherwise read as pending.
+    fakeSockets((port) => `LISTEN 0 128 127.0.0.1:${port} 0.0.0.0:*`, 1);
+    const failed = await verifyT3Backend(t3.config).catch((e: unknown) => e);
+    expect(failed).toBeInstanceOf(BridgeError);
+    expect(failed).not.toBeInstanceOf(T3IdentityPending);
     // A pid that is gone by the time its /proc entry is read.
     fakeSockets((port) => sockets(port, 4194000));
     expect(await verifyT3Backend(t3.config).catch((e: unknown) => e)).toBeInstanceOf(

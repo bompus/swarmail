@@ -311,8 +311,8 @@ logs the retry, so the supervisor keeps reconciling and persisting quarantines;
 every poll verifies the T3 listener again before the credential is sent. After
 two minutes of such failures the next failing poll stops the follower with the
 original error. A listener whose identity cannot be verified yet is treated the
-same way, with its own two-minute window and a single log line when the wait
-starts: its process is not visible, two processes share the port, it exited while
+same way, with its own two-minute window (consecutive failures of this kind) and
+a single log line when the wait starts: its process is not visible, two processes share the port, it exited while
 being checked, or it has not opened T3's database (as while T3 updates itself).
 Nothing is sent to it meanwhile, and a failure still going after the window stops
 the follower with the usual identity message. A listener that is verified to be
