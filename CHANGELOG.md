@@ -2,7 +2,7 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
-## Unreleased
+## 0.9.0 - 2026-11-02
 
 - `swarmail wake-auto-t3` holds its bridges while it has no verified T3 backend. A bridge sends no T3 request, and
   so no credential, until the supervisor has verified the T3 listener again. It keeps its journaled command meanwhile
