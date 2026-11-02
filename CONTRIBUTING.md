@@ -199,3 +199,11 @@ fails until every folder in `packages/` is named in this section.
   <https://cursor.com/marketplace/publish> while signed in to Cursor. The
   plugin has no version and points at the local server, so releases need no
   change. Cursor reviews each update to the plugin before publishing it.
+- [Cursor Directory](https://cursor.directory/plugins/swarmail) (pending): the
+  plugin in `packages/cursor-plugin/`, submitted at
+  <https://cursor.directory/plugins/new> while signed in with GitHub: "Scan
+  repo" on this repository, then the name, description and MCP component text
+  edited in the form. The page stays hidden until the site's security scan
+  finishes. It shows no version, so releases need no change. Its text lives on
+  the site, not in this repository, and it is not known how to edit it after
+  publishing, so check that once it is public.
