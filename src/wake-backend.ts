@@ -138,12 +138,15 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
     }
     const proc = `/proc/${[...pids][0]}`;
     // The listener may exit while it is read, as when T3 restarts: a vanished entry is pending, not a mismatch.
+    const vanished = (error: unknown) => {
+      const code = (error as NodeJS.ErrnoException).code;
+      return code === "ENOENT" || code === "ESRCH";
+    };
     const live = <T>(read: () => T): T => {
       try {
         return read();
       } catch (error) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code === "ENOENT" || code === "ESRCH") {
+        if (vanished(error)) {
           pending("the listening process exited");
         }
         throw error;
@@ -175,6 +178,7 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
     // A listener that holds another database file named like T3's in T3's data directory is a different store; one
     // that holds none is not up yet.
     const others: string[] = [];
+    let inspectionError: { error: unknown } | undefined;
     const openDatabase = live(() => readdirSync(join(proc, "fd"))).some((fd) => {
       try {
         const link = join(proc, "fd", fd);
@@ -188,8 +192,13 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
         ) {
           others.push(target);
         }
-      } catch {
-        // Descriptors may close during the snapshot, and the database file may not exist.
+      } catch (error) {
+        // Descriptors may close during the snapshot, and the database file may not exist. Any other error is
+        // kept and scanning goes on: a descriptor that proves the database is open outweighs it, and without one
+        // it is a refusal below, not "not open yet".
+        if (!vanished(error)) {
+          inspectionError ??= { error };
+        }
       }
       return false;
     });
@@ -199,6 +208,10 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
       pending("the listening process changed");
     }
     if (!openDatabase) {
+      // Only now, with the same listener still present: the scan may have failed because it was exiting.
+      if (inspectionError) {
+        throw inspectionError.error;
+      }
       let databaseExists = true;
       try {
         statSync(database);
