@@ -99,6 +99,7 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
     }
     const lines = output.trim().split("\n");
     const pids = new Set<string>();
+    let unseen = false;
     for (const line of lines) {
       const local = line.trim().split(/\s+/)[3] ?? "";
       if (!addresses.has(local.slice(0, local.lastIndexOf(":")))) {
@@ -106,14 +107,23 @@ export async function verifyT3Backend(config: Backend, check: BackendCheck = {})
       }
       const owners = [...line.matchAll(/pid=(\d+),/g)];
       if (!owners.length) {
-        throw new T3IdentityPending("listening process not visible");
+        unseen = true;
+        continue;
       }
       for (const owner of owners) {
         pids.add(owner[1]!);
       }
     }
-    if (pids.size > 1) {
-      throw new T3IdentityPending("more than one process is listening");
+    if (unseen || pids.size > 1) {
+      // A missing database is a known configuration failure, whatever the owners look like.
+      try {
+        statSync(t3StatePath(config.baseDir));
+      } catch {
+        refuse();
+      }
+      throw new T3IdentityPending(
+        unseen ? "listening process not visible" : "more than one process is listening",
+      );
     }
     if (pids.size === 0 || (config.pid !== undefined && !pids.has(String(config.pid)))) {
       throw new T3Unavailable();

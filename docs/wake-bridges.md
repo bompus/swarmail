@@ -315,7 +315,9 @@ same way, with its own two-minute window (consecutive failures of this kind) and
 a single log line when the wait starts: its process is not visible, two processes share the port, it exited while
 being checked, or it has not opened T3's database (as while T3 updates itself).
 Nothing is sent to it meanwhile, and a failure still going after the window stops
-the follower with the usual identity message. A listener that is verified to be
+the follower with the usual identity message. Verified readiness after such a wait
+is reported as a restart even on the same URL, so the supervisor reads T3's
+database afresh. A listener that is verified to be
 something else (another user, another executable, another database file in T3's
 data directory, or a data directory without a database) is a mismatch and stops
 the follower at once. Credential rejection, redirects,

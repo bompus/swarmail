@@ -794,6 +794,28 @@ linuxTest("a verified different identity exits at once, with no wait", async () 
   ).toEqual([]);
 });
 
+linuxTest(
+  "recovering from an identity wait reports a restart, so the held T3 database is reopened",
+  async () => {
+    const f = fixture();
+    quietWarnings();
+    fetchMock(f.response);
+    let now = performance.now();
+    const clock = spyOn(performance, "now").mockImplementation(() => now);
+    cleanup.push(() => clock.mockRestore());
+    const poll = followT3Backend(f.path, f, undefined, 60_000);
+    expect(await poll()).toEqual({ url: f.url, moved: true, restarted: true });
+    expect(await poll()).toEqual({ url: f.url, moved: false, restarted: false }); // Cached, nothing happened.
+    // T3 replaces its database while its identity cannot be verified, on the same URL and with no runtime file change.
+    const finishUpdate = mimicUpdate(f);
+    now += 70_000;
+    expect(await poll()).toBeUndefined();
+    finishUpdate();
+    now += 1000;
+    expect(await poll()).toEqual({ url: f.url, moved: false, restarted: true });
+  },
+);
+
 linuxTest("each wait for an identity starts its own window", async () => {
   const f = fixture();
   quietWarnings();

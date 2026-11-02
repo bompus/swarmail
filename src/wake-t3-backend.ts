@@ -76,7 +76,9 @@ export function followT3Backend(
       }
       checkBackendOperation(check);
       const moved = checked.url !== url;
-      const restarted = listener !== published;
+      // A wait for the identity counts as a restart even on the same listener: T3 was updating and may have replaced
+      // its database meanwhile, so the caller must open the new one.
+      const restarted = listener !== published || pendingSince !== undefined;
       url = checked.url;
       published = listener;
       nextCheck = performance.now() + 60_000;

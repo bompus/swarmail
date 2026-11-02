@@ -219,6 +219,20 @@ test.skipIf(process.platform !== "linux")(
     expect(await verifyT3Backend(t3.config).catch((e: unknown) => e)).toBeInstanceOf(
       T3IdentityPending,
     );
+    // The configured database is missing: a known configuration failure, refused even for owners that look pending.
+    const empty = mkdtempSync(join(scratch, "case-"));
+    cleanups.push(() => rmSync(empty, { recursive: true, force: true }));
+    for (const lines of [
+      (port: number) => `LISTEN 0 128 127.0.0.1:${port} 0.0.0.0:*`,
+      (port: number) => sockets(port, process.pid, process.pid + 1),
+    ]) {
+      fakeSockets(lines);
+      const missing = await verifyT3Backend({ ...t3.config, baseDir: empty }).catch(
+        (e: unknown) => e,
+      );
+      expect(missing).toBeInstanceOf(BridgeError);
+      expect(missing).not.toBeInstanceOf(T3IdentityPending);
+    }
     // A failing `ss` is a refusal even when its partial output would otherwise read as pending.
     fakeSockets((port) => `LISTEN 0 128 127.0.0.1:${port} 0.0.0.0:*`, 1);
     const failed = await verifyT3Backend(t3.config).catch((e: unknown) => e);
