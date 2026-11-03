@@ -2,6 +2,15 @@
 
 Notable changes to Swarmail. Versions follow [semantic versioning](https://semver.org).
 
+## 0.9.1 - 2026-11-03
+
+- A Claude Code one-shot run (`claude -p`) started by T3 Code registers on its first edit, as intended, instead of
+  at start, so a read-only run adds no agent to the roster. T3 sets its own `CLAUDE_CODE_ENTRYPOINT` on the runs
+  it starts, which hid them from the existing `sdk-cli` check. The register hook now also reads the host process's
+  arguments (`-p`, `--print` or `--no-session-persistence`, including short flags clustered with `-p`, and ignoring
+  text after `--` or after `--system-prompt` / `--append-system-prompt`). Where the arguments cannot be read, as on
+  Windows, the `sdk-cli` entrypoint is still the signal. An edit made through the shell does not register the run.
+
 ## 0.9.0 - 2026-11-02
 
 - `swarmail wake-auto-t3` holds its bridges while it has no verified T3 backend. A held bridge sends no T3 request,
