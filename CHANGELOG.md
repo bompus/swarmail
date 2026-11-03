@@ -9,7 +9,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
   it starts, which hid them from the existing `sdk-cli` check. The register hook now also reads the host process's
   arguments (`-p`, `--print` or `--no-session-persistence`, including short flags clustered with `-p`, and ignoring
   text after `--` or after `--system-prompt` / `--append-system-prompt`). Where the arguments cannot be read, as on
-  Windows, the `sdk-cli` entrypoint is still the signal. An edit made through the shell does not register the run.
+  native Windows, only the `sdk-cli` entrypoint is checked, so a run T3 starts there still registers at start. An
+  edit made through the shell does not register the run.
 
 ## 0.9.0 - 2026-11-02
 
