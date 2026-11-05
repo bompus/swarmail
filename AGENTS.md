@@ -13,7 +13,8 @@ bun test
 ```
 
 `bun run check` also runs `shellcheck` and `shfmt` on the shell scripts, so both
-must be installed. Run the checks bare or redirected to a log you read after they
+must be installed. `bun test` starts the stdio relay (`packages/mcp-relay`) with
+`node`, so Node.js 18 or later must be on the path. Run the checks bare or redirected to a log you read after they
 exit. CI runs the same checks on Linux and Windows; on Windows it runs
 `bun test --timeout 60000`, because several tests approach Bun's five-second
 default there, so use that command on Windows.
