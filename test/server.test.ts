@@ -723,6 +723,36 @@ test("a directory reservation covers the files under it, with or without its tra
   }
 });
 
+test("an empty or overlong reservation path is rejected instead of granted", async () => {
+  for (const paths of [[""], ["  "], ["src/a.ts", ""], ["a".repeat(1025)]]) {
+    const error = await call("file_reservation_paths", {
+      project_key: P,
+      agent_name: "BlueLake",
+      paths,
+    }).catch((e: unknown) => e);
+    expect(error).toMatchObject({ type: "INVALID_ARGUMENT", data: { field: "paths" } });
+  }
+  const held = await call("list_file_reservations", { project_key: P });
+  expect(held.filter((r: any) => r.agent === "BlueLake")).toEqual([]);
+});
+
+test("two glob reservations that can match one file conflict", async () => {
+  await call("file_reservation_paths", {
+    project_key: P,
+    agent_name: "BlueLake",
+    paths: ["lib/*.ts"],
+  });
+  const other = await call("file_reservation_paths", {
+    project_key: P,
+    agent_name: "GreenCastle",
+    paths: ["lib/a*", "lib/*.md"],
+  });
+  expect(other.conflicts.map((c: any) => c.path)).toEqual(["lib/a*"]);
+  expect(other.granted.map((g: any) => g.path_pattern)).toEqual(["lib/*.md"]);
+  await call("release_file_reservations", { project_key: P, agent_name: "BlueLake" });
+  await call("release_file_reservations", { project_key: P, agent_name: "GreenCastle" });
+});
+
 test("the endpoint answers notifications, bad JSON, unknown methods and foreign origins per MCP", async () => {
   const post = (body: string, headers: Record<string, string> = {}) =>
     fetch(url, {

@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { REPOSITORY_PREFIX, originUrl, repositoryKey, repositoryName } from "./checkout.ts";
-import { nowUs } from "./db.ts";
+import { freeSlug, nowUs } from "./db.ts";
 import type { Project } from "./store.ts";
 
 export const isName = (key: string): boolean => key.startsWith(REPOSITORY_PREFIX);
@@ -70,10 +70,7 @@ export function claim(db: Database, key: string): Project | null {
     const hash = createHash("sha1").update(key).digest("hex").slice(0, 8);
     const base = `${key.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}-${hash}`;
     // A checkout that took over an earlier project for this name keeps its slug, so a new one needs another.
-    let slug = base;
-    for (let n = 2; db.query("SELECT 1 FROM projects WHERE slug = ?").get(slug); n++) {
-      slug = `${base}-${n}`;
-    }
+    const slug = freeSlug(db, base);
     return db
       .query<Project, [string, string, number]>(
         "INSERT INTO projects (slug, human_key, created_at) VALUES (?, ?, ?) RETURNING *",

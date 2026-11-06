@@ -239,6 +239,27 @@ export function openDatabase(
   return db;
 }
 
+/** `base`, or `base-2`, `base-3`, ... when projects already use it; slugs are unique but are not project identity. */
+export function freeSlug(db: Database, base: string): string {
+  let slug = base;
+  for (let n = 2; db.query("SELECT 1 FROM projects WHERE slug = ?").get(slug); n++) {
+    slug = `${base}-${n}`;
+  }
+  return slug;
+}
+
+/**
+ * A readable label for a new project, not its identity: two different keys can slugify alike (`/w/my_app` and
+ * `/w/my-app`), and the later one gets a number.
+ */
+export function projectSlug(db: Database, humanKey: string): string {
+  const base = humanKey
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return freeSlug(db, base);
+}
+
 let lastUs = 0;
 /** Microseconds since the epoch, wall-clock, strictly increasing within the process. */
 export function nowUs(): number {
@@ -262,8 +283,13 @@ export function iso(us: number | null | undefined): string | null {
 
 export class InvalidTimestamp extends Error {}
 
+/** ISO 8601 and RFC 3339: a year, month or date, or a date and a time with an optional zone. */
+const ISO =
+  /^\d{4}(-\d{2}(-\d{2}([Tt ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?([Zz]|[+-]\d{2}(:?\d{2})?)?)?)?)?$/;
+
 export function parseIso(value: string): number {
-  const ms = Date.parse(value);
+  // Date.parse also takes loose forms such as "1" (the year 2001), which would filter on a time nobody meant.
+  const ms = ISO.test(value) ? Date.parse(value) : NaN;
   if (Number.isNaN(ms)) {
     throw new InvalidTimestamp(`not an ISO-8601 timestamp: ${value}`);
   }
