@@ -8,3 +8,9 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    ignore:
+      # typescript is pinned to its beta tag (7.1.0-beta). Without this rule Dependabot proposes the nightly 7.1.0-dev.*
+      # builds, which sort above the beta; this range covers those and leaves betas, rcs and releases alone.
+      # The next minor's dev line is listed too, for when the nightlies move on before the pin does. Move the ranges when the pin moves.
+      - dependency-name: typescript
+        versions: [">=7.1.0-dev <7.1.0-rc", ">=7.2.0-dev <7.2.0-rc"]
