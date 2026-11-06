@@ -8,6 +8,7 @@ import { primaryCheckout, worktreeRoot } from "./checkout.ts";
 import * as repositories from "./repository-projects.ts";
 import { overlaps } from "./glob.ts";
 import { locations } from "./location.ts";
+import { trimKey, windowsKey } from "./paths.ts";
 import {
   identity,
   leadingTag,
@@ -17,7 +18,7 @@ import {
   replaceRefusal,
   type Identity,
 } from "./tag.ts";
-import { InvalidTimestamp, iso, nowUs, parseIso } from "./db.ts";
+import { InvalidTimestamp, iso, nowUs, parseIso, projectSlug } from "./db.ts";
 import { lifecycleEligible, type Lifecycle } from "./lifecycle.ts";
 import { SESSION_RE, T3_THREAD_RE } from "./wake.ts";
 import { reconcileNotices, linkNotice, PING_SUBJECT } from "./wake-notices.ts";
@@ -183,13 +184,6 @@ const NOUNS = [
 ];
 const NAME_RE = /^[A-Z][a-z]+[A-Z][a-z]+$/;
 
-export function slugify(humanKey: string): string {
-  return humanKey
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-}
-
 export function str(value: unknown, field: string): string {
   if (typeof value !== "string" || value === "") {
     throw new ToolError("INVALID_ARGUMENT", `${field} is required`, { field });
@@ -237,8 +231,9 @@ export const projectOut = (p: Project) => ({
 });
 
 const queries = (db: Database) => ({
-  projectByKey: db.query<Project, [string, string]>(
-    "SELECT * FROM projects WHERE human_key = ? OR slug = ? ORDER BY id LIMIT 1",
+  projectByKey: db.query<Project, [string, string | null]>(
+    `SELECT * FROM projects WHERE human_key IN (?1, ?1 || '/')
+       OR (?2 IS NOT NULL AND rtrim(replace(lower(human_key), char(92), '/'), '/') = ?2) ORDER BY id LIMIT 1`,
   ),
   insertProject: db.query<Project, [string, string, number]>(
     "INSERT INTO projects (slug, human_key, created_at) VALUES (?, ?, ?) RETURNING *",
@@ -321,12 +316,13 @@ export class MailStore {
    * The project a key names. A row stored under the exact key wins, so a project created under a
    * worktree path stays reachable by that path.
    */
-  private lookup(given: string, persist = false): { k: string; p: Project | null } {
+  private lookup(key: string, persist = false): { k: string; p: Project | null } {
+    const given = trimKey(key);
     const exact = repositories.isName(given)
       ? repositories.projectOf(this.db, given, persist)
-      : this.q.projectByKey.get(given, slugify(given));
+      : this.q.projectByKey.get(given, windowsKey(given));
     const k = exact ? given : this.projectKey(given);
-    return { k, p: exact ?? (k === given ? null : this.q.projectByKey.get(k, slugify(k))) };
+    return { k, p: exact ?? (k === given ? null : this.q.projectByKey.get(k, windowsKey(k))) };
   }
 
   project(key: unknown): Project {
@@ -343,7 +339,11 @@ export class MailStore {
 
   ensureProject(key: unknown): Project {
     const { k, p } = this.lookup(str(key, "human_key"), true);
-    return p ?? repositories.claim(this.db, k) ?? this.q.insertProject.get(slugify(k), k, nowUs())!;
+    return (
+      p ??
+      repositories.claim(this.db, k) ??
+      this.q.insertProject.get(projectSlug(this.db, k), k, nowUs())!
+    );
   }
 
   private lifecycleAllows(who: Agent): boolean {
@@ -909,8 +909,8 @@ export class MailStore {
   reserve(p: Project, who: Agent, a: Args, ttlField = "ttl_seconds") {
     this.requireLifecycle(who);
     const paths = [...new Set(list(a.paths))];
-    if (paths.length === 0) {
-      throw new ToolError("INVALID_ARGUMENT", "paths is required", { field: "paths" });
+    if (paths.length === 0 || paths.some((path) => path.trim() === "")) {
+      throw new ToolError("INVALID_ARGUMENT", "paths needs non-empty paths", { field: "paths" });
     }
     const now = nowUs(),
       exclusive = a.exclusive ?? true;

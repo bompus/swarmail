@@ -118,3 +118,19 @@ export const authHeaders = (
   const token = bearerToken(env);
   return token ? { authorization: `Bearer ${token}` } : {};
 };
+
+/**
+ * How a Windows drive path is compared: Windows ignores case and slash direction, so `C:\Repo` and `c:/repo` are one
+ * checkout. Any other key compares exactly (null), because on Linux `/work/Repo` and `/work/repo` are two directories.
+ */
+export const windowsKey = (key: string): string | null =>
+  /^[A-Za-z]:[\\/]/.test(key)
+    ? key
+        .replace(/\\/g, "/")
+        .replace(/[A-Z]/g, (c) => c.toLowerCase())
+        .replace(/(?<=.)\/+$/, "")
+    : null;
+
+/** A project key without trailing separators (`/work/repo/` is `/work/repo`), except for a root such as `/` or `C:\`. */
+export const trimKey = (key: string): string =>
+  /^([A-Za-z]:)?[\\/]*$/.test(key) ? key : key.replace(/[\\/]+$/, "");

@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openDatabase, SCHEMA_VERSION } from "../src/db.ts";
+import { InvalidTimestamp, iso, openDatabase, parseIso, SCHEMA_VERSION } from "../src/db.ts";
 
 test("opening waits for another process that holds the database instead of failing", async () => {
   const dir = mkdtempSync(join(tmpdir(), "swarmail-db-"));
@@ -277,5 +277,20 @@ test("version-five upgrade retains mail, retry results and uncertain cursors", (
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("parseIso takes ISO-8601 forms and rejects loose ones Date.parse would read as a year", () => {
+  for (const value of [
+    "2026-11-06",
+    "2026-11-06T10:20:30Z",
+    "2026-11-06T10:20:30.123456Z",
+    "2026-11-06 10:20",
+  ]) {
+    expect(Number.isNaN(parseIso(value))).toBe(false);
+  }
+  expect(iso(parseIso("2026-11-06T10:20:30.123456Z"))).toBe("2026-11-06T10:20:30.123456Z");
+  for (const value of ["1", "12", "Nov 6 2026", "2026 Nov 6", "yesterday", ""]) {
+    expect(() => parseIso(value)).toThrow(InvalidTimestamp);
   }
 });
