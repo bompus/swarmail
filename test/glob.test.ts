@@ -92,3 +92,16 @@ test("a pattern of many unclosed [ is read in linear time", () => {
   expect(overlaps("[".repeat(40_000), "[".repeat(40_000))).toBe(true);
   expect(performance.now() - start).toBeLessThan(3000);
 });
+
+test("a changed submodule, reported as its directory, is covered by a reservation inside it", () => {
+  expect(covers("vendor/lib/src/a.ts", "vendor/lib")).toBe(true);
+  expect(covers("vendor/lib/src/a.ts", "vendor/libs")).toBe(false);
+});
+
+test("many held patterns that cannot match the request are settled quickly", () => {
+  const held = Array.from({ length: 15 }, (_, i) => "[a]*".repeat(250) + "b" + i);
+  const request = "[a]*".repeat(250) + "c";
+  const start = performance.now();
+  expect(held.some((h) => overlaps(h, request))).toBe(false);
+  expect(performance.now() - start).toBeLessThan(400);
+});

@@ -4,22 +4,30 @@ import type { Database } from "bun:sqlite";
 import type { Project } from "./store.ts";
 
 // A drive path (`C:\Repo`, `c:/repo`) or a share (`\\server\share`). Elsewhere `\` is an ordinary file name character.
-const WINDOWS = /^([A-Za-z]:[\\/]|\\\\)/;
+const WINDOWS = /^([A-Za-z]:[\\/]|[\\/]{2}[^\\/])/;
+
+/**
+ * Case-folds as Windows does: each character on its own, to upper case when that is one character. That makes the
+ * Greek `Σ`, `σ` and `ς` one letter, and keeps `İ` apart from `i` and a combining dot, as `toLowerCase()` would not.
+ */
+const fold = (text: string): string =>
+  Array.from(text, (c) => {
+    const upper = c.toUpperCase();
+    return upper.length === c.length ? upper : c;
+  }).join("");
 
 /**
  * How a Windows path is compared: Windows ignores case and slash direction, so `C:\Repo` and `c:/repo` are one
  * checkout. Any other key compares exactly (null), because on Linux `/work/Repo` and `/work/repo` are two directories.
  */
 export const windowsKey = (key: string): string | null =>
-  WINDOWS.test(key)
-    ? key
-        .replace(/\\/g, "/")
-        .toLowerCase()
-        .replace(/(?<=.)\/+$/, "")
-    : null;
+  WINDOWS.test(key) ? fold(key.replace(/\\/g, "/")).replace(/(?<=.)\/+$/, "") : null;
 
 /** A project key without trailing separators (`/work/repo/` is `/work/repo`), except for a root such as `/` or `C:\`. */
 export const trimKey = (key: string): string => {
+  if (/^\/+$/.test(key)) {
+    return "/";
+  }
   if (/^([A-Za-z]:)?[\\/]*$/.test(key)) {
     return key;
   }

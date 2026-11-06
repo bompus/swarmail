@@ -60,7 +60,7 @@ test("a trailing backslash is part of a POSIX name, and a Windows share compares
   expect(s.ensureProject("/work/repo\\").id).not.toBe(s.ensureProject("/work/repo").id);
   const share = s.ensureProject("\\\\Server\\Share\\Repo");
   expect(s.ensureProject("\\\\server\\share\\repo\\").id).toBe(share.id);
-  expect(s.ensureProject("//server/share/repo").id).not.toBe(share.id);
+  expect(s.ensureProject("//Server/Share/Repo").id).toBe(share.id);
 });
 
 test("a Windows path compares letters beyond ASCII without regard to case", () => {
@@ -77,4 +77,18 @@ test("a key an earlier build stored with several trailing slashes is still found
   for (const key of ["/old/repo//", "/old/repo/", "/old/repo"]) {
     expect(s.ensureProject(key).slug).toBe("old");
   }
+});
+
+test("a Windows path folds case one character at a time, as Windows does", () => {
+  const s = store();
+  const sigma = s.ensureProject("C:/WORK/ΟΣ");
+  expect(s.ensureProject("c:/work/οσ").id).toBe(sigma.id);
+  expect(s.ensureProject("c:/work/ος").id).toBe(sigma.id);
+  const dotted = s.ensureProject("C:/work/İ");
+  expect(s.ensureProject("C:/work/i\u0307").id).not.toBe(dotted.id);
+});
+
+test("the filesystem root is one project however many slashes name it", () => {
+  const s = store();
+  expect(s.ensureProject("///").id).toBe(s.ensureProject("/").id);
 });

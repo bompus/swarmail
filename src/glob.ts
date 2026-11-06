@@ -6,9 +6,10 @@
 /** One step of a pattern: a star, or one character taken from a set. */
 type Step =
   | { star: true; dirs: boolean }
-  | { star: false; has: (c: string) => boolean; hints: string[] };
+  | { star: false; has: (c: string) => boolean; hints: string[]; only?: string };
 
-const literal = (c: string): Step => ({ star: false, has: (x) => x === c, hints: [c] });
+// `only` is set when a step matches one character, which makes comparing it with another step a single test.
+const literal = (c: string): Step => ({ star: false, has: (x) => x === c, hints: [c], only: c });
 const anyChar: Step = { star: false, has: () => true, hints: [] };
 
 /** A character no pattern spells out, standing for "some other character" when two sets are compared. */
@@ -32,7 +33,15 @@ const charClass = (chars: string[], at: number): { step: Step; next: number } | 
       ]);
       const inside = (c: string) => ranges.some(([lo, hi]) => lo <= c && c <= hi);
       return {
-        step: { star: false, has: (c) => inside(c) !== negated, hints },
+        step: {
+          star: false,
+          has: (c) => inside(c) !== negated,
+          hints,
+          only:
+            !negated && ranges.length === 1 && ranges[0]![0] === ranges[0]![1]
+              ? ranges[0]![0]
+              : undefined,
+        },
         next: i + 1,
       };
     }
@@ -86,7 +95,11 @@ const steps = (pattern: string): Step[] => {
 
 /** Whether the two single-character steps share a character. */
 const share = (a: Step & { star: false }, b: Step & { star: false }) =>
-  [...a.hints, ...b.hints, OTHER].some((c) => a.has(c) && b.has(c));
+  a.only !== undefined
+    ? b.has(a.only)
+    : b.only !== undefined
+      ? a.has(b.only)
+      : [...a.hints, ...b.hints, OTHER].some((c) => a.has(c) && b.has(c));
 
 /**
  * Whether some string matches both patterns: a walk over states, at most one visit per state, so its cost is
@@ -96,6 +109,14 @@ const share = (a: Step & { star: false }, b: Step & { star: false }) =>
 const intersect = (a: string, b: string): boolean => {
   const x = steps(a);
   const y = steps(b);
+  // Both ends that no star can stretch must agree, which settles most unrelated pairs without the walk.
+  for (const end of [0, -1]) {
+    const p = x.at(end);
+    const q = y.at(end);
+    if (p && q && !p.star && !q.star && !share(p, q)) {
+      return false;
+    }
+  }
   const seen = new Set<number>();
   const todo: [number, number, boolean, boolean][] = [[0, 0, false, false]];
   while (todo.length) {
@@ -161,15 +182,19 @@ export const overlaps = (a: string, b: string) =>
     ? a === b
     : a === b ||
       intersect(a, b) ||
-      intersect(a, literally(b)) ||
-      intersect(literally(a), b) ||
+      (literally(b) !== b && intersect(a, literally(b))) ||
+      (literally(a) !== a && intersect(literally(a), b)) ||
       under(a, b) ||
       under(b, a);
 
 /**
- * Whether `reservation` covers `path`, a file a commit changed: unlike `overlaps`, `path` is that one file, so
- * its `[` or `*` are not pattern characters, and it is not a directory.
+ * Whether `reservation` covers `path`, a file a commit changed: unlike `overlaps`, `path` is that one name, so
+ * its `[` or `*` are not pattern characters. A reservation inside `path` still counts, because a changed
+ * submodule is reported as the directory it replaces.
  */
 export const covers = (reservation: string, path: string) =>
   reservation !== "" &&
-  (reservation === path || intersect(reservation, literally(path)) || under(reservation, path));
+  (reservation === path ||
+    intersect(reservation, literally(path)) ||
+    under(reservation, path) ||
+    under(path, reservation));
