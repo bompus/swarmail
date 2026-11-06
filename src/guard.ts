@@ -8,7 +8,7 @@ import { existsSync } from "node:fs";
 import { nowUs } from "./db.ts";
 import { projectFor } from "./checkout.ts";
 import { callTool } from "./client.ts";
-import { overlaps } from "./glob.ts";
+import { covers } from "./glob.ts";
 import { selfNames } from "./registry.ts";
 
 interface Reservation {
@@ -133,7 +133,7 @@ export function guard(
   const conflicts: string[] = [];
   for (const path of changedPaths(hook, stdin, cwd)) {
     for (const r of foreign) {
-      if (overlaps(r.path_pattern, path)) {
+      if (covers(r.path_pattern, path)) {
         conflicts.push(`  ${path}  (${r.path_pattern}, held by ${r.agent})`);
       }
     }

@@ -6,13 +6,13 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 - Project keys that differ only by punctuation, such as `/work/my_app` and `/work/my-app`, are now separate
   projects. They used to resolve to the first one created, so two repositories shared one mailbox, roster and
-  reservations. A project's key is its exact path (a Windows drive path still ignores case and slash direction),
-  and `slug` is only a label that gets a `-2`, `-3` suffix when another project has it. A project key is no
-  longer looked up by its slug. No database is migrated: a mailbox that already merged two checkouts stays
+  reservations. A project's key is its exact path (a Windows drive or share path still ignores case and slash
+  direction, and a trailing separator is dropped), and `slug` is only a label that gets a `-2`, `-3` suffix
+  when another project has it. A project key is no longer looked up by its slug. No database is migrated: a mailbox that already merged two checkouts stays
   under the first path, because nothing recorded which messages came from which, so register and send from the
   second checkout again after upgrading to give it its own project.
-- `file_reservation_paths` rejects an empty path with `INVALID_ARGUMENT`. It used to be granted and then
-  conflicted with every absolute-path reservation.
+- `file_reservation_paths` rejects an empty path, and one longer than 1024 characters, with `INVALID_ARGUMENT`.
+  An empty path used to be granted and then conflicted with every absolute-path reservation.
 - Two reserved globs that can name one file now conflict, for example `src/*.ts` and `src/a*`. Before, only a
   glob and a literal path were compared. The git guard uses the same matching.
 - In a reservation, `**/` matches zero or more directories, so `src/**/x.ts` and `src/**/*.ts` cover

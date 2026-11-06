@@ -290,7 +290,17 @@ test("parseIso takes ISO-8601 forms and rejects loose ones Date.parse would read
     expect(Number.isNaN(parseIso(value))).toBe(false);
   }
   expect(iso(parseIso("2026-11-06T10:20:30.123456Z"))).toBe("2026-11-06T10:20:30.123456Z");
-  for (const value of ["1", "12", "Nov 6 2026", "2026 Nov 6", "yesterday", ""]) {
+  for (const value of [
+    "1",
+    "12",
+    "Nov 6 2026",
+    "2026 Nov 6",
+    "yesterday",
+    "",
+    "2026-11-06 10:20 junk",
+    "2026-11-06T10",
+    "2026-11-06T10:20:30Zjunk",
+  ]) {
     expect(() => parseIso(value)).toThrow(InvalidTimestamp);
   }
 });

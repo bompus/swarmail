@@ -54,3 +54,27 @@ test("a trailing separator on a project key names the same project", () => {
   expect(s.ensureProject("/old/repo/").slug).toBe("old");
   expect(s.ensureProject("/").human_key).toBe("/");
 });
+
+test("a trailing backslash is part of a POSIX name, and a Windows share compares like a drive", () => {
+  const s = store();
+  expect(s.ensureProject("/work/repo\\").id).not.toBe(s.ensureProject("/work/repo").id);
+  const share = s.ensureProject("\\\\Server\\Share\\Repo");
+  expect(s.ensureProject("\\\\server\\share\\repo\\").id).toBe(share.id);
+  expect(s.ensureProject("//server/share/repo").id).not.toBe(share.id);
+});
+
+test("a Windows path compares letters beyond ASCII without regard to case", () => {
+  const s = store();
+  const first = s.ensureProject("C:/CAFÉ/Repo");
+  expect(s.ensureProject("c:/café/repo").id).toBe(first.id);
+  expect(s.ensureProject("c:/cafe/repo").id).not.toBe(first.id);
+});
+
+test("a key an earlier build stored with several trailing slashes is still found", () => {
+  const db = openDatabase(":memory:");
+  const s = store(db);
+  db.run("INSERT INTO projects (slug, human_key, created_at) VALUES ('old', '/old/repo//', 1)");
+  for (const key of ["/old/repo//", "/old/repo/", "/old/repo"]) {
+    expect(s.ensureProject(key).slug).toBe("old");
+  }
+});

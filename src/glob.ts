@@ -51,6 +51,8 @@ const charClass = (chars: string[], at: number): { step: Step; next: number } | 
 const steps = (pattern: string): Step[] => {
   const chars = Array.from(pattern);
   const out: Step[] = [];
+  // Once a `[` finds no `]`, no later `[` can either, so each unclosed one costs nothing to scan.
+  let closes: boolean = true;
   for (let i = 0; i < chars.length; i++) {
     const c = chars[i]!;
     if (c === "*") {
@@ -67,7 +69,8 @@ const steps = (pattern: string): Step[] => {
     } else if (c === "?") {
       out.push(anyChar);
     } else if (c === "[") {
-      const set = charClass(chars, i);
+      const set: ReturnType<typeof charClass> = closes ? charClass(chars, i) : null;
+      closes = set !== null;
       if (set) {
         out.push(set.step);
         i = set.next - 1;
@@ -138,10 +141,35 @@ const intersect = (a: string, b: string): boolean => {
  */
 const under = (dir: string, path: string) => path.startsWith(dir.replace(/\/+$/, "") + "/");
 
+/** `path` written as a pattern that matches only itself: each of `*`, `?`, `[` and `]` becomes a one-character set. */
+const literally = (path: string) => path.replace(/[*?[\]]/g, (c) => `[${c}]`);
+
+/** The longest reservation path accepted; the cost of comparing two patterns grows with the product of their lengths. */
+export const MAX_PATH = 1024;
+
+/** Whether `path` cannot be reserved: it is empty or blank, or longer than MAX_PATH. */
+export const unreservable = (path: string) => path.trim() === "" || path.length > MAX_PATH;
+
 /**
- * Whether two reservations can name the same file. A reservation also covers everything under it as a
+ * Whether two reservations can name the same file. Each is a pattern, and also the one file or directory it
+ * spells, so `app/*slug*` and `app/[slug]` conflict. A reservation also covers everything under it as a
  * directory, so `docs` and `docs/` both cover `docs/guide.md`. An empty pattern names nothing, so it overlaps
  * only another empty one.
  */
 export const overlaps = (a: string, b: string) =>
-  a === "" || b === "" ? a === b : a === b || intersect(a, b) || under(a, b) || under(b, a);
+  a === "" || b === ""
+    ? a === b
+    : a === b ||
+      intersect(a, b) ||
+      intersect(a, literally(b)) ||
+      intersect(literally(a), b) ||
+      under(a, b) ||
+      under(b, a);
+
+/**
+ * Whether `reservation` covers `path`, a file a commit changed: unlike `overlaps`, `path` is that one file, so
+ * its `[` or `*` are not pattern characters, and it is not a directory.
+ */
+export const covers = (reservation: string, path: string) =>
+  reservation !== "" &&
+  (reservation === path || intersect(reservation, literally(path)) || under(reservation, path));

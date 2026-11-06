@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { overlaps } from "../src/glob.ts";
+import { covers, overlaps } from "../src/glob.ts";
 
 test("two glob reservations that can match one file overlap", () => {
   expect(overlaps("src/*.ts", "src/a*")).toBe(true);
@@ -72,4 +72,23 @@ test("a long pattern pair is decided", () => {
   const a = "*a".repeat(40) + "b";
   expect(overlaps(a, "a".repeat(80) + "c")).toBe(false);
   expect(overlaps(a, "a".repeat(80) + "b")).toBe(true);
+});
+
+test("a reservation also matches the one file whose name it spells, and the guard reads a changed file literally", () => {
+  expect(overlaps("app/*slug*/page.tsx", "app/[slug]/page.tsx")).toBe(true);
+  expect(overlaps("app/[slug]/page.tsx", "app/*slug*/page.tsx")).toBe(true);
+  expect(covers("app/*slug*/page.tsx", "app/[slug]/page.tsx")).toBe(true);
+  expect(covers("f????", "f[ab]")).toBe(true);
+  expect(covers("f[[]ab[]]", "f[ab]")).toBe(true);
+  expect(covers("f?", "f[ab]")).toBe(false);
+  expect(covers("app/[slug]", "app/[slug]/page.tsx")).toBe(true);
+  expect(covers("src/*.ts", "src/a/b.ts")).toBe(true);
+  expect(covers("", "src/a.ts")).toBe(false);
+});
+
+test("a pattern of many unclosed [ is read in linear time", () => {
+  const start = performance.now();
+  expect(overlaps("[".repeat(40_000), "a")).toBe(false);
+  expect(overlaps("[".repeat(40_000), "[".repeat(40_000))).toBe(true);
+  expect(performance.now() - start).toBeLessThan(3000);
 });

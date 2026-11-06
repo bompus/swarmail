@@ -6,9 +6,9 @@ import { existsSync, realpathSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { primaryCheckout, worktreeRoot } from "./checkout.ts";
 import * as repositories from "./repository-projects.ts";
-import { overlaps } from "./glob.ts";
+import { overlaps, unreservable } from "./glob.ts";
 import { locations } from "./location.ts";
-import { trimKey, windowsKey } from "./paths.ts";
+import { findProject, trimKey } from "./project-key.ts";
 import {
   identity,
   leadingTag,
@@ -231,10 +231,6 @@ export const projectOut = (p: Project) => ({
 });
 
 const queries = (db: Database) => ({
-  projectByKey: db.query<Project, [string, string | null]>(
-    `SELECT * FROM projects WHERE human_key IN (?1, ?1 || '/')
-       OR (?2 IS NOT NULL AND rtrim(replace(lower(human_key), char(92), '/'), '/') = ?2) ORDER BY id LIMIT 1`,
-  ),
   insertProject: db.query<Project, [string, string, number]>(
     "INSERT INTO projects (slug, human_key, created_at) VALUES (?, ?, ?) RETURNING *",
   ),
@@ -320,9 +316,9 @@ export class MailStore {
     const given = trimKey(key);
     const exact = repositories.isName(given)
       ? repositories.projectOf(this.db, given, persist)
-      : this.q.projectByKey.get(given, windowsKey(given));
+      : findProject(this.db, given);
     const k = exact ? given : this.projectKey(given);
-    return { k, p: exact ?? (k === given ? null : this.q.projectByKey.get(k, windowsKey(k))) };
+    return { k, p: exact ?? (k === given ? null : findProject(this.db, k)) };
   }
 
   project(key: unknown): Project {
@@ -909,8 +905,10 @@ export class MailStore {
   reserve(p: Project, who: Agent, a: Args, ttlField = "ttl_seconds") {
     this.requireLifecycle(who);
     const paths = [...new Set(list(a.paths))];
-    if (paths.length === 0 || paths.some((path) => path.trim() === "")) {
-      throw new ToolError("INVALID_ARGUMENT", "paths needs non-empty paths", { field: "paths" });
+    if (paths.length === 0 || paths.some(unreservable)) {
+      throw new ToolError("INVALID_ARGUMENT", "paths needs non-empty paths up to 1024 characters", {
+        field: "paths",
+      });
     }
     const now = nowUs(),
       exclusive = a.exclusive ?? true;

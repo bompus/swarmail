@@ -723,8 +723,8 @@ test("a directory reservation covers the files under it, with or without its tra
   }
 });
 
-test("an empty reservation path is rejected instead of granted", async () => {
-  for (const paths of [[""], ["  "], ["src/a.ts", ""]]) {
+test("an empty or overlong reservation path is rejected instead of granted", async () => {
+  for (const paths of [[""], ["  "], ["src/a.ts", ""], ["a".repeat(1025)]]) {
     const error = await call("file_reservation_paths", {
       project_key: P,
       agent_name: "BlueLake",

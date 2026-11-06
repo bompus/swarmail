@@ -283,9 +283,13 @@ export function iso(us: number | null | undefined): string | null {
 
 export class InvalidTimestamp extends Error {}
 
+/** ISO 8601 and RFC 3339: a year, month or date, or a date and a time with an optional zone. */
+const ISO =
+  /^\d{4}(-\d{2}(-\d{2}([Tt ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?([Zz]|[+-]\d{2}(:?\d{2})?)?)?)?)?$/;
+
 export function parseIso(value: string): number {
   // Date.parse also takes loose forms such as "1" (the year 2001), which would filter on a time nobody meant.
-  const ms = /^\d{4}(-\d{2}(-\d{2})?)?([T ]\d|$)/.test(value) ? Date.parse(value) : NaN;
+  const ms = ISO.test(value) ? Date.parse(value) : NaN;
   if (Number.isNaN(ms)) {
     throw new InvalidTimestamp(`not an ISO-8601 timestamp: ${value}`);
   }
