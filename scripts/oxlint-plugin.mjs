@@ -1,4 +1,4 @@
-// Shared oxlint rules for this owner's repositories. Load it from .oxlintrc.json with
+// Shared oxlint rules for this repository. Load it from .oxlintrc.json with
 // `"jsPlugins": ["./scripts/oxlint-plugin.mjs"]`.
 // The reason rule follows the idea of require-description-when-disabling in cloudflare/workers-sdk
 // (MIT OR Apache-2.0).
