@@ -4,6 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+## 0.10.0 - 2026-11-06
+
 - Project keys that differ only by punctuation, such as `/work/my_app` and `/work/my-app`, are now separate
   projects. They used to resolve to the first one created, so two repositories shared one mailbox, roster and
   reservations. A project's key is its exact path (a Windows drive or share path still ignores case and slash
