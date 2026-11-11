@@ -162,16 +162,15 @@ fails until every folder in `packages/` is named in this section.
   emails the submitter when the listing is approved. It is not known how to
   change an approved listing, or whether it shows a version, so check both once
   it is approved.
-- Gemini CLI extensions gallery (not submitted; pending until the repository
-  has the `gemini-cli-extension` topic): the `gemini-extension.json` at the
-  repository root, which adds the `swarmail` MCP server through
-  `npx -y swarmail-mcp`. People install it with `gemini extensions install
-  https://github.com/bompus/swarmail`. Gemini CLI installs the latest GitHub
-  release when a repository has one, so the command works only once a release
-  contains the file. After the first release that contains it, add the topic
-  and the install line to the README. The gallery's crawler finds the
-  repository by the topic and validates the manifest. The manifest's `version` is set in step 1
-  of Releasing; `bun run check` fails until it matches.
+- Gemini CLI extensions gallery (pending until the gallery lists it): the
+  `gemini-extension.json` at the repository root, which adds the `swarmail` MCP
+  server through `npx -y swarmail-mcp`. People install it with `gemini
+  extensions install https://github.com/bompus/swarmail`; the README says so.
+  Gemini CLI installs the latest GitHub release when a repository has one, so a
+  change to the manifest reaches users with the next release. The gallery's
+  crawler finds the repository by its `gemini-cli-extension` topic and
+  validates the manifest. The manifest's `version` is set in step 1 of
+  Releasing; `bun run check` fails until it matches.
 - Claude Code plugin marketplace: this repository, through
   `.claude-plugin/marketplace.json` and the plugin in
   `packages/claude-plugin/`. People add it with
