@@ -1,6 +1,6 @@
 {
   "name": "swarmail",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Mail between coding-agent sessions, on one machine or across machines; relays to a Swarmail server.",
   "mcpServers": {
     "swarmail": {

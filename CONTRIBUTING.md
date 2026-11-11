@@ -168,9 +168,9 @@ fails until every folder in `packages/` is named in this section.
   `npx -y swarmail-mcp`. People install it with `gemini extensions install
   https://github.com/bompus/swarmail`. Gemini CLI installs the latest GitHub
   release when a repository has one, so the command works only once a release
-  contains the file. Add the topic after that release, and add the install line
-  to the README with it. The gallery's crawler finds the repository by the
-  topic and validates the manifest. The manifest's `version` is set in step 1
+  contains the file. After the first release that contains it, add the topic
+  and the install line to the README. The gallery's crawler finds the
+  repository by the topic and validates the manifest. The manifest's `version` is set in step 1
   of Releasing; `bun run check` fails until it matches.
 - Claude Code plugin marketplace: this repository, through
   `.claude-plugin/marketplace.json` and the plugin in
