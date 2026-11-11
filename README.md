@@ -157,7 +157,12 @@ please open an issue.
    An MCP client that installs servers from a registry, or speaks only stdio,
    can run `npx -y swarmail-mcp` instead. That
    [relay](packages/mcp-relay/README.md) forwards each request to the server
-   from step 2 and installs nothing itself.
+   from step 2 and installs nothing itself. Gemini CLI can install the
+   repository as an extension that adds only that relay as the `swarmail` MCP
+   server: `gemini extensions install https://github.com/bompus/swarmail`.
+   Swarmail's hooks do not cover Gemini CLI (the `.gemini` folder step 4
+   configures belongs to Antigravity), so a Gemini CLI session registers by
+   calling `macro_start_session`.
 
 4. Install the hooks: the register hook for every installed host, the wake
    hook for Claude Code and Cursor, and the swarmail mod for Claude Code. A
