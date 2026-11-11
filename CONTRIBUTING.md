@@ -79,9 +79,9 @@ an older result with the version it was measured on.
   the GitHub release notes. It must cover every change in the release.
 
 1. Open a pull request that sets `version` in `package.json`,
-   `packages/mcp-relay/package.json` and both version fields in `server.json`
-   to the same `X.Y.Z`. Rename the `Unreleased` heading in `CHANGELOG.md`
-   to `X.Y.Z - YYYY-MM-DD`. `bun run check` rejects version drift.
+   `packages/mcp-relay/package.json`, `gemini-extension.json` and both version
+   fields in `server.json` to the same `X.Y.Z`. Rename the `Unreleased`
+   heading in `CHANGELOG.md` to `X.Y.Z - YYYY-MM-DD`. `bun run check` rejects version drift.
 2. After it merges, tag the squash commit `vX.Y.Z` and push the tag. The
    [Release workflow](.github/workflows/release.yml) takes it from there. It
    stops unless the tag matches the version in `package.json` and its commit is
@@ -162,6 +162,16 @@ fails until every folder in `packages/` is named in this section.
   emails the submitter when the listing is approved. It is not known how to
   change an approved listing, or whether it shows a version, so check both once
   it is approved.
+- Gemini CLI extensions gallery (not submitted; pending until the repository
+  has the `gemini-cli-extension` topic): the `gemini-extension.json` at the
+  repository root, which adds the `swarmail` MCP server through
+  `npx -y swarmail-mcp`. People install it with `gemini extensions install
+  https://github.com/bompus/swarmail`. Gemini CLI installs the latest GitHub
+  release when a repository has one, so the command works only once a release
+  contains the file. Add the topic after that release, and add the install line
+  to the README with it. The gallery's crawler finds the repository by the
+  topic and validates the manifest. The manifest's `version` is set in step 1
+  of Releasing; `bun run check` fails until it matches.
 - Claude Code plugin marketplace: this repository, through
   `.claude-plugin/marketplace.json` and the plugin in
   `packages/claude-plugin/`. People add it with
