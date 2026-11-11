@@ -5,10 +5,12 @@ const read = (path: string) => JSON.parse(readFileSync(new URL(path, root), "utf
 const core = read("package.json");
 const relay = read("packages/mcp-relay/package.json");
 const registry = read("server.json");
+const gemini = read("gemini-extension.json");
 const versions = [
   ["package.json", core.version],
   ["packages/mcp-relay/package.json", relay.version],
   ["server.json", registry.version],
+  ["gemini-extension.json", gemini.version],
   ...registry.packages.map((pkg: { version?: string }, index: number) => [
     `server.json packages[${index}]`,
     pkg.version,

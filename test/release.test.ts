@@ -25,6 +25,7 @@ function fixture() {
     "packages/claude-plugin/relay.mjs",
     "packages/codex-plugin/relay.mjs",
     "server.json",
+    "gemini-extension.json",
     "CONTRIBUTING.md",
     "bunfig.toml",
   ]) {
@@ -57,6 +58,7 @@ test.each<[string, (manifest: Manifest) => string]>([
   ["packages/mcp-relay/package.json", (manifest) => (manifest.version = "0.0.0")],
   ["server.json", (manifest) => (manifest.version = "0.0.0")],
   ["server.json", (manifest) => (manifest.packages[0]!.version = "0.0.0")],
+  ["gemini-extension.json", (manifest) => (manifest.version = "0.0.0")],
 ])("release check rejects version drift in %s", (file, change) => {
   const root = fixture();
   const path = join(root, file);
