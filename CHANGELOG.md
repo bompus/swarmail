@@ -4,7 +4,9 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
-- Gemini CLI can now install Swarmail as an extension (`gemini extensions install https://github.com/bompus/swarmail`). It adds the `swarmail` MCP server through `npx -y swarmail-mcp` and no hooks, and needs the server running first.
+## 0.11.0 - 2026-11-11
+
+- From this release on, Gemini CLI can install Swarmail as an extension (`gemini extensions install https://github.com/bompus/swarmail`; earlier releases have no extension manifest). It adds the `swarmail` MCP server through `npx -y swarmail-mcp` and no hooks, and needs the server running first.
 
 ## 0.10.0 - 2026-11-06
 
