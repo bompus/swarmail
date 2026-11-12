@@ -20,7 +20,7 @@
     "oxfmt": "0.76.0",
     "oxlint": "1.92.0",
     "oxlint-tsgolint": "7.0.2006",
-    "typebox": "1.4.5",
+    "typebox": "1.4.6",
     "typescript": "7.1.0-beta"
   },
   "engines": {
