@@ -1156,7 +1156,7 @@ for (const timing of [
       await until(
         () => Object.keys(status()?.subscriptions ?? {}).length === 2 && waiting.has("thread-1"),
       );
-      const receipts = Object.values(status().subscriptions) as HostProcess[];
+      const receipts = Object.values<HostProcess>(status().subscriptions);
       if (duringRemoval) {
         // Stop the healthy bridge first; the sibling fails while that stop is awaiting delivery.
         pauseDelivery = true;

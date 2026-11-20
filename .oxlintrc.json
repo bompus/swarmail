@@ -127,6 +127,7 @@
       }
     ],
     "typescript/no-unnecessary-condition": "error",
+    "typescript/no-unnecessary-type-assertion": "error",
     "typescript/prefer-includes": "error",
     "typescript/prefer-optional-chain": "error",
     "typescript/switch-exhaustiveness-check": "error",

@@ -440,7 +440,7 @@ export function openRegistry<S extends RegisterState = RegisterState>(
         if (stale || state.ended) {
           const { ended, ...rest } = state;
           const { pending: dropped, ...withoutPending } = rest;
-          writeState(file, (stale ? withoutPending : rest) as S);
+          writeState(file, stale ? withoutPending : rest);
         }
       });
       return pending;
