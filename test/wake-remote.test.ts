@@ -356,12 +356,12 @@ test("without the token those calls are refused instead of reading the hub's mai
     expect(
       await peek.then(
         () => null,
-        (error: Error) => error,
+        (error: unknown) => error as Error,
       ),
     ).toBeInstanceOf(Error);
     const eligible = ensureWakeEligible(hub, "s-1").then(
       () => null,
-      (error: Error) => error,
+      (error: unknown) => error as Error,
     );
     expect((await eligible)?.message).toContain("SWARMAIL_TOKEN_FILE");
   } finally {
@@ -441,7 +441,7 @@ test("an unreadable token file is reported at once, not retried as a dropped con
   try {
     const held = await ensureWakeEligible(hub, "s-1").then(
       () => null,
-      (error: { message: string; retryable?: boolean }) => error,
+      (error: unknown) => error as { message: string; retryable?: boolean },
     );
     expect(held?.message).toContain("SWARMAIL_TOKEN_FILE");
     expect(held?.retryable).toBe(false);
@@ -548,7 +548,7 @@ test("the supervisor's lifecycle reconciliation stops on an unreadable token fil
     const reconcile = lifecycleReconciliation(hub, new AbortController().signal);
     const stopped = await reconcile().then(
       () => null,
-      (error: Error) => error,
+      (error: unknown) => error as Error,
     );
     expect(stopped).toBeInstanceOf(TargetAuthenticationError);
   } finally {
@@ -623,7 +623,7 @@ test("a server that rejects the token is an authentication failure, not a hold t
   const failure = (run: () => Promise<unknown>) =>
     run().then(
       () => null,
-      (error: Error) => error,
+      (error: unknown) => error as Error,
     );
   try {
     const config = { swarmailUrl: url, target: { id: "s-1" } };
@@ -677,7 +677,7 @@ test("a rejection of a token that has since been replaced is retried, not fatal"
   try {
     const held = await ensureWakeEligible(`http://${REMOTE}:${rotating.port}`, "s-1").then(
       () => null,
-      (error: { retryable?: boolean }) => error,
+      (error: unknown) => error as { retryable?: boolean },
     );
     expect(held).not.toBeInstanceOf(TargetAuthenticationError);
     expect(held?.retryable).toBe(true);

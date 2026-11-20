@@ -1148,7 +1148,9 @@ test("an unknown agent error names at most ten recent agents and says what to do
   for (let i = 0; i < 12; i++) {
     await register(`Bulk${"ABCDEFGHIJKL"[i]}ear`);
   }
-  const error = await call("whois", { project_key: P, agent_name: "NoSuchAgent" }).catch((e) => e);
+  const error = await call("whois", { project_key: P, agent_name: "NoSuchAgent" }).catch(
+    (e: unknown) => e as any,
+  );
   expect(error.type).toBe("NOT_FOUND");
   expect(error.data.available_agents.length).toBe(10);
   expect(error.message).toContain("more");
@@ -1159,7 +1161,7 @@ test("an unknown agent error names at most ten recent agents and says what to do
     to: ["NoSuchAgent"],
     subject: "x",
     body_md: "y",
-  }).catch((e) => e);
+  }).catch((e: unknown) => e as any);
   expect(recipient.message).toContain("recipient's spelling");
 });
 
@@ -1177,7 +1179,7 @@ test("an unknown agent error names the project where that name is registered", a
     to: ["awayagent"],
     subject: "x",
     body_md: "y",
-  }).catch((e) => e);
+  }).catch((e: unknown) => e as any);
   expect(recipient.type).toBe("NOT_FOUND");
   expect(recipient.message).toContain("'awayagent' is registered in project '/w/other'");
   expect(recipient.message).not.toContain("spelling");
@@ -1189,11 +1191,11 @@ test("an unknown agent error names the project where that name is registered", a
     to: ["AwayAgent"],
     subject: "x",
     body_md: "y",
-  }).catch((e) => e);
+  }).catch((e: unknown) => e as any);
   expect(retired.message).toContain("'AwayAgent' is retired in project '/w/other'");
   expect(retired.data.registered_in).toEqual(["/w/other"]);
   const self = await call("fetch_inbox", { project_key: P, agent_name: "AwayAgent" }).catch(
-    (e) => e,
+    (e: unknown) => e as any,
   );
   expect(self.message).toContain("pass that project_key.");
 });
@@ -1208,7 +1210,9 @@ test("an unknown agent registered in several projects gets plural advice", async
       name: "TwiceAgent",
     });
   }
-  const error = await call("whois", { project_key: P, agent_name: "TwiceAgent" }).catch((e) => e);
+  const error = await call("whois", { project_key: P, agent_name: "TwiceAgent" }).catch(
+    (e: unknown) => e as any,
+  );
   expect(error.type).toBe("NOT_FOUND");
   expect(error.message).toContain("'TwiceAgent' is registered in projects '/w/");
   expect(error.message).toContain("'/w/one'");
