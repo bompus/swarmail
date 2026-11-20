@@ -8,6 +8,7 @@ type Response = { status: number; text: string; headers?: Record<string, string>
 function session({
   registered = true,
   entrypoint = "cli",
+  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- widens the default so callers can pass other variables
   home = { HOME: "/h" } as Record<string, string>,
 } = {}) {
   const on: Record<string, Handler> = {};

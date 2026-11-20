@@ -33,9 +33,7 @@ const ADAPTERS: { [K in Target["type"]]: TargetAdapter<TargetOf<K>> } = {
 };
 
 function adapterFor(type: string): TargetAdapter<Target> | undefined {
-  return Object.hasOwn(ADAPTERS, type)
-    ? (ADAPTERS[type as Target["type"]] as TargetAdapter<Target>)
-    : undefined;
+  return Object.hasOwn(ADAPTERS, type) ? ADAPTERS[type as Target["type"]] : undefined;
 }
 
 export interface BridgeConfig {

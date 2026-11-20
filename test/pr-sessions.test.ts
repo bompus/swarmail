@@ -154,7 +154,7 @@ function run(f: Fixture, target = url(), flags: string[] = []) {
   return {
     status: child.status,
     error: child.stderr,
-    output: child.status === 0 ? (JSON.parse(child.stdout) as any) : null,
+    output: child.status === 0 ? JSON.parse(child.stdout) : null,
   };
 }
 test("secondary, multiple, retained and project-scoped associations use V2 payloads", () => {
