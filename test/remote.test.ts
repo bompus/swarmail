@@ -189,7 +189,7 @@ test("a loopback URL gets no token, so a broken token file cannot break local us
     { ...broken, SWARMAIL_URL: "http://100.64.0.1:18765/mcp/" },
     "ensure_project",
     { human_key: "/remote/project" },
-  ).catch((error: Error) => error);
+  ).catch((error: unknown) => error);
   expect((failure as Error).message).toContain("missing");
 });
 

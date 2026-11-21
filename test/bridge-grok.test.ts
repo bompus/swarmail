@@ -548,11 +548,9 @@ for (const evidence of ["success", "cancelled", "wrong prompt", "wrong session"]
         }
       }
       await f.settled();
-      const delivered = sequence.slice(0, sequence.indexOf("disconnect"));
+      const delivered = new Set(sequence.slice(0, sequence.indexOf("disconnect")));
       const expected =
-        evidence === "success" &&
-        delivered.includes("load reply") &&
-        delivered.includes("completion");
+        evidence === "success" && delivered.has("load reply") && delivered.has("completion");
       if (admitted !== expected) {
         failures.push(`${sequence.join(" -> ")}: expected admission ${expected}, got ${admitted}`);
       }
@@ -647,8 +645,8 @@ test("Grok steering admits only receipt and matching echo before disconnect in e
       /* A closed socket retains the attempted command for manual recovery. */
     }
     await f.settled();
-    const beforeClose = sequence.slice(0, sequence.indexOf("disconnect"));
-    const expected = beforeClose.includes("receipt") && beforeClose.includes("echo");
+    const beforeClose = new Set(sequence.slice(0, sequence.indexOf("disconnect")));
+    const expected = beforeClose.has("receipt") && beforeClose.has("echo");
     if (admitted !== expected || marks !== 1) {
       failures.push({ sequence, admitted, expected, marks });
     }
