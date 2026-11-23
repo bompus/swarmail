@@ -4,6 +4,8 @@ Notable changes to Swarmail. Versions follow [semantic versioning](https://semve
 
 ## Unreleased
 
+- The register hook no longer reads `--no-session-persistence` as a sign of a one-shot run. `-p` and `--print` still do, and Claude Code accepts that flag only together with them. This undoes that part of the 0.9.1 change.
+
 ## 0.11.0 - 2026-11-11
 
 - From this release on, Gemini CLI can install Swarmail as an extension (`gemini extensions install https://github.com/bompus/swarmail`; earlier releases have no extension manifest). It adds the `swarmail` MCP server through `npx -y swarmail-mcp` and no hooks, and needs the server running first.

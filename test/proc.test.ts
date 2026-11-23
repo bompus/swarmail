@@ -83,9 +83,13 @@ const argv =
   () => ["/home/u/.local/bin/claude", ...args];
 
 test("a Claude host run with a print-mode flag is a one-shot run", () => {
-  for (const flag of ["-p", "--print", "--no-session-persistence"]) {
+  for (const flag of ["-p", "--print"]) {
     expect(isPrintMode(claude, argv("--model", "haiku", flag, "say ok"))).toBe(true);
   }
+});
+
+test("--no-session-persistence alone does not mark a run as print mode", () => {
+  expect(isPrintMode(claude, argv("--model", "haiku", "--no-session-persistence"))).toBe(false);
 });
 
 test("an interactive host is not a print-mode run, whatever its values look like", () => {

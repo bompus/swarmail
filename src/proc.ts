@@ -70,7 +70,7 @@ function readProcArguments(pid: number): string[] | null {
 }
 
 // Claude Code accepts these only in print mode (`claude -p`), a one-shot run; its interactive sessions never pass them.
-const PRINT_MODE_FLAGS = new Set(["-p", "--print", "--no-session-persistence"]);
+const PRINT_MODE_FLAGS = new Set(["-p", "--print"]);
 // A cluster of short flags that includes -p, as in `-pc`, `-cp` or `-pn probe`. Only the boolean short flags (-c, -v,
 // -h) may sit before the p; -d (its value is optional) comes only after it, and -n or -r (which take a value) end the
 // cluster. So `-nprod` (--name prod) and `-dp` are not read as print.
