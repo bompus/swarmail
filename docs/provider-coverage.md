@@ -3,7 +3,7 @@
 What each agent host already provides for sessions that talk to each other,
 where swarmail adds to it, and where the host's own feature is enough. Checked
 on 2026-10-11 against the versions in the table below, except T3 Code, checked
-on 2026-11-02. Hosts change quickly, so
+on 2026-11-23. Hosts change quickly, so
 recheck a limit before you depend on it.
 
 "Independent sessions" means sessions you started yourself, in separate
@@ -23,16 +23,16 @@ version show none. A test did not prove the absence.
 
 ## Summary
 
-| Host (version checked)           | Messages another independent local session             | Starts a turn in an idle session                                        | swarmail delivers its notice through                                                |
-| -------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Claude Code 2.1.296              | Yes, to live sessions on the same machine              | Yes                                                                     | The swarmail mod, or the wake hook                                                  |
-| Codex CLI 0.162.1                | Yes, for sessions on the shared app-server daemon      | Yes, tested                                                             | An opt-in bridge on the app-server queue API                                        |
-| Cursor (cursor-agent 2026.10.01) | No                                                     | No for local sessions. A cloud agent takes a follow-up                  | The wake hook, and context after tool calls                                         |
-| Devin CLI 3000.11.3              | No, except cloud sessions through the API              | No                                                                      | Context after tool calls, and a continue at `Stop`                                  |
-| Antigravity (agy 1.3.3)          | Yes, tested: `send_message` reaches a separate process | No for an idle interactive session, tested: delivered at next turn      | Context before each model call, and a continue at `Stop`                            |
-| OpenCode 2.0.26                  | No. A client can prompt a session through the HTTP API | Yes, through the prompt API (experimental)                              | An opt-in bridge on the prompt API. Without it, mail is seen at the next inbox read |
-| Grok Build 1.0.50                | No                                                     | Only in a session hosted by a leader, through an undocumented extension | An opt-in bridge on that extension. Without it, mail is seen at the next inbox read |
-| T3 Code (0.1.6, docs 2026-11-02) | Yes, between T3 threads                                | Yes                                                                     | An opt-in bridge                                                                    |
+| Host (version checked)            | Messages another independent local session             | Starts a turn in an idle session                                        | swarmail delivers its notice through                                                |
+| --------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Claude Code 2.1.296               | Yes, to live sessions on the same machine              | Yes                                                                     | The swarmail mod, or the wake hook                                                  |
+| Codex CLI 0.162.1                 | Yes, for sessions on the shared app-server daemon      | Yes, tested                                                             | An opt-in bridge on the app-server queue API                                        |
+| Cursor (cursor-agent 2026.10.01)  | No                                                     | No for local sessions. A cloud agent takes a follow-up                  | The wake hook, and context after tool calls                                         |
+| Devin CLI 3000.11.3               | No, except cloud sessions through the API              | No                                                                      | Context after tool calls, and a continue at `Stop`                                  |
+| Antigravity (agy 1.3.3)           | Yes, tested: `send_message` reaches a separate process | No for an idle interactive session, tested: delivered at next turn      | Context before each model call, and a continue at `Stop`                            |
+| OpenCode 2.0.26                   | No. A client can prompt a session through the HTTP API | Yes, through the prompt API (experimental)                              | An opt-in bridge on the prompt API. Without it, mail is seen at the next inbox read |
+| Grok Build 1.0.50                 | No                                                     | Only in a session hosted by a leader, through an undocumented extension | An opt-in bridge on that extension. Without it, mail is seen at the next inbox read |
+| T3 Code (0.1.11, docs 2026-11-23) | Yes, between T3 threads                                | Yes                                                                     | An opt-in bridge                                                                    |
 
 swarmail delivers through each host's own entry point. It does not replace the
 host's messaging. Its notice is one line telling the session to read its inbox.
@@ -315,15 +315,15 @@ All statements here are documented. None were tested.
 
 ## T3 Code
 
-- **Versions read (documented; 2026-11-02).** The release notes of stable
+- **Versions read (documented; 2026-11-23).** The release notes of stable
   [0.1.3](https://github.com/pingdotgg/t3code/releases/tag/v0.1.3) through
-  [0.1.6](https://github.com/pingdotgg/t3code/releases/tag/v0.1.6) (published
-  2026-10-27 to 2026-10-31) and the documents named under Tracking T3 Code, read on
-  `main`, which is ahead of 0.1.6. The cross-environment changes below and the v2
+  [0.1.11](https://github.com/pingdotgg/t3code/releases/tag/v0.1.11) (published
+  2026-10-27 to 2026-11-20) and the documents named under Tracking T3 Code, read at
+  the v0.1.11 tag. The cross-environment changes below and the v2
   thread links are in stable 0.1.4; they were first in
   [nightly `v0.1.4-nightly.20261027.3796`](https://github.com/pingdotgg/t3code/releases/tag/v0.1.4-nightly.20261027.3796).
   The evidence is merged source and documentation, not a running-client test.
-  The installed server is `0.1.7-nightly.20261101.4048`.
+  The installed server is `0.1.12-nightly.20261123.5124`.
 - **Messaging (documented from nightly source).** `t3_thread_send` reaches any thread in the
   environment with `auto` (start an idle thread, steer an active turn, or queue
   behind it), `queue`, `steer` or `restart`, and repeats safely with the same
@@ -335,11 +335,15 @@ All statements here are documented. None were tested.
   lives on the server and survives restarts; the queue tools cancel, edit,
   reorder and promote queued runs. `delegate_task` starts a child task on any
   provider and model, and a child's question wakes its parent. T3 Code also
-  offers `schedule_task` (interval, fixed-time or webhook triggers),
+  offers `schedule_task` (interval, fixed-time, one-time or webhook triggers; a
+  task can run in one thread and start a fresh session each run),
   `watch_pull_request` and per-thread pull request links. Outside agents that
   support OAuth, such as Claude Code and Codex in a terminal, can use these tools
-  through an MCP sign-in that lasts 30 days. Read only is the default, and
-  Supervised or above can message threads.
+  through an MCP sign-in that lasts 30 days. Tools that act as a thread, such as
+  `delegate_task` and `create_threads`, return an error to an outside agent: it
+  starts a thread with `t3_thread_launch` and follows it with `t3_thread_wait` or
+  `t3_thread_read`. Read only is the default, and Supervised or above can message
+  threads.
 - **Thread identity (verified).** T3 sets `T3CODE_THREAD_ID` to the thread's id
   in the environment of the Claude sessions it starts: the Claude adapter source
   sets it in stable 0.1.4 and 0.1.6 but not 0.1.3, and a Claude session on
@@ -347,7 +351,13 @@ All statements here are documented. None were tested.
   tools report. A hook that Claude runs inherits it (checked with a
   `SessionStart` hook). Codex sessions get it from
   [fa31b66b](https://github.com/pingdotgg/t3code/commit/fa31b66b) (2026-11-01,
-  after stable 0.1.6, [#28604](https://github.com/pingdotgg/t3code/pull/28604)).
+  stable 0.1.7, [#28604](https://github.com/pingdotgg/t3code/pull/28604)). Agents
+  that run through the ACP layer get it in stable 0.1.8
+  ([#30361](https://github.com/pingdotgg/t3code/pull/30361)), and shells in the
+  integrated terminal and Codex stdio MCP servers in stable 0.1.11
+  ([#35006](https://github.com/pingdotgg/t3code/pull/35006),
+  [#39414](https://github.com/pingdotgg/t3code/pull/39414)); these three come from
+  release notes and pull request text, not from a run.
   A Claude process that such a session starts inherits it too (a one-shot
   `claude -p` run's hook saw its parent's value), so it names the thread that
   started the process, not the session that is running. swarmail does not read

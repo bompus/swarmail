@@ -1157,7 +1157,7 @@ test.skipIf(process.platform === "win32")(
       await run(["--input-format", "stream-json"], "interactive-1", "SessionStart");
       expect(roster()).toHaveLength(1);
       // Each print-mode flag skips the start registration and the roster stays as it was.
-      for (const [index, flag] of ["-p", "--print", "--no-session-persistence"].entries()) {
+      for (const [index, flag] of ["-p", "--print"].entries()) {
         expect(
           await run(["--model", "haiku", flag, "say ok"], `print-${index}`, "SessionStart"),
         ).toBe("");

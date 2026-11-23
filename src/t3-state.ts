@@ -40,9 +40,10 @@ export const T3_V2_THREADS = `
     on pt.provider_thread_id = t.active_provider_thread_id`;
 
 /**
- * The T3 Code thread that runs provider session `sessionId`, or null outside T3. T3 passes no
- * thread id to the provider process, but the provider thread's native reference holds the
- * session id. With `host`, the provider must match too.
+ * The T3 Code thread that runs provider session `sessionId`, or null outside T3. T3 Code also sets
+ * `T3CODE_THREAD_ID` in its provider processes, but this lookup does not read it: the provider
+ * thread's native reference in T3's database holds the session id. With `host`, the provider
+ * must match too.
  */
 export function t3ThreadId(
   sessionId: string,
