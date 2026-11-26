@@ -150,9 +150,8 @@ fails until every folder in `packages/` is named in this section.
   listing of the npm package. It is not known whether it follows new npm
   releases, so check the version it shows. Edit it while signed in as its
   owner.
-- [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers)
-  (pending): one line under Communication in that repository's `README.md`,
-  submitted in
+- [Awesome MCP Servers](https://github.com/punkpeye/awesome-mcp-servers): one
+  line under Communication in that repository's `README.md`, added in
   [#16031](https://github.com/punkpeye/awesome-mcp-servers/pull/16031). It
   shows no version, so releases need no change. To change its description or
   tags, open a pull request there that edits that line.
